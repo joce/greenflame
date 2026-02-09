@@ -1,0 +1,36 @@
+digraph selection_flow {
+        Idle [label = "Idle";shape = "box";];
+        Crosshair_idle [label = "Idle (crosshair)";shape = "box";];
+        Dragging_selection [label = "Dragging selection (drag rect)";shape = "box";];
+        Object_selection [label = "Object selection (window/monitor/desktop)";shape = "box";];
+        Commited_selection [label = "Committed (selected region - resize handle shown)";shape = "box";];
+        Resizing [label = "Resizing (live resize rect)";shape = "box";];
+        Save_to_file [label = "Save to file";shape = "box";];
+        Save_to_clipboard [label = "Save to clipboard";shape = "box";];
+        Exit [label = "Exit";shape = "box";];
+        
+        Idle -> Crosshair_idle [label = "capture triggered (tray Start capture or Print Screen)";];
+        
+        Crosshair_idle -> Dragging_selection [label = "LButton down (no modifier)";];
+        Dragging_selection -> Commited_selection [label = "LButton up";];
+        
+        Crosshair_idle -> Object_selection [label = "Shift/Ctrl down";];
+        Object_selection -> Crosshair_idle [label = "Shift/Ctrl up";];
+        Object_selection -> Commited_selection [label = "Click (with modifier)";];
+        
+        Commited_selection -> Resizing [label = "LButton down on handle";];
+        Commited_selection -> Save_to_file [label = "Ctrl-S (commit and close)";];
+        Commited_selection -> Save_to_clipboard [label = "Ctrl-C (save to clipboard)";];
+        
+        Save_to_file -> Idle [label = "Back to idle after saving";];
+        Save_to_clipboard -> Idle [label = "Back to idle after saving";];
+        
+        
+        Resizing -> Commited_selection [label = "LButton up (new commited region)";];
+        Resizing -> Commited_selection [label = "Esc (cancel resize, keep selection)";];
+        
+        Commited_selection -> Crosshair_idle [label = "Esc (commited region completely reset)";];
+        Crosshair_idle -> Idle [label = "Esc (close overlay)";];
+        
+        Idle -> Exit [label = "Exit (through notification icon)";];
+}

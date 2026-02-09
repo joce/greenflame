@@ -1,0 +1,25 @@
+{
+    "version": "0.2",
+    "language": "en",
+    "ignorePaths": [".gitignore", ".cspell.json", ".todo", "Makefile", ".github/workflows/**", ".vscode/**"],
+    "useGitignore": true,
+    "dictionaryDefinitions": [],
+    "dictionaries": ["cpp"],
+    "words": ["Greenshot", "Flameshot", "Segoe", "negotiables"],
+    "ignoreWords": [
+        "CAPTUREBLT",
+        "GWLP",
+        "PAINTSTRUCT",
+        "WNDCLASSEXW",
+        "lpfn",
+        "lpsz",
+        "lprc",
+        "lparam",
+        "ltrb",
+        "wparam",
+        "hwnd"
+    ],
+    "import": [],
+    "flagWords": ["hte"],
+    "ignoreRegExpList": ["H[A-Z]+", "SM_[A-Z]+", "WM_[A-Z]+"]
+}

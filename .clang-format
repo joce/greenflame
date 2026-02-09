@@ -1,0 +1,5 @@
+# Greenflame: 4 spaces, no tabs (see AGENTS.md)
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never

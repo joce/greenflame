@@ -1,0 +1,4 @@
+# Tell clangd where the compilation database lives (CMake puts it in the build dir).
+# Run "cmake --preset x64-debug" so build/x64-debug/compile_commands.json exists.
+CompileFlags:
+    CompilationDatabase: build/x64-debug

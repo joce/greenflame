@@ -57,7 +57,6 @@ std::vector<greenflame::core::MonitorWithBounds> GetMonitorsWithBounds() {
         m.bounds = bounds;
         m.info.dpi_scale.percent = percent;
         m.info.orientation = OrientationFromRect(rc);
-        m.info.name = {};
         out.push_back(m);
     }
 

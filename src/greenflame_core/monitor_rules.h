@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <optional>
 #include <span>
-#include <string_view>
 #include <vector>
 
 namespace greenflame::core {
@@ -33,9 +32,6 @@ struct MonitorInfo final {
     // Pure, testable metadata (no Win32 types in core).
     MonitorDpiScale dpi_scale{};
     MonitorOrientation orientation{MonitorOrientation::Landscape};
-
-    // Optional: for debugging/logging, not required for correctness.
-    std::string_view name{};
 };
 
 // Monitor entry with bounds in physical pixels. Core only consumes this; Win32

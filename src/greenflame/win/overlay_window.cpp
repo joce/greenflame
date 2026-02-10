@@ -2,9 +2,9 @@
 // CreateOverlayIfNone are called from main; overlay runs modeless, no
 // PostQuitMessage on close.
 
+#include <windows.h>
 #include <ShlObj.h>
 #include <commdlg.h>
-#include <windows.h>
 
 #include "win/overlay_window.h"
 
@@ -74,6 +74,12 @@ struct OverlayState {
     std::vector<greenflame::core::RectPx> window_rects;
     std::vector<int32_t> vertical_edges;
     std::vector<int32_t> horizontal_edges;
+    // Reusable paint buffer: allocated once, reused every WM_PAINT frame.
+    std::vector<uint8_t> paint_buffer;
+    // Cached GDI resources: created once at overlay init, destroyed on close.
+    greenflame::PaintResources resources = {};
+    // Cached monitor list: populated at overlay creation, stable for overlay lifetime.
+    std::vector<greenflame::core::MonitorWithBounds> cached_monitors;
 };
 
 // Builds default save filename (no path) into out. Uses DDMMYY-HHmmSS.
@@ -180,13 +186,11 @@ void UpdateModifierPreview(HWND hwnd, OverlayState *state, bool shift,
     } else if (shift) {
         POINT screenPt = CursorScreenPt();
         greenflame::core::PointPx cursorScreenPx = {screenPt.x, screenPt.y};
-        std::vector<greenflame::core::MonitorWithBounds> monitors =
-            greenflame::GetMonitorsWithBounds();
         std::optional<size_t> idx = greenflame::core::IndexOfMonitorContaining(
-            cursorScreenPx, monitors);
+            cursorScreenPx, state->cached_monitors);
         if (idx.has_value()) {
             state->live_rect =
-                ScreenRectToClient(monitors[*idx].bounds, ox, oy);
+                ScreenRectToClient(state->cached_monitors[*idx].bounds, ox, oy);
             state->modifier_preview = true;
         } else {
             state->live_rect = {};
@@ -460,11 +464,9 @@ LRESULT OnOverlayLButtonDown(HWND hwnd) {
             state->selection_source = SelectionSource::Monitor;
             POINT screenPt = CursorScreenPt();
             greenflame::core::PointPx cursorScreenPx = {screenPt.x, screenPt.y};
-            std::vector<greenflame::core::MonitorWithBounds> monitors =
-                greenflame::GetMonitorsWithBounds();
             std::optional<size_t> idx =
                 greenflame::core::IndexOfMonitorContaining(cursorScreenPx,
-                                                           monitors);
+                                                           state->cached_monitors);
             if (idx.has_value())
                 state->selection_monitor_index = *idx;
         } else {
@@ -491,6 +493,7 @@ LRESULT OnOverlayLButtonDown(HWND hwnd) {
             state->resize_handle = hit;
             state->resize_anchor_rect = state->final_selection;
             state->live_rect = state->final_selection;
+            BuildSnapEdgesFromWindows(hwnd, state);
             InvalidateRect(hwnd, nullptr, TRUE);
             return 0;
         }
@@ -504,6 +507,7 @@ LRESULT OnOverlayLButtonDown(HWND hwnd) {
     state->selection_monitor_index = std::nullopt;
     state->live_rect =
         greenflame::core::RectPx::FromPoints(state->start_px, state->start_px);
+    BuildSnapEdgesFromWindows(hwnd, state);
     InvalidateRect(hwnd, nullptr, TRUE);
     return 0;
 }
@@ -517,7 +521,6 @@ LRESULT OnOverlayMouseMove(HWND hwnd) {
                 greenflame::core::ResizeRectFromHandle(
                     state->resize_anchor_rect, *state->resize_handle, cur);
             if ((GetKeyState(VK_MENU) & 0x8000) == 0) {
-                BuildSnapEdgesFromWindows(hwnd, state);
                 candidate = greenflame::core::SnapRectToEdges(
                     candidate, state->vertical_edges, state->horizontal_edges,
                     kSnapThresholdPx);
@@ -525,10 +528,8 @@ LRESULT OnOverlayMouseMove(HWND hwnd) {
             greenflame::core::PointPx anchor =
                 greenflame::core::AnchorPointForResizePolicy(
                     state->resize_anchor_rect, *state->resize_handle);
-            std::vector<greenflame::core::MonitorWithBounds> monitors =
-                greenflame::GetMonitorsWithBounds();
             state->live_rect = greenflame::core::AllowedSelectionRect(
-                candidate, anchor, monitors);
+                candidate, anchor, state->cached_monitors);
         } else if (state->dragging) {
             greenflame::core::PointPx cur = ClientCursorPx(hwnd);
             state->live_rect =
@@ -555,7 +556,6 @@ LRESULT OnOverlayLButtonUp(HWND hwnd) {
     if (state->handle_dragging && state->resize_handle.has_value()) {
         greenflame::core::RectPx to_commit = state->live_rect;
         if ((GetKeyState(VK_MENU) & 0x8000) == 0) {
-            BuildSnapEdgesFromWindows(hwnd, state);
             to_commit = greenflame::core::SnapRectToEdges(
                 to_commit, state->vertical_edges, state->horizontal_edges,
                 kSnapThresholdPx);
@@ -563,10 +563,8 @@ LRESULT OnOverlayLButtonUp(HWND hwnd) {
         greenflame::core::PointPx anchor =
             greenflame::core::AnchorPointForResizePolicy(
                 state->resize_anchor_rect, *state->resize_handle);
-        std::vector<greenflame::core::MonitorWithBounds> monitors =
-            greenflame::GetMonitorsWithBounds();
         state->final_selection =
-            greenflame::core::AllowedSelectionRect(to_commit, anchor, monitors);
+            greenflame::core::AllowedSelectionRect(to_commit, anchor, state->cached_monitors);
         state->handle_dragging = false;
         state->resize_handle = std::nullopt;
         state->live_rect = {};
@@ -579,15 +577,12 @@ LRESULT OnOverlayLButtonUp(HWND hwnd) {
             greenflame::core::RectPx::FromPoints(state->start_px, cur)
                 .Normalized();
         if ((GetKeyState(VK_MENU) & 0x8000) == 0) {
-            BuildSnapEdgesFromWindows(hwnd, state);
             raw = greenflame::core::SnapRectToEdges(raw, state->vertical_edges,
                                                     state->horizontal_edges,
                                                     kSnapThresholdPx);
         }
-        std::vector<greenflame::core::MonitorWithBounds> monitors =
-            greenflame::GetMonitorsWithBounds();
         state->final_selection = greenflame::core::AllowedSelectionRect(
-            raw, state->start_px, monitors);
+            raw, state->start_px, state->cached_monitors);
         state->selection_source = SelectionSource::Region;
         state->selection_window = std::nullopt;
         state->selection_monitor_index = std::nullopt;
@@ -613,6 +608,8 @@ LRESULT OnOverlayPaint(HWND hwnd) {
             input.live_rect = state->live_rect;
             input.final_selection = state->final_selection;
             input.cursor_client_px = ClientCursorPx(hwnd);
+            input.paint_buffer = std::span<uint8_t>(state->paint_buffer);
+            input.resources = &state->resources;
         }
         greenflame::PaintOverlay(hdc, hwnd, rc, input);
         EndPaint(hwnd, &ps);
@@ -624,6 +621,13 @@ LRESULT OnOverlayDestroy(HWND hwnd) {
     OverlayState *state = GetState(hwnd);
     if (state) {
         state->capture.Free();
+        if (state->resources.font_dim) DeleteObject(state->resources.font_dim);
+        if (state->resources.font_center) DeleteObject(state->resources.font_center);
+        if (state->resources.crosshair_pen) DeleteObject(state->resources.crosshair_pen);
+        if (state->resources.border_pen) DeleteObject(state->resources.border_pen);
+        if (state->resources.handle_brush) DeleteObject(state->resources.handle_brush);
+        if (state->resources.handle_pen) DeleteObject(state->resources.handle_pen);
+        if (state->resources.sel_border_brush) DeleteObject(state->resources.sel_border_brush);
         delete state;
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
     }
@@ -735,6 +739,27 @@ void CreateOverlayIfNoneImpl(HINSTANCE hInstance) {
         DestroyWindow(hwnd);
         return;
     }
+    // Pre-allocate paint buffer (reused every WM_PAINT, avoids per-frame heap allocation).
+    int const paintRowBytes = greenflame::RowBytes32(state->capture.width);
+    size_t const paintBufSize =
+        static_cast<size_t>(paintRowBytes) * static_cast<size_t>(state->capture.height);
+    state->paint_buffer.resize(paintBufSize);
+    // Create cached GDI resources (reused every WM_PAINT, avoids per-frame kernel calls).
+    state->resources.font_dim =
+        CreateFontW(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                    DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                    DEFAULT_QUALITY, FF_DONTCARE, L"Segoe UI");
+    state->resources.font_center =
+        CreateFontW(36, 0, 0, 0, FW_BLACK, FALSE, FALSE, FALSE,
+                    DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                    DEFAULT_QUALITY, FF_DONTCARE, L"Segoe UI");
+    state->resources.crosshair_pen = CreatePen(PS_SOLID, 1, RGB(0x20, 0xB2, 0xAA));
+    state->resources.border_pen = CreatePen(PS_SOLID, 1, RGB(46, 139, 87));
+    state->resources.handle_brush = CreateSolidBrush(RGB(0, 0x80, 0x80));
+    state->resources.handle_pen = CreatePen(PS_SOLID, 1, RGB(0, 0x80, 0x80));
+    state->resources.sel_border_brush = CreateSolidBrush(RGB(0, 0x80, 0x80));
+    // Cache monitor list (stable for overlay lifetime).
+    state->cached_monitors = greenflame::GetMonitorsWithBounds();
     SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state));
     s_overlayHwnd = hwnd;
     ShowWindow(hwnd, SW_SHOW);

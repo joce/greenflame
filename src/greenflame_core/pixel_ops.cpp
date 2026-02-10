@@ -15,12 +15,9 @@ void DimPixelsOutsideRect(std::span<uint8_t> pixels, int width, int height,
                     y >= selection.bottom) {
                 size_t off = static_cast<size_t>(x) * 4;
                 if (off + 2 < static_cast<size_t>(rowBytes)) {
-                    row[off] =
-                            static_cast<uint8_t>(std::min(255, static_cast<int>(row[off]) / 2));
-                    row[off + 1] = static_cast<uint8_t>(
-                            std::min(255, static_cast<int>(row[off + 1]) / 2));
-                    row[off + 2] = static_cast<uint8_t>(
-                            std::min(255, static_cast<int>(row[off + 2]) / 2));
+                    row[off] = static_cast<uint8_t>(row[off] >> 1);
+                    row[off + 1] = static_cast<uint8_t>(row[off + 1] >> 1);
+                    row[off + 2] = static_cast<uint8_t>(row[off + 2] >> 1);
                 }
             }
         }

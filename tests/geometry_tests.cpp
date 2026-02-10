@@ -46,9 +46,9 @@ TEST_CASE("RectPx normalizes and intersects", "[rect][geometry]")
 
 TEST_CASE("Cross-monitor selection rule", "[monitor][policy]")
 {
-        MonitorInfo m1{MonitorDpiScale{150}, MonitorOrientation::Landscape, "A"};
-        MonitorInfo m2{MonitorDpiScale{150}, MonitorOrientation::Landscape, "B"};
-        MonitorInfo m3{MonitorDpiScale{125}, MonitorOrientation::Landscape, "C"};
+        MonitorInfo m1{MonitorDpiScale{150}, MonitorOrientation::Landscape};
+        MonitorInfo m2{MonitorDpiScale{150}, MonitorOrientation::Landscape};
+        MonitorInfo m3{MonitorDpiScale{125}, MonitorOrientation::Landscape};
 
         REQUIRE(IsAllowed(DecideCrossMonitorSelection(std::span{&m1, 1})));
 

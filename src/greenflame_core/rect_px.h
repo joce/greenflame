@@ -9,6 +9,8 @@ namespace greenflame::core {
 struct PointPx final {
     int32_t x{0};
     int32_t y{0};
+
+    constexpr bool operator==(const PointPx&) const noexcept = default;
 };
 
 struct SizePx final {
@@ -18,6 +20,8 @@ struct SizePx final {
     [[nodiscard]] constexpr bool IsEmpty() const noexcept {
         return w <= 0 || h <= 0;
     }
+
+    constexpr bool operator==(const SizePx&) const noexcept = default;
 };
 
 struct RectPx final {
@@ -62,6 +66,8 @@ struct RectPx final {
     // Clips rect to bounds. If result is empty, returns nullopt.
     [[nodiscard]] static std::optional<RectPx> Clip(RectPx r,
                                                                                                     RectPx bounds) noexcept;
+
+    constexpr bool operator==(const RectPx&) const noexcept = default;
 
     // Build from left/top/right/bottom (any order; use Normalized() if invariant
     // needed).

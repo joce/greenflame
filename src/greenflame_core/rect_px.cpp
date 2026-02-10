@@ -54,14 +54,7 @@ RectPx RectPx::Union(RectPx a, RectPx b) noexcept {
 }
 
 std::optional<RectPx> RectPx::Clip(RectPx r, RectPx bounds) noexcept {
-    r = r.Normalized();
-    bounds = bounds.Normalized();
-
-    auto i = Intersect(r, bounds);
-    if (!i.has_value())
-        return std::nullopt;
-
-    return i.value();
+    return Intersect(r, bounds);
 }
 
 RectPx RectPx::FromPoints(PointPx a, PointPx b) noexcept {

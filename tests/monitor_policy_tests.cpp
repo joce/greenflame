@@ -8,7 +8,7 @@ using namespace greenflame::core;
 
 // Fixture: two monitors side-by-side, same DPI and orientation.
 static std::vector<MonitorWithBounds> TwoMonitorsSameDpi() {
-    MonitorInfo info{MonitorDpiScale{150}, MonitorOrientation::Landscape, {}};
+    MonitorInfo info{MonitorDpiScale{150}, MonitorOrientation::Landscape};
     std::vector<MonitorWithBounds> out;
     out.push_back(MonitorWithBounds{RectPx::FromLtrb(0, 0, 1920, 1080), info});
     out.push_back(MonitorWithBounds{RectPx::FromLtrb(1920, 0, 3840, 1080), info});
@@ -20,10 +20,10 @@ static std::vector<MonitorWithBounds> TwoMonitorsDifferentDpi() {
     std::vector<MonitorWithBounds> out;
     out.push_back(MonitorWithBounds{
             RectPx::FromLtrb(0, 0, 1920, 1080),
-            MonitorInfo{MonitorDpiScale{150}, MonitorOrientation::Landscape, {}}});
+            MonitorInfo{MonitorDpiScale{150}, MonitorOrientation::Landscape}});
     out.push_back(MonitorWithBounds{
             RectPx::FromLtrb(1920, 0, 3840, 1080),
-            MonitorInfo{MonitorDpiScale{125}, MonitorOrientation::Landscape, {}}});
+            MonitorInfo{MonitorDpiScale{125}, MonitorOrientation::Landscape}});
     return out;
 }
 
@@ -32,10 +32,10 @@ static std::vector<MonitorWithBounds> TwoMonitorsDifferentOrientation() {
     std::vector<MonitorWithBounds> out;
     out.push_back(MonitorWithBounds{
             RectPx::FromLtrb(0, 0, 1920, 1080),
-            MonitorInfo{MonitorDpiScale{100}, MonitorOrientation::Landscape, {}}});
+            MonitorInfo{MonitorDpiScale{100}, MonitorOrientation::Landscape}});
     out.push_back(MonitorWithBounds{
             RectPx::FromLtrb(0, 1080, 1080, 1920 + 1080),
-            MonitorInfo{MonitorDpiScale{100}, MonitorOrientation::Portrait, {}}});
+            MonitorInfo{MonitorDpiScale{100}, MonitorOrientation::Portrait}});
     return out;
 }
 

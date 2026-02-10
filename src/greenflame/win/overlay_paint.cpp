@@ -10,6 +10,7 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <span>
 #include <wchar.h>
@@ -27,6 +28,76 @@ constexpr int kMagnifierZoom =
     8; // source size = kMagnifierSize / kMagnifierZoom
 constexpr int kMagnifierSource = kMagnifierSize / kMagnifierZoom; // 64
 constexpr int kMagnifierPadding = 8;
+// Magnifier crosshair and contour: 66% opaque.
+constexpr unsigned char kMagnifierCrosshairAlpha = 168;  // 255 * 66 / 100
+// Greenshot-style: thick cross with white contour, center gap, margin from edge.
+constexpr int kMagnifierCrosshairThickness = 8;
+constexpr int kMagnifierCrosshairGap = 20;     // center to inner arm end
+constexpr int kMagnifierCrosshairMargin = 8;   // circle edge to outer arm end
+
+void BlendMagnifierCrosshairOntoPixels(std::span<uint8_t> pixels, int width,
+                                       int height, int rowBytes, int magLeft,
+                                       int magTop) noexcept {
+    int const size = kMagnifierSize;
+    int const center = size / 2;
+    int const radiusSq = center * center;
+    int const half = kMagnifierCrosshairThickness / 2;
+    int const gap = kMagnifierCrosshairGap;
+    int const margin = kMagnifierCrosshairMargin;
+    float const a = static_cast<float>(kMagnifierCrosshairAlpha) / 255.f;
+    float const ia = 1.f - a;
+
+    // Four arm rectangles in magnifier-local coords [x0,x1) x [y0,y1).
+    struct Arm { int x0, y0, x1, y1; };
+    Arm const arms[4] = {
+        {center - half, margin,       center + half, center - gap}, // top
+        {center - half, center + gap, center + half, size - margin},// bottom
+        {margin,        center - half, center - gap, center + half},// left
+        {center + gap,  center - half, size - margin, center + half},// right
+    };
+
+    int const sy0 = std::max(0, magTop);
+    int const sy1 = std::min(height, magTop + size);
+    int const sx0 = std::max(0, magLeft);
+    int const sx1 = std::min(width, magLeft + size);
+
+    for (int y = sy0; y < sy1; ++y) {
+        int const iy = y - magTop;
+        int const dySq = (iy - center) * (iy - center);
+        uint8_t* row = pixels.data() + static_cast<size_t>(y) * rowBytes;
+        for (int x = sx0; x < sx1; ++x) {
+            int const ix = x - magLeft;
+            if ((ix - center) * (ix - center) + dySq > radiusSq)
+                continue;
+
+            // Classify: inside an arm (black) or on its 1px contour (white)?
+            bool onArm = false;
+            bool onContour = false;
+            for (auto const& r : arms) {
+                if (ix >= r.x0 && ix < r.x1 && iy >= r.y0 && iy < r.y1) {
+                    onArm = true;
+                    break;
+                }
+                if (ix >= r.x0 - 1 && ix < r.x1 + 1 &&
+                    iy >= r.y0 - 1 && iy < r.y1 + 1)
+                    onContour = true;
+            }
+            if (onArm) onContour = false;
+            if (!onArm && !onContour) continue;
+
+            size_t off = static_cast<size_t>(x) * 4;
+            if (off + 2 >= static_cast<size_t>(rowBytes))
+                continue;
+            float const target = onContour ? 255.f : 0.f;
+            int const blendB = static_cast<int>(ia * row[off] + a * target);
+            int const blendG = static_cast<int>(ia * row[off + 1] + a * target);
+            int const blendR = static_cast<int>(ia * row[off + 2] + a * target);
+            row[off]     = static_cast<uint8_t>(blendB > 255 ? 255 : blendB);
+            row[off + 1] = static_cast<uint8_t>(blendG > 255 ? 255 : blendG);
+            row[off + 2] = static_cast<uint8_t>(blendR > 255 ? 255 : blendR);
+        }
+    }
+}
 
 void DrawCaptureToBuffer(HDC bufDc, HDC hdc, int w, int h,
                          greenflame::GdiCaptureResult const *capture) {
@@ -263,7 +334,8 @@ void DrawDimensionLabels(HDC bufDc, HBITMAP bufBmp, int w, int h,
 void DrawCrosshairAndCoordTooltip(HDC bufDc, HBITMAP bufBmp, HWND hwnd, int w,
                                   int h, int cx, int cy, bool dragging,
                                   std::span<uint8_t> pixels,
-                                  greenflame::PaintResources const *res) {
+                                  greenflame::PaintResources const *res,
+                                  greenflame::GdiCaptureResult const *capture) {
     if (cx < 0 || cx >= w || cy < 0 || cy >= h)
         return;
 
@@ -338,15 +410,29 @@ void DrawCrosshairAndCoordTooltip(HDC bufDc, HBITMAP bufBmp, HWND hwnd, int w,
                 if (magTop + kMagnifierSize > monBottom)
                     magTop = monBottom - kMagnifierSize;
             }
+            // Draw magnifier from capture so dotted crosshair is not magnified (Greenshot does the same).
             HRGN rgn =
                 CreateEllipticRgn(magLeft, magTop, magLeft + kMagnifierSize,
                                   magTop + kMagnifierSize);
             if (rgn) {
                 SelectClipRgn(bufDc, rgn);
                 SetStretchBltMode(bufDc, COLORONCOLOR);
-                StretchBlt(bufDc, magLeft, magTop, kMagnifierSize,
-                           kMagnifierSize, bufDc, srcX, srcY, kMagnifierSource,
-                           kMagnifierSource, SRCCOPY);
+                if (capture && capture->IsValid()) {
+                    HDC captureDc = CreateCompatibleDC(bufDc);
+                    if (captureDc) {
+                        HGDIOBJ oldCap = SelectObject(captureDc, capture->bitmap);
+                        StretchBlt(bufDc, magLeft, magTop, kMagnifierSize,
+                                   kMagnifierSize, captureDc, srcX, srcY,
+                                   kMagnifierSource, kMagnifierSource,
+                                   SRCCOPY);
+                        SelectObject(captureDc, oldCap);
+                        DeleteDC(captureDc);
+                    }
+                } else {
+                    StretchBlt(bufDc, magLeft, magTop, kMagnifierSize,
+                               kMagnifierSize, bufDc, srcX, srcY,
+                               kMagnifierSource, kMagnifierSource, SRCCOPY);
+                }
                 SelectClipRgn(bufDc, nullptr);
                 DeleteObject(rgn);
             }
@@ -357,6 +443,25 @@ void DrawCrosshairAndCoordTooltip(HDC bufDc, HBITMAP bufBmp, HWND hwnd, int w,
                 Ellipse(bufDc, magLeft, magTop, magLeft + kMagnifierSize,
                         magTop + kMagnifierSize);
                 SelectObject(bufDc, oldPen);
+            }
+            // Separate semi-transparent crosshair inside magnifier (Greenshot-style).
+            int const rowBytes = greenflame::RowBytes32(w);
+            size_t const pixSize =
+                static_cast<size_t>(rowBytes) * static_cast<size_t>(h);
+            if (pixels.size() >= pixSize) {
+                BITMAPINFOHEADER bmi;
+                greenflame::FillBmi32TopDown(bmi, w, h);
+                if (GetDIBits(bufDc, bufBmp, 0, static_cast<UINT>(h),
+                              pixels.data(),
+                              reinterpret_cast<BITMAPINFO*>(&bmi),
+                              DIB_RGB_COLORS) != 0) {
+                    BlendMagnifierCrosshairOntoPixels(pixels, w, h, rowBytes,
+                                                     magLeft, magTop);
+                    SetDIBits(bufDc, bufBmp, 0, static_cast<UINT>(h),
+                              pixels.data(),
+                              reinterpret_cast<BITMAPINFO*>(&bmi),
+                              DIB_RGB_COLORS);
+                }
             }
         }
 
@@ -478,7 +583,7 @@ void PaintOverlay(HDC hdc, HWND hwnd, const RECT &rc,
     int const cy = in.cursor_client_px.y;
     if (show_crosshair)
         DrawCrosshairAndCoordTooltip(bufDc, bufBmp, hwnd, w, h, cx, cy, false,
-                                     in.paint_buffer, in.resources);
+                                     in.paint_buffer, in.resources, in.capture);
     // Resize handles only when committed or resizing; never in Object_selection
     // (modifier_preview).
     else if (in.handle_dragging && !in.live_rect.IsEmpty())

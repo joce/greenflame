@@ -28,7 +28,7 @@ Inspired by:
 ## Platform & Toolchain (authoritative)
 
 - OS: **Windows 11**
-- Compiler: **MSVC (Visual Studio 2026 (18.2.1 or later))**
+- Compiler: **MSVC (Visual Studio 2026 (18.2.1 or later))**; **Clang (clang-cl)** is supported as an alternative when the Visual Studio "C++ Clang compiler for Windows" component is installed. MSVC remains the primary compiler.
 - Build system: **CMake**
 - Generator: **Ninja** (preferred) or **Visual Studio**
 - Language standard: **C++20**
@@ -90,6 +90,25 @@ build\x64-debug\greenflame.exe
 cmake --preset x64-release
 cmake --build --preset x64-release
 ```
+
+### Clang build (optional)
+
+With the Visual Studio "C++ Clang compiler for Windows" (or "Clang-cl") component installed:
+
+```bat
+cmake --preset x64-debug-clang
+cmake --build --preset x64-debug-clang
+```
+
+Output: `build\x64-debug-clang\greenflame.exe`. Run tests: `ctest --test-dir build\x64-debug-clang`.
+
+For release with Clang: `cmake --preset x64-release-clang` then `cmake --build --preset x64-release-clang`.
+
+### Static analysis and include analysis
+
+- **clang-tidy:** `compile_commands.json` is generated in the build dir (from `CMAKE_EXPORT_COMPILE_COMMANDS ON`). Use the Clang preset build dir so include paths and defines match. Example: `clang-tidy -p build\x64-debug-clang src\greenflame\win\gdi_capture.cpp` (and similarly for other sources under `src\greenflame\` and `src\greenflame_core\`).
+- **Include timing:** Clang builds use `-ftime-trace`; the compiler emits `.json` trace files in the build dir. Open them in Chrome’s `chrome://tracing` to inspect time spent in includes and in the compiler.
+- **Include What You Use (IWYU)** can use the same `compile_commands.json` for optional include-cleanup suggestions.
 
 ---
 

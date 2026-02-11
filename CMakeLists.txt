@@ -42,6 +42,8 @@ target_compile_definitions(greenflame_core PRIVATE
 
 if (MSVC)
     target_compile_options(greenflame_core PRIVATE /W4 /permissive- /Zc:__cplusplus)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(greenflame_core PRIVATE -Wall -Wextra -Wpedantic -ftime-trace)
 else()
     target_compile_options(greenflame_core PRIVATE -Wall -Wextra -Wpedantic)
 endif()
@@ -88,6 +90,8 @@ target_compile_definitions(greenflame PRIVATE
 
 if (MSVC)
     target_compile_options(greenflame PRIVATE /W4 /permissive- /Zc:__cplusplus)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(greenflame PRIVATE -Wall -Wextra -Wpedantic -ftime-trace)
 else()
     target_compile_options(greenflame PRIVATE -Wall -Wextra -Wpedantic)
 endif()

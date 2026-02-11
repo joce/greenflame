@@ -7,7 +7,7 @@ Yet another Windows screenshot tool, with very opinionated set of behaviors.  `�
 The selection scheme of [Greenshot](https://greenshot.org/)
 <img src="https://avatars.githubusercontent.com/u/5614224?s=200&v=4" alt="Greenshot" style="width: 16px; height: 16px;">, the editing scheme of [Flameshot](https://flameshot.org/) <img src="https://flameshot.org/flameshot-icon.svg" alt="Flameshot" style="width: 16px; height: 16px;">, all in one tool.
 
-**License** — [Unlicense](LICENSE)
+**License** — [MIT](LICENSE)
 
 ---
 

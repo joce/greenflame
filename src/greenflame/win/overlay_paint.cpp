@@ -378,37 +378,31 @@ void DrawCrosshairAndCoordTooltip(HDC bufDc, HBITMAP bufBmp, HWND hwnd, int w,
         bool const sourceInBounds = srcX >= 0 && srcY >= 0 &&
                                     srcX + kMagnifierSource <= w &&
                                     srcY + kMagnifierSource <= h;
+        int magLeft = 0, magTop = 0;
         if (sourceInBounds) {
             int const pad = kMagnifierPadding;
-            int magLeft;
-            int magTop;
-            if (cx + pad + kMagnifierSize <= monRight &&
-                cy + pad + kMagnifierSize <= monBottom) {
-                magLeft = cx + pad;
-                magTop = cy + pad;
-            } else if (cx - pad - kMagnifierSize >= monLeft &&
-                       cy + pad + kMagnifierSize <= monBottom) {
-                magLeft = cx - pad - kMagnifierSize;
-                magTop = cy + pad;
-            } else if (cx + pad + kMagnifierSize <= monRight &&
-                       cy - pad - kMagnifierSize >= monTop) {
-                magLeft = cx + pad;
-                magTop = cy - pad - kMagnifierSize;
-            } else if (cx - pad - kMagnifierSize >= monLeft &&
-                       cy - pad - kMagnifierSize >= monTop) {
-                magLeft = cx - pad - kMagnifierSize;
-                magTop = cy - pad - kMagnifierSize;
-            } else {
-                magLeft = cx + pad;
-                magTop = cy + pad;
-                if (magLeft < monLeft)
-                    magLeft = monLeft;
-                if (magTop < monTop)
-                    magTop = monTop;
-                if (magLeft + kMagnifierSize > monRight)
-                    magLeft = monRight - kMagnifierSize;
-                if (magTop + kMagnifierSize > monBottom)
-                    magTop = monBottom - kMagnifierSize;
+            struct { int dx, dy; } constexpr quadrants[] = {
+                {+pad, +pad},                                   // bottom-right
+                {-pad - kMagnifierSize, +pad},                  // bottom-left
+                {+pad, -pad - kMagnifierSize},                  // top-right
+                {-pad - kMagnifierSize, -pad - kMagnifierSize}, // top-left
+            };
+            bool placed = false;
+            for (auto const& q : quadrants) {
+                int const ml = cx + q.dx;
+                int const mt = cy + q.dy;
+                if (ml >= monLeft && mt >= monTop &&
+                    ml + kMagnifierSize <= monRight &&
+                    mt + kMagnifierSize <= monBottom) {
+                    magLeft = ml;
+                    magTop = mt;
+                    placed = true;
+                    break;
+                }
+            }
+            if (!placed) {
+                magLeft = std::clamp(cx + pad, monLeft, monRight - kMagnifierSize);
+                magTop  = std::clamp(cy + pad, monTop, monBottom - kMagnifierSize);
             }
             // Draw magnifier from capture so dotted crosshair is not magnified (Greenshot does the same).
             HRGN rgn =
@@ -444,90 +438,88 @@ void DrawCrosshairAndCoordTooltip(HDC bufDc, HBITMAP bufBmp, HWND hwnd, int w,
                         magTop + kMagnifierSize);
                 SelectObject(bufDc, oldPen);
             }
-            // Separate semi-transparent crosshair inside magnifier (Greenshot-style).
-            int const rowBytes = greenflame::RowBytes32(w);
-            size_t const pixSize =
-                static_cast<size_t>(rowBytes) * static_cast<size_t>(h);
-            if (pixels.size() >= pixSize) {
-                BITMAPINFOHEADER bmi;
-                greenflame::FillBmi32TopDown(bmi, w, h);
-                if (GetDIBits(bufDc, bufBmp, 0, static_cast<UINT>(h),
-                              pixels.data(),
-                              reinterpret_cast<BITMAPINFO*>(&bmi),
-                              DIB_RGB_COLORS) != 0) {
-                    BlendMagnifierCrosshairOntoPixels(pixels, w, h, rowBytes,
-                                                     magLeft, magTop);
-                    SetDIBits(bufDc, bufBmp, 0, static_cast<UINT>(h),
-                              pixels.data(),
-                              reinterpret_cast<BITMAPINFO*>(&bmi),
-                              DIB_RGB_COLORS);
-                }
-            }
         }
 
+        // Compute coord tooltip position (no pixel buffer needed).
         constexpr int kCoordPadding = 4;
         constexpr int kCoordMargin = 4;
         wchar_t coordBuf[32];
         swprintf_s(coordBuf, L"%d x %d", cx, cy);
         HFONT font = res ? res->font_dim : nullptr;
+        bool tooltipReady = false;
+        int boxW = 0, boxH = 0, ttLeft = 0, ttTop = 0;
+        greenflame::core::RectPx boxRect;
+        HGDIOBJ oldFont = nullptr;
         if (font) {
-            HGDIOBJ oldFont = SelectObject(bufDc, font);
+            oldFont = SelectObject(bufDc, font);
             SIZE textSize = {};
             if (GetTextExtentPoint32W(bufDc, coordBuf,
                                       static_cast<int>(wcslen(coordBuf)),
                                       &textSize)) {
-                int boxW = textSize.cx + 2 * kCoordMargin;
-                int boxH = textSize.cy + 2 * kCoordMargin;
-                int left = cx + kCoordPadding;
-                int top = cy + kCoordPadding;
-                if (left + boxW > monRight)
-                    left = cx - kCoordPadding - boxW;
-                if (top + boxH > monBottom)
-                    top = cy - kCoordPadding - boxH;
-                if (left < monLeft)
-                    left = monLeft;
-                if (top < monTop)
-                    top = monTop;
-                greenflame::core::RectPx boxRect =
-                    greenflame::core::RectPx::FromLtrb(left, top, left + boxW,
-                                                       top + boxH);
-                int const rowBytes = greenflame::RowBytes32(w);
-                size_t const pixSize =
-                    static_cast<size_t>(rowBytes) * static_cast<size_t>(h);
-                if (pixels.size() >= pixSize) {
-                    BITMAPINFOHEADER bmi;
-                    greenflame::FillBmi32TopDown(bmi, w, h);
-                    if (GetDIBits(bufDc, bufBmp, 0, static_cast<UINT>(h),
-                                  pixels.data(),
-                                  reinterpret_cast<BITMAPINFO *>(&bmi),
-                                  DIB_RGB_COLORS) != 0) {
-                        greenflame::core::BlendRectOntoPixels(
-                            pixels, w, h, rowBytes, boxRect, kCoordTooltipBgR,
-                            kCoordTooltipBgG, kCoordTooltipBgB,
-                            kCoordTooltipAlpha);
-                        SetDIBits(bufDc, bufBmp, 0, static_cast<UINT>(h),
-                                  pixels.data(),
-                                  reinterpret_cast<BITMAPINFO *>(&bmi),
-                                  DIB_RGB_COLORS);
-                    }
-                }
-                HPEN borderPen = res ? res->border_pen : nullptr;
-                if (borderPen) {
-                    HGDIOBJ oldPen = SelectObject(bufDc, borderPen);
-                    SelectObject(bufDc, GetStockObject(NULL_BRUSH));
-                    Rectangle(bufDc, left, top, left + boxW, top + boxH);
-                    SelectObject(bufDc, oldPen);
-                }
-                SetBkMode(bufDc, TRANSPARENT);
-                SetTextColor(bufDc, kCoordTooltipBorderText);
-                RECT textRc = {left + kCoordMargin, top + kCoordMargin,
-                               left + boxW - kCoordMargin,
-                               top + boxH - kCoordMargin};
-                DrawTextW(bufDc, coordBuf, -1, &textRc,
-                          DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                boxW = textSize.cx + 2 * kCoordMargin;
+                boxH = textSize.cy + 2 * kCoordMargin;
+                ttLeft = cx + kCoordPadding;
+                ttTop = cy + kCoordPadding;
+                if (ttLeft + boxW > monRight)
+                    ttLeft = cx - kCoordPadding - boxW;
+                if (ttTop + boxH > monBottom)
+                    ttTop = cy - kCoordPadding - boxH;
+                if (ttLeft < monLeft)
+                    ttLeft = monLeft;
+                if (ttTop < monTop)
+                    ttTop = monTop;
+                boxRect = greenflame::core::RectPx::FromLtrb(
+                    ttLeft, ttTop, ttLeft + boxW, ttTop + boxH);
+                tooltipReady = true;
             }
-            SelectObject(bufDc, oldFont);
         }
+
+        // Single DIB round-trip for magnifier crosshair + tooltip background.
+        bool const needPixels = sourceInBounds || tooltipReady;
+        int const rowBytes = greenflame::RowBytes32(w);
+        size_t const pixSize =
+            static_cast<size_t>(rowBytes) * static_cast<size_t>(h);
+        if (needPixels && pixels.size() >= pixSize) {
+            BITMAPINFOHEADER bmi;
+            greenflame::FillBmi32TopDown(bmi, w, h);
+            if (GetDIBits(bufDc, bufBmp, 0, static_cast<UINT>(h),
+                          pixels.data(),
+                          reinterpret_cast<BITMAPINFO *>(&bmi),
+                          DIB_RGB_COLORS) != 0) {
+                if (sourceInBounds)
+                    BlendMagnifierCrosshairOntoPixels(pixels, w, h, rowBytes,
+                                                     magLeft, magTop);
+                if (tooltipReady)
+                    greenflame::core::BlendRectOntoPixels(
+                        pixels, w, h, rowBytes, boxRect, kCoordTooltipBgR,
+                        kCoordTooltipBgG, kCoordTooltipBgB,
+                        kCoordTooltipAlpha);
+                SetDIBits(bufDc, bufBmp, 0, static_cast<UINT>(h),
+                          pixels.data(),
+                          reinterpret_cast<BITMAPINFO *>(&bmi),
+                          DIB_RGB_COLORS);
+            }
+        }
+
+        // GDI tooltip border + text (after SetDIBits).
+        if (tooltipReady) {
+            HPEN borderPen = res ? res->border_pen : nullptr;
+            if (borderPen) {
+                HGDIOBJ oldPen = SelectObject(bufDc, borderPen);
+                SelectObject(bufDc, GetStockObject(NULL_BRUSH));
+                Rectangle(bufDc, ttLeft, ttTop, ttLeft + boxW, ttTop + boxH);
+                SelectObject(bufDc, oldPen);
+            }
+            SetBkMode(bufDc, TRANSPARENT);
+            SetTextColor(bufDc, kCoordTooltipBorderText);
+            RECT textRc = {ttLeft + kCoordMargin, ttTop + kCoordMargin,
+                           ttLeft + boxW - kCoordMargin,
+                           ttTop + boxH - kCoordMargin};
+            DrawTextW(bufDc, coordBuf, -1, &textRc,
+                      DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        }
+        if (oldFont)
+            SelectObject(bufDc, oldFont);
     }
 }
 
@@ -564,11 +556,9 @@ void PaintOverlay(HDC hdc, HWND hwnd, const RECT &rc,
     DrawCaptureToBuffer(bufDc, hdc, w, h, in.capture);
 
     greenflame::core::RectPx sel =
-        in.modifier_preview
+        (in.modifier_preview || in.handle_dragging || in.dragging)
             ? in.live_rect
-            : (in.handle_dragging
-                   ? in.live_rect
-                   : (in.dragging ? in.live_rect : in.final_selection));
+            : in.final_selection;
     DrawSelectionDimAndBorder(bufDc, bufBmp, w, h, sel, in.paint_buffer,
                               in.resources);
 

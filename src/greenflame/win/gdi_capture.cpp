@@ -54,48 +54,35 @@ bool CaptureVirtualDesktop(GdiCaptureResult& out) {
     if (!desktopDc)
         return false;
 
+    bool ok = false;
+    HBITMAP dib = nullptr;
     HDC const memDc = CreateCompatibleDC(desktopDc);
-    if (!memDc) {
-        ReleaseDC(GetDesktopWindow(), desktopDc);
-        return false;
-    }
-
-    BITMAPINFOHEADER bmi;
-    FillBmi32TopDown(bmi, w, h);
-
-    void* bits = nullptr;
-    HBITMAP dib = CreateDIBSection(desktopDc, reinterpret_cast<BITMAPINFO*>(&bmi),
-                                                                DIB_RGB_COLORS, &bits, nullptr, 0);
-    if (!dib || !bits) {
+    if (memDc) {
+        BITMAPINFOHEADER bmi;
+        FillBmi32TopDown(bmi, w, h);
+        void* bits = nullptr;
+        dib = CreateDIBSection(desktopDc, reinterpret_cast<BITMAPINFO*>(&bmi),
+                               DIB_RGB_COLORS, &bits, nullptr, 0);
+        if (dib && bits) {
+            HGDIOBJ const old = SelectObject(memDc, dib);
+            if (old && old != HGDI_ERROR) {
+                ok = BitBlt(memDc, 0, 0, w, h, desktopDc, bounds.left,
+                            bounds.top, kCaptureRop) != 0;
+                SelectObject(memDc, old);
+            }
+        }
         DeleteDC(memDc);
-        ReleaseDC(GetDesktopWindow(), desktopDc);
-        return false;
     }
-
-    HGDIOBJ const old = SelectObject(memDc, dib);
-    if (!old || old == HGDI_ERROR) {
-        DeleteObject(dib);
-        DeleteDC(memDc);
-        ReleaseDC(GetDesktopWindow(), desktopDc);
-        return false;
-    }
-
-    if (!BitBlt(memDc, 0, 0, w, h, desktopDc, bounds.left, bounds.top, kCaptureRop)) {
-        SelectObject(memDc, old);
-        DeleteObject(dib);
-        DeleteDC(memDc);
-        ReleaseDC(GetDesktopWindow(), desktopDc);
-        return false;
-    }
-
-    SelectObject(memDc, old);
-    DeleteDC(memDc);
     ReleaseDC(GetDesktopWindow(), desktopDc);
 
-    out.bitmap = dib;
-    out.width = w;
-    out.height = h;
-    return true;
+    if (ok) {
+        out.bitmap = dib;
+        out.width = w;
+        out.height = h;
+    } else if (dib) {
+        DeleteObject(dib);
+    }
+    return ok;
 }
 
 bool SaveCaptureToBmp(GdiCaptureResult const& capture, wchar_t const* path) {
@@ -139,7 +126,7 @@ bool SaveCaptureToBmp(GdiCaptureResult const& capture, wchar_t const* path) {
 }
 
 bool CropCapture(GdiCaptureResult const& source, int left, int top, int width, int height,
-                                  GdiCaptureResult& out) {
+                 GdiCaptureResult& out) {
     out.Free();
     if (width <= 0 || height <= 0 || !source.IsValid())
         return false;
@@ -150,69 +137,43 @@ bool CropCapture(GdiCaptureResult const& source, int left, int top, int width, i
     if (!dc)
         return false;
 
+    bool ok = false;
+    HBITMAP dib = nullptr;
     HDC const srcDc = CreateCompatibleDC(dc);
-    if (!srcDc) {
-        ReleaseDC(nullptr, dc);
-        return false;
-    }
-    HGDIOBJ const srcOld = SelectObject(srcDc, source.bitmap);
-    if (!srcOld || srcOld == HGDI_ERROR) {
+    if (srcDc) {
+        HGDIOBJ const srcOld = SelectObject(srcDc, source.bitmap);
+        if (srcOld && srcOld != HGDI_ERROR) {
+            BITMAPINFOHEADER bmi;
+            FillBmi32TopDown(bmi, width, height);
+            void* bits = nullptr;
+            dib = CreateDIBSection(dc, reinterpret_cast<BITMAPINFO*>(&bmi),
+                                   DIB_RGB_COLORS, &bits, nullptr, 0);
+            if (dib) {
+                HDC const dstDc = CreateCompatibleDC(dc);
+                if (dstDc) {
+                    HGDIOBJ const dstOld = SelectObject(dstDc, dib);
+                    if (dstOld && dstOld != HGDI_ERROR) {
+                        ok = BitBlt(dstDc, 0, 0, width, height, srcDc, left,
+                                    top, SRCCOPY) != 0;
+                        SelectObject(dstDc, dstOld);
+                    }
+                    DeleteDC(dstDc);
+                }
+            }
+            SelectObject(srcDc, srcOld);
+        }
         DeleteDC(srcDc);
-        ReleaseDC(nullptr, dc);
-        return false;
     }
-
-    BITMAPINFOHEADER bmi;
-    FillBmi32TopDown(bmi, width, height);
-
-    void* bits = nullptr;
-    HBITMAP dib = CreateDIBSection(dc, reinterpret_cast<BITMAPINFO*>(&bmi),
-                                                                DIB_RGB_COLORS, &bits, nullptr, 0);
-    if (!dib) {
-        SelectObject(srcDc, srcOld);
-        DeleteDC(srcDc);
-        ReleaseDC(nullptr, dc);
-        return false;
-    }
-
-    HDC const dstDc = CreateCompatibleDC(dc);
-    if (!dstDc) {
-        DeleteObject(dib);
-        SelectObject(srcDc, srcOld);
-        DeleteDC(srcDc);
-        ReleaseDC(nullptr, dc);
-        return false;
-    }
-    HGDIOBJ const dstOld = SelectObject(dstDc, dib);
-    if (!dstOld || dstOld == HGDI_ERROR) {
-        DeleteDC(dstDc);
-        DeleteObject(dib);
-        SelectObject(srcDc, srcOld);
-        DeleteDC(srcDc);
-        ReleaseDC(nullptr, dc);
-        return false;
-    }
-
-    if (!BitBlt(dstDc, 0, 0, width, height, srcDc, left, top, SRCCOPY)) {
-        SelectObject(dstDc, dstOld);
-        DeleteDC(dstDc);
-        DeleteObject(dib);
-        SelectObject(srcDc, srcOld);
-        DeleteDC(srcDc);
-        ReleaseDC(nullptr, dc);
-        return false;
-    }
-
-    SelectObject(dstDc, dstOld);
-    DeleteDC(dstDc);
-    SelectObject(srcDc, srcOld);
-    DeleteDC(srcDc);
     ReleaseDC(nullptr, dc);
 
-    out.bitmap = dib;
-    out.width = width;
-    out.height = height;
-    return true;
+    if (ok) {
+        out.bitmap = dib;
+        out.width = width;
+        out.height = height;
+    } else if (dib) {
+        DeleteObject(dib);
+    }
+    return ok;
 }
 
 }  // namespace greenflame

@@ -43,16 +43,8 @@ enum class SelectionSource { Region, Window, Monitor, Desktop };
 static void SanitizeFilenameSegment(wchar_t *str, size_t maxChars) {
     static wchar_t const *const kInvalid = L"\\/:*?\"<>|";
     for (size_t i = 0; i < maxChars && str[i] != L'\0'; ++i) {
-        if (static_cast<unsigned>(str[i]) < 0x20)
+        if (static_cast<unsigned>(str[i]) < 0x20 || wcschr(kInvalid, str[i]))
             str[i] = L'_';
-        else {
-            for (wchar_t const *p = kInvalid; *p != L'\0'; ++p) {
-                if (str[i] == *p) {
-                    str[i] = L'_';
-                    break;
-                }
-            }
-        }
     }
 }
 
@@ -188,25 +180,21 @@ void UpdateModifierPreview(HWND hwnd, OverlayState *state, bool shift,
         greenflame::core::PointPx cursorScreenPx = {screenPt.x, screenPt.y};
         std::optional<size_t> idx = greenflame::core::IndexOfMonitorContaining(
             cursorScreenPx, state->cached_monitors);
-        if (idx.has_value()) {
+        if (idx.has_value())
             state->live_rect =
                 ScreenRectToClient(state->cached_monitors[*idx].bounds, ox, oy);
-            state->modifier_preview = true;
-        } else {
+        else
             state->live_rect = {};
-            state->modifier_preview = true;
-        }
+        state->modifier_preview = true;
     } else if (ctrl) {
         POINT screenPt = CursorScreenPt();
         std::optional<greenflame::core::RectPx> rect =
             greenflame::GetWindowRectUnderCursor(screenPt, hwnd);
-        if (rect.has_value()) {
+        if (rect.has_value())
             state->live_rect = ScreenRectToClient(*rect, ox, oy);
-            state->modifier_preview = true;
-        } else {
+        else
             state->live_rect = {};
-            state->modifier_preview = true;
-        }
+        state->modifier_preview = true;
     } else {
         if (state->modifier_preview) {
             state->modifier_preview = false;
@@ -319,51 +307,39 @@ static void CopyToClipboardAndClose(HWND hwnd) {
         static_cast<size_t>(rowBytes) * static_cast<size_t>(cropped.height);
     BITMAPINFOHEADER info = {};
     greenflame::FillBmi32TopDown(info, cropped.width, cropped.height);
-    info.biHeight = cropped.height;
+    info.biHeight = cropped.height; // bottom-up for clipboard CF_DIB
 
+    HGLOBAL hMem = nullptr;
     HDC const dc = GetDC(nullptr);
-    if (!dc) {
-        cropped.Free();
-        DestroyWindow(hwnd);
-        return;
-    }
-
-    size_t const dibSize = sizeof(BITMAPINFOHEADER) + imageSize;
-    HGLOBAL const hMem = GlobalAlloc(GMEM_MOVEABLE, dibSize);
-    if (!hMem) {
+    if (dc) {
+        size_t const dibSize = sizeof(BITMAPINFOHEADER) + imageSize;
+        hMem = GlobalAlloc(GMEM_MOVEABLE, dibSize);
+        if (hMem) {
+            void *const pMem = GlobalLock(hMem);
+            bool ok = false;
+            if (pMem) {
+                memcpy(pMem, &info, sizeof(BITMAPINFOHEADER));
+                uint8_t *bits =
+                    static_cast<uint8_t *>(pMem) + sizeof(BITMAPINFOHEADER);
+                ok = GetDIBits(dc, cropped.bitmap, 0, cropped.height, bits,
+                               reinterpret_cast<BITMAPINFO *>(&info),
+                               DIB_RGB_COLORS) != 0;
+                GlobalUnlock(hMem);
+            }
+            if (!ok) {
+                GlobalFree(hMem);
+                hMem = nullptr;
+            }
+        }
         ReleaseDC(nullptr, dc);
-        cropped.Free();
-        DestroyWindow(hwnd);
-        return;
     }
-    void *const pMem = GlobalLock(hMem);
-    if (!pMem) {
-        GlobalFree(hMem);
-        ReleaseDC(nullptr, dc);
-        cropped.Free();
-        DestroyWindow(hwnd);
-        return;
-    }
-    memcpy(pMem, &info, sizeof(BITMAPINFOHEADER));
-    uint8_t *bits = static_cast<uint8_t *>(pMem) + sizeof(BITMAPINFOHEADER);
-    if (GetDIBits(dc, cropped.bitmap, 0, cropped.height, bits,
-                  reinterpret_cast<BITMAPINFO *>(&info), DIB_RGB_COLORS) == 0) {
-        GlobalUnlock(hMem);
-        GlobalFree(hMem);
-        ReleaseDC(nullptr, dc);
-        cropped.Free();
-        DestroyWindow(hwnd);
-        return;
-    }
-    GlobalUnlock(hMem);
-    ReleaseDC(nullptr, dc);
     cropped.Free();
 
-    if (OpenClipboard(hwnd)) {
+    if (hMem && OpenClipboard(hwnd)) {
         EmptyClipboard();
         SetClipboardData(CF_DIB, hMem);
         CloseClipboard();
-    } else {
+    } else if (hMem) {
         GlobalFree(hMem);
     }
     DestroyWindow(hwnd);

@@ -10,7 +10,9 @@
 
 #include "greenflame_core/monitor_rules.h"
 #include "greenflame_core/rect_px.h"
+#include "greenflame_core/save_image_policy.h"
 #include "greenflame_core/selection_handles.h"
+#include "greenflame_core/snap_edge_builder.h"
 #include "greenflame_core/snap_to_edges.h"
 #include "win/gdi_capture.h"
 #include "win/monitors_win.h"
@@ -21,6 +23,7 @@
 
 #include <cstddef>
 #include <optional>
+#include <string>
 #include <vector>
 #include <wchar.h>
 
@@ -37,17 +40,6 @@ static wchar_t s_lastSaveDir[MAX_PATH] = {};
 // User's Pictures folder; used as initial dir when no previous save exists.
 static wchar_t s_picturesDir[MAX_PATH] = {};
 
-enum class SelectionSource { Region, Window, Monitor, Desktop };
-
-// Replaces characters invalid in Windows filenames with underscore.
-static void SanitizeFilenameSegment(wchar_t *str, size_t maxChars) {
-    static wchar_t const *const kInvalid = L"\\/:*?\"<>|";
-    for (size_t i = 0; i < maxChars && str[i] != L'\0'; ++i) {
-        if (static_cast<unsigned>(str[i]) < 0x20 || wcschr(kInvalid, str[i]))
-            str[i] = L'_';
-    }
-}
-
 struct OverlayState {
     greenflame::GdiCaptureResult capture;
     bool dragging = false;
@@ -58,7 +50,8 @@ struct OverlayState {
     greenflame::core::PointPx start_px = {};
     greenflame::core::RectPx live_rect = {};
     greenflame::core::RectPx final_selection = {};
-    SelectionSource selection_source = SelectionSource::Region;
+    greenflame::core::SaveSelectionSource selection_source =
+        greenflame::core::SaveSelectionSource::Region;
     std::optional<HWND> selection_window;
     std::optional<size_t> selection_monitor_index;
     ULONGLONG last_invalidate_tick = 0;
@@ -82,37 +75,23 @@ static void BuildDefaultSaveName(OverlayState const *state, wchar_t *out,
     out[0] = L'\0';
     SYSTEMTIME st = {};
     GetLocalTime(&st);
-    wchar_t timePart[32] = {};
-    swprintf_s(timePart, L"%02u%02u%02u-%02u%02u%02u", st.wDay, st.wMonth,
-               st.wYear % 100, st.wHour, st.wMinute, st.wSecond);
-
-    switch (state->selection_source) {
-    case SelectionSource::Region:
-    case SelectionSource::Desktop:
-        swprintf_s(out, outChars, L"Greenflame-%s", timePart);
-        break;
-    case SelectionSource::Monitor: {
-        size_t id = state->selection_monitor_index.value_or(0) + 1;
-        swprintf_s(out, outChars, L"Greenflame-monitor%zu-%s", id, timePart);
-        break;
+    std::wstring window_title;
+    if (state->selection_window.has_value()) {
+        wchar_t buf[256] = {};
+        if (GetWindowTextW(*state->selection_window, buf, 256) > 0 && buf[0])
+            window_title = buf;
     }
-    case SelectionSource::Window: {
-        wchar_t windowName[64] = L"window";
-        if (state->selection_window.has_value()) {
-            wchar_t buf[256] = {};
-            if (GetWindowTextW(*state->selection_window, buf, 256) > 0 &&
-                buf[0]) {
-                size_t len = wcsnlen_s(buf, 256);
-                if (len > 50)
-                    buf[50] = L'\0';
-                SanitizeFilenameSegment(buf, 256);
-                wcscpy_s(windowName, buf);
-            }
-        }
-        swprintf_s(out, outChars, L"Greenflame-%s-%s", windowName, timePart);
-        break;
-    }
-    }
+    greenflame::core::SaveTimestamp timestamp = {};
+    timestamp.day = st.wDay;
+    timestamp.month = st.wMonth;
+    timestamp.year_two_digits = st.wYear % 100;
+    timestamp.hour = st.wHour;
+    timestamp.minute = st.wMinute;
+    timestamp.second = st.wSecond;
+    std::wstring const name = greenflame::core::BuildDefaultSaveName(
+        state->selection_source, state->selection_monitor_index, window_title,
+        timestamp);
+    wcsncpy_s(out, outChars, name.c_str(), _TRUNCATE);
 }
 
 OverlayState *GetState(HWND hwnd) {
@@ -133,14 +112,6 @@ POINT CursorScreenPt() {
     return pt;
 }
 
-greenflame::core::RectPx
-ScreenRectToClient(greenflame::core::RectPx screen_rect, int origin_x,
-                   int origin_y) {
-    return greenflame::core::RectPx::FromLtrb(
-        screen_rect.left - origin_x, screen_rect.top - origin_y,
-        screen_rect.right - origin_x, screen_rect.bottom - origin_y);
-}
-
 void BuildSnapEdgesFromWindows(HWND hwnd, OverlayState *state) {
     RECT overlayRect;
     GetWindowRect(hwnd, &overlayRect);
@@ -148,15 +119,11 @@ void BuildSnapEdgesFromWindows(HWND hwnd, OverlayState *state) {
     int const oy = overlayRect.top;
     state->window_rects.clear();
     greenflame::GetVisibleTopLevelWindowRects(hwnd, state->window_rects);
-    state->vertical_edges.clear();
-    state->horizontal_edges.clear();
-    for (greenflame::core::RectPx const &r : state->window_rects) {
-        greenflame::core::RectPx client = ScreenRectToClient(r, ox, oy);
-        state->vertical_edges.push_back(client.left);
-        state->vertical_edges.push_back(client.right);
-        state->horizontal_edges.push_back(client.top);
-        state->horizontal_edges.push_back(client.bottom);
-    }
+    greenflame::core::SnapEdges const edges =
+        greenflame::core::BuildSnapEdgesFromScreenRects(state->window_rects, ox,
+                                                        oy);
+    state->vertical_edges = edges.vertical;
+    state->horizontal_edges = edges.horizontal;
 }
 
 void UpdateModifierPreview(HWND hwnd, OverlayState *state, bool shift,
@@ -173,7 +140,8 @@ void UpdateModifierPreview(HWND hwnd, OverlayState *state, bool shift,
     if (shift && ctrl) {
         greenflame::core::RectPx desktopScreen =
             greenflame::GetVirtualDesktopBoundsPx();
-        state->live_rect = ScreenRectToClient(desktopScreen, ox, oy);
+        state->live_rect =
+            greenflame::core::ScreenRectToClientRect(desktopScreen, ox, oy);
         state->modifier_preview = true;
     } else if (shift) {
         POINT screenPt = CursorScreenPt();
@@ -182,7 +150,8 @@ void UpdateModifierPreview(HWND hwnd, OverlayState *state, bool shift,
             cursorScreenPx, state->cached_monitors);
         if (idx.has_value())
             state->live_rect =
-                ScreenRectToClient(state->cached_monitors[*idx].bounds, ox, oy);
+                greenflame::core::ScreenRectToClientRect(
+                    state->cached_monitors[*idx].bounds, ox, oy);
         else
             state->live_rect = {};
         state->modifier_preview = true;
@@ -191,7 +160,8 @@ void UpdateModifierPreview(HWND hwnd, OverlayState *state, bool shift,
         std::optional<greenflame::core::RectPx> rect =
             greenflame::GetWindowRectUnderCursor(screenPt, hwnd);
         if (rect.has_value())
-            state->live_rect = ScreenRectToClient(*rect, ox, oy);
+            state->live_rect =
+                greenflame::core::ScreenRectToClientRect(*rect, ox, oy);
         else
             state->live_rect = {};
         state->modifier_preview = true;
@@ -248,27 +218,16 @@ static void SaveAsAndClose(HWND hwnd) {
         return;
     }
 
-    DWORD const filterIndex = ofn.nFilterIndex;
-    size_t pathLen = wcsnlen_s(pathBuf, MAX_PATH);
-    auto EndsWith = [&](wchar_t const *ext) {
-        size_t elen = wcslen(ext);
-        return pathLen >= elen && _wcsicmp(pathBuf + pathLen - elen, ext) == 0;
-    };
-    if (!EndsWith(L".png") && !EndsWith(L".jpg") && !EndsWith(L".jpeg") &&
-        !EndsWith(L".bmp")) {
-        if (filterIndex == 2)
-            wcscat_s(pathBuf, L".jpg");
-        else if (filterIndex == 3)
-            wcscat_s(pathBuf, L".bmp");
-        else
-            wcscat_s(pathBuf, L".png");
-        pathLen = wcsnlen_s(pathBuf, MAX_PATH);
-    }
+    std::wstring const resolved_path =
+        greenflame::core::EnsureImageSaveExtension(pathBuf, ofn.nFilterIndex);
+    wcsncpy_s(pathBuf, MAX_PATH, resolved_path.c_str(), _TRUNCATE);
 
     bool saved = false;
-    if (EndsWith(L".jpg") || EndsWith(L".jpeg"))
+    greenflame::core::ImageSaveFormat const format =
+        greenflame::core::DetectImageSaveFormatFromPath(pathBuf);
+    if (format == greenflame::core::ImageSaveFormat::Jpeg)
         saved = greenflame::SaveCaptureToJpeg(cropped, pathBuf);
-    else if (EndsWith(L".bmp"))
+    else if (format == greenflame::core::ImageSaveFormat::Bmp)
         saved = greenflame::SaveCaptureToBmp(cropped, pathBuf);
     else
         saved = greenflame::SaveCaptureToPng(cropped, pathBuf);
@@ -435,9 +394,11 @@ LRESULT OnOverlayLButtonDown(HWND hwnd) {
         state->selection_window = std::nullopt;
         state->selection_monitor_index = std::nullopt;
         if (shift && ctrl) {
-            state->selection_source = SelectionSource::Desktop;
+            state->selection_source =
+                greenflame::core::SaveSelectionSource::Desktop;
         } else if (shift) {
-            state->selection_source = SelectionSource::Monitor;
+            state->selection_source =
+                greenflame::core::SaveSelectionSource::Monitor;
             POINT screenPt = CursorScreenPt();
             greenflame::core::PointPx cursorScreenPx = {screenPt.x, screenPt.y};
             std::optional<size_t> idx =
@@ -446,7 +407,8 @@ LRESULT OnOverlayLButtonDown(HWND hwnd) {
             if (idx.has_value())
                 state->selection_monitor_index = *idx;
         } else {
-            state->selection_source = SelectionSource::Window;
+            state->selection_source =
+                greenflame::core::SaveSelectionSource::Window;
             POINT screenPt = CursorScreenPt();
             std::optional<HWND> win =
                 greenflame::GetWindowUnderCursor(screenPt, hwnd);
@@ -478,7 +440,7 @@ LRESULT OnOverlayLButtonDown(HWND hwnd) {
     state->start_px = cur;
     state->dragging = true;
     state->final_selection = {};
-    state->selection_source = SelectionSource::Region;
+    state->selection_source = greenflame::core::SaveSelectionSource::Region;
     state->selection_window = std::nullopt;
     state->selection_monitor_index = std::nullopt;
     state->live_rect =
@@ -559,7 +521,7 @@ LRESULT OnOverlayLButtonUp(HWND hwnd) {
         }
         state->final_selection = greenflame::core::AllowedSelectionRect(
             raw, state->start_px, state->cached_monitors);
-        state->selection_source = SelectionSource::Region;
+        state->selection_source = greenflame::core::SaveSelectionSource::Region;
         state->selection_window = std::nullopt;
         state->selection_monitor_index = std::nullopt;
         state->dragging = false;

@@ -20,6 +20,8 @@ add_executable(greenflame_tests
     dpi_scale_tests.cpp
     selection_handles_tests.cpp
     snap_to_edges_tests.cpp
+    snap_edge_builder_tests.cpp
+    save_image_policy_tests.cpp
 )
 set_target_properties(greenflame_tests PROPERTIES WIN32_EXECUTABLE FALSE)  # console app (main), not GUI (WinMain)
 target_link_libraries(greenflame_tests PRIVATE

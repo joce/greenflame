@@ -3,6 +3,7 @@
 
 #include <windows.h>
 
+#include "win/config.h"
 #include "win/dpi.h"
 #include "win/overlay_window.h"
 #include "win/tray.h"
@@ -26,6 +27,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int) {
     if (!greenflame::RegisterOverlayClass(hInstance) ||
             !greenflame::RegisterTrayClass(hInstance))
         return 1;
+    greenflame::Config config = greenflame::LoadConfig();
     HWND trayHwnd = greenflame::CreateTrayWindow(hInstance, greenflame::CreateOverlayIfNone);
     if (!trayHwnd)
         return 2;
@@ -34,5 +36,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
+    (void)greenflame::SaveConfig(config);
     return static_cast<int>(msg.wParam);
 }

@@ -91,7 +91,7 @@ cmake --preset x64-release
 cmake --build --preset x64-release
 ```
 
-### Clang build (optional)
+### Clang build
 
 With the Visual Studio "C++ Clang compiler for Windows" (or "Clang-cl") component installed:
 
@@ -104,11 +104,16 @@ Output: `build\x64-debug-clang\greenflame.exe`. Run tests: `ctest --test-dir bui
 
 For release with Clang: `cmake --preset x64-release-clang` then `cmake --build --preset x64-release-clang`.
 
-### Static analysis and include analysis
+### Static analysis and include analysis (non-mandatory)
 
 - **clang-tidy:** `compile_commands.json` is generated in the build dir (from `CMAKE_EXPORT_COMPILE_COMMANDS ON`). Use the Clang preset build dir so include paths and defines match. Example: `clang-tidy -p build\x64-debug-clang src\greenflame\win\gdi_capture.cpp` (and similarly for other sources under `src\greenflame\` and `src\greenflame_core\`).
 - **Include timing:** Clang builds use `-ftime-trace`; the compiler emits `.json` trace files in the build dir. Open them in Chrome’s `chrome://tracing` to inspect time spent in includes and in the compiler.
 - **Include What You Use (IWYU)** can use the same `compile_commands.json` for optional include-cleanup suggestions.
+
+### Completeness and correctness
+
+- Code iteration can be done on the MSVC debug build only.
+- However, all builds (debug and release) must be run on all compilers (MSVC and Clang) and must pass before any task is considered complete. This is a hard requirement.
 
 ---
 
@@ -145,6 +150,8 @@ If using a multi-config generator (Visual Studio):
 ```bat
 ctest --test-dir build\x64-debug -C Debug
 ```
+
+Test must be run and must pass before any task is considered complete. This is a hard requirement.
 
 ---
 

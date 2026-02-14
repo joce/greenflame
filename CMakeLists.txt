@@ -53,10 +53,32 @@ else()
 endif()
 
 # -----------------------------
+# Tests (before easyjson so CPM/cmake-scripts don't affect test config)
+# -----------------------------
+include(CTest)
+if (BUILD_TESTING)
+    add_subdirectory(tests)
+endif()
+
+# -----------------------------
+# easyjson (header-only JSON)
+# -----------------------------
+include(FetchContent)
+FetchContent_Declare(
+    easyjson
+    GIT_REPOSITORY https://github.com/jahan-addison/easyjson.git
+    GIT_TAG        v1.2.1
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(easyjson)
+
+# -----------------------------
 # greenflame (Win32 GUI app)
 # -----------------------------
 add_executable(greenflame WIN32
     src/greenflame/main.cpp
+    src/greenflame/win/config.cpp
+    src/greenflame/win/config.h
     src/greenflame/win/cursor.cpp
     src/greenflame/win/cursor.h
     src/greenflame/win/gdi_capture.cpp
@@ -102,6 +124,7 @@ endif()
 
 target_link_libraries(greenflame PRIVATE
     greenflame_core
+    easyjson
 
         # Win32 basics
         user32
@@ -114,10 +137,3 @@ target_link_libraries(greenflame PRIVATE
         ole32
 )
 
-# -----------------------------
-# Tests
-# -----------------------------
-include(CTest) # defines BUILD_TESTING option and enables ctest integration
-if (BUILD_TESTING)
-    add_subdirectory(tests)
-endif()

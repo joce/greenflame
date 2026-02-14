@@ -29,3 +29,6 @@ target_link_libraries(greenflame_tests PRIVATE
     Catch2::Catch2WithMain
 )
 add_test(NAME greenflame_tests COMMAND greenflame_tests)
+set_tests_properties(greenflame_tests PROPERTIES
+    ENVIRONMENT_MODIFICATION "PATH=path_list_append:$<TARGET_RUNTIME_DLL_DIRS:greenflame_tests>"
+)

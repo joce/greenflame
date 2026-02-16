@@ -1,12 +1,8 @@
-// Entry point: console detach (if from CLI), DPI, tray + overlay registration,
-// single message loop. Overlay created on demand via tray "Start capture".
+// Entry point: optional console-detach relaunch, then run GreenflameApp.
 
 #include <windows.h>
 
-#include "win/config.h"
-#include "win/dpi.h"
-#include "win/overlay_window.h"
-#include "win/tray.h"
+#include "greenflame_app.h"
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int) {
     if (GetConsoleWindow() != nullptr) {
@@ -23,19 +19,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int) {
             }
         }
     }
-    greenflame::EnablePerMonitorDpiAwarenessV2();
-    if (!greenflame::RegisterOverlayClass(hInstance) ||
-            !greenflame::RegisterTrayClass(hInstance))
-        return 1;
-    greenflame::Config config = greenflame::LoadConfig();
-    HWND trayHwnd = greenflame::CreateTrayWindow(hInstance, greenflame::CreateOverlayIfNone);
-    if (!trayHwnd)
-        return 2;
-    MSG msg;
-    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
-    }
-    (void)greenflame::SaveConfig(config);
-    return static_cast<int>(msg.wParam);
+    greenflame::GreenflameApp app(hInstance);
+    return app.Run();
 }

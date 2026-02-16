@@ -230,6 +230,7 @@ Breaking these rules is considered a correctness bug.
 ## Notes for Agents
 
 - **Indent with 4 spaces (no tabs).**
+- **Prefer forward declarations over `#include` in header files.** Avoid including headers in other headers whenever possible; use forward declarations for types that are only used as pointers or references. Include the full header only in the `.cpp` that needs the definition.
 - Do not introduce third-party libraries without explicit justification
 - Do not bypass or “simplify” DPI logic
 - Do not move testable logic into the GUI executable

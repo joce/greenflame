@@ -5,7 +5,7 @@
 // CreateDIBSection, BitBlt(SRCCOPY | CAPTUREBLT). Caller must call
 // Result::Free() when done (or DeleteObject(result.bitmap)).
 
-#include <windows.h>
+#include "win_min_fwd.h"
 
 namespace greenflame {
 

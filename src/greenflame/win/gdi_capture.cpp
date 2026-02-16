@@ -3,9 +3,11 @@
 // BitBlt(SRCCOPY | CAPTUREBLT). SaveCaptureToBmp for validation.
 
 #include "gdi_capture.h"
-#include "virtual_screen.h"
+#include "win/display_queries.h"
 #include "greenflame_core/bmp.h"
 #include "greenflame_core/rect_px.h"
+
+#include <windows.h>
 
 #include <cstdint>
 #include <vector>

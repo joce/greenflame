@@ -77,27 +77,23 @@ FetchContent_MakeAvailable(easyjson)
 # -----------------------------
 add_executable(greenflame WIN32
     src/greenflame/main.cpp
-    src/greenflame/win/config.cpp
-    src/greenflame/win/config.h
-    src/greenflame/win/cursor.cpp
-    src/greenflame/win/cursor.h
+    src/greenflame/greenflame_app.cpp
+    src/greenflame/greenflame_app.h
+    src/greenflame/app_config.cpp
+    src/greenflame/app_config.h
+    src/greenflame/win/display_queries.cpp
+    src/greenflame/win/display_queries.h
     src/greenflame/win/gdi_capture.cpp
     src/greenflame/win/gdi_capture.h
     src/greenflame/win/save_image.cpp
-    src/greenflame/win/dpi.cpp
-    src/greenflame/win/dpi.h
-    src/greenflame/win/monitors_win.cpp
-    src/greenflame/win/monitors_win.h
     src/greenflame/win/overlay_paint.cpp
     src/greenflame/win/overlay_paint.h
     src/greenflame/win/overlay_window.cpp
     src/greenflame/win/overlay_window.h
-    src/greenflame/win/tray.cpp
-    src/greenflame/win/tray.h
-    src/greenflame/win/virtual_screen.cpp
-    src/greenflame/win/virtual_screen.h
-    src/greenflame/win/window_under_cursor.cpp
-    src/greenflame/win/window_under_cursor.h
+    src/greenflame/win/tray_window.cpp
+    src/greenflame/win/tray_window.h
+    src/greenflame/win/window_query.cpp
+    src/greenflame/win/window_query.h
     app.manifest
     greenflame.rc
 )
@@ -136,4 +132,3 @@ target_link_libraries(greenflame PRIVATE
         Windowscodecs
         ole32
 )
-

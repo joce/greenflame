@@ -1,27 +1,26 @@
-// Overlay window: fullscreen capture/selection UI. RegisterOverlayClass and
-// CreateOverlayIfNone are called from main; overlay runs modeless, no
-// PostQuitMessage on close.
-
-#include <windows.h>
-#include <ShlObj.h>
-#include <commdlg.h>
+// Overlay window object: fullscreen capture/selection UI.
 
 #include "win/overlay_window.h"
 
+#include "app_config.h"
 #include "greenflame_core/monitor_rules.h"
 #include "greenflame_core/rect_px.h"
 #include "greenflame_core/save_image_policy.h"
 #include "greenflame_core/selection_handles.h"
 #include "greenflame_core/snap_edge_builder.h"
 #include "greenflame_core/snap_to_edges.h"
+#include "win/display_queries.h"
 #include "win/gdi_capture.h"
-#include "win/monitors_win.h"
 #include "win/overlay_paint.h"
 #include "win/save_image.h"
-#include "win/virtual_screen.h"
-#include "win/window_under_cursor.h"
+#include "win/window_query.h"
+
+#include <windows.h>
+#include <ShlObj.h>
+#include <commdlg.h>
 
 #include <cstddef>
+#include <cstring>
 #include <optional>
 #include <string>
 #include <vector>
@@ -29,188 +28,403 @@
 
 namespace {
 
-constexpr const wchar_t *kOverlayWindowClass = L"GreenflameOverlay";
+constexpr wchar_t kOverlayWindowClass[] = L"GreenflameOverlay";
 constexpr int kHandleGrabRadiusPx = 6;
 constexpr int32_t kSnapThresholdPx = 10;
 
-static HWND s_overlayHwnd = nullptr;
+[[nodiscard]] POINT ToPoint(greenflame::core::PointPx p) {
+    POINT out{};
+    out.x = p.x;
+    out.y = p.y;
+    return out;
+}
 
-// Directory of the last successful save; used as initial dir for next Save As.
-static wchar_t s_lastSaveDir[MAX_PATH] = {};
-// User's Pictures folder; used as initial dir when no previous save exists.
-static wchar_t s_picturesDir[MAX_PATH] = {};
+[[nodiscard]] HCURSOR CursorForHandle(greenflame::core::SelectionHandle handle) {
+    using Handle = greenflame::core::SelectionHandle;
+    switch (handle) {
+    case Handle::Top:
+    case Handle::Bottom:
+        return LoadCursorW(nullptr, IDC_SIZENS);
+    case Handle::Left:
+    case Handle::Right:
+        return LoadCursorW(nullptr, IDC_SIZEWE);
+    case Handle::TopLeft:
+    case Handle::BottomRight:
+        return LoadCursorW(nullptr, IDC_SIZENWSE);
+    case Handle::TopRight:
+    case Handle::BottomLeft:
+        return LoadCursorW(nullptr, IDC_SIZENESW);
+    }
+    return LoadCursorW(nullptr, IDC_ARROW);
+}
 
-struct OverlayState {
-    greenflame::GdiCaptureResult capture;
+}  // namespace
+
+namespace greenflame {
+
+struct OverlayWindow::OverlayResources {
+    GdiCaptureResult capture = {};
+    std::vector<uint8_t> paint_buffer = {};
+    PaintResources paint = {};
+
+    OverlayResources() = default;
+    ~OverlayResources() {
+        Reset();
+    }
+
+    OverlayResources(OverlayResources const&) = delete;
+    OverlayResources& operator=(OverlayResources const&) = delete;
+
+    [[nodiscard]] bool InitializeForCapture() {
+        if (!capture.IsValid()) {
+            return false;
+        }
+        int const paint_row_bytes = RowBytes32(capture.width);
+        size_t const paint_buf_size =
+            static_cast<size_t>(paint_row_bytes) * static_cast<size_t>(capture.height);
+        try {
+            paint_buffer.resize(paint_buf_size);
+        } catch (...) {
+            return false;
+        }
+
+        paint.font_dim =
+            CreateFontW(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                        DEFAULT_QUALITY, FF_DONTCARE, L"Segoe UI");
+        paint.font_center =
+            CreateFontW(36, 0, 0, 0, FW_BLACK, FALSE, FALSE, FALSE,
+                        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                        DEFAULT_QUALITY, FF_DONTCARE, L"Segoe UI");
+        paint.crosshair_pen = CreatePen(PS_SOLID, 1, RGB(0x20, 0xB2, 0xAA));
+        paint.border_pen = CreatePen(PS_SOLID, 1, RGB(46, 139, 87));
+        paint.handle_brush = CreateSolidBrush(RGB(0, 0x80, 0x80));
+        paint.handle_pen = CreatePen(PS_SOLID, 1, RGB(0, 0x80, 0x80));
+        paint.sel_border_brush = CreateSolidBrush(RGB(0, 0x80, 0x80));
+        return true;
+    }
+
+    void Reset() noexcept {
+        capture.Free();
+        paint_buffer.clear();
+        if (paint.font_dim) {
+            DeleteObject(paint.font_dim);
+            paint.font_dim = nullptr;
+        }
+        if (paint.font_center) {
+            DeleteObject(paint.font_center);
+            paint.font_center = nullptr;
+        }
+        if (paint.crosshair_pen) {
+            DeleteObject(paint.crosshair_pen);
+            paint.crosshair_pen = nullptr;
+        }
+        if (paint.border_pen) {
+            DeleteObject(paint.border_pen);
+            paint.border_pen = nullptr;
+        }
+        if (paint.handle_brush) {
+            DeleteObject(paint.handle_brush);
+            paint.handle_brush = nullptr;
+        }
+        if (paint.handle_pen) {
+            DeleteObject(paint.handle_pen);
+            paint.handle_pen = nullptr;
+        }
+        if (paint.sel_border_brush) {
+            DeleteObject(paint.sel_border_brush);
+            paint.sel_border_brush = nullptr;
+        }
+    }
+};
+
+struct OverlayWindow::OverlayState {
     bool dragging = false;
     bool handle_dragging = false;
     bool modifier_preview = false;
-    std::optional<greenflame::core::SelectionHandle> resize_handle;
+    std::optional<greenflame::core::SelectionHandle> resize_handle = std::nullopt;
     greenflame::core::RectPx resize_anchor_rect = {};
     greenflame::core::PointPx start_px = {};
     greenflame::core::RectPx live_rect = {};
     greenflame::core::RectPx final_selection = {};
     greenflame::core::SaveSelectionSource selection_source =
         greenflame::core::SaveSelectionSource::Region;
-    std::optional<HWND> selection_window;
-    std::optional<size_t> selection_monitor_index;
+    std::optional<HWND> selection_window = std::nullopt;
+    std::optional<size_t> selection_monitor_index = std::nullopt;
     ULONGLONG last_invalidate_tick = 0;
-    // Reused for snap-to-window-edges; avoid per-frame allocation.
-    std::vector<greenflame::core::RectPx> window_rects;
-    std::vector<int32_t> vertical_edges;
-    std::vector<int32_t> horizontal_edges;
-    // Reusable paint buffer: allocated once, reused every WM_PAINT frame.
-    std::vector<uint8_t> paint_buffer;
-    // Cached GDI resources: created once at overlay init, destroyed on close.
-    greenflame::PaintResources resources = {};
-    // Cached monitor list: populated at overlay creation, stable for overlay lifetime.
-    std::vector<greenflame::core::MonitorWithBounds> cached_monitors;
+    std::vector<greenflame::core::RectPx> window_rects = {};
+    std::vector<int32_t> vertical_edges = {};
+    std::vector<int32_t> horizontal_edges = {};
+    std::vector<greenflame::core::MonitorWithBounds> cached_monitors = {};
+
+    void ResetForSession() {
+        dragging = false;
+        handle_dragging = false;
+        modifier_preview = false;
+        resize_handle = std::nullopt;
+        resize_anchor_rect = {};
+        start_px = {};
+        live_rect = {};
+        final_selection = {};
+        selection_source = greenflame::core::SaveSelectionSource::Region;
+        selection_window = std::nullopt;
+        selection_monitor_index = std::nullopt;
+        last_invalidate_tick = 0;
+        window_rects.clear();
+        vertical_edges.clear();
+        horizontal_edges.clear();
+        cached_monitors.clear();
+    }
 };
 
-// Builds default save filename (no path) into out. Uses DDMMYY-HHmmSS.
-static void BuildDefaultSaveName(OverlayState const *state, wchar_t *out,
-                                 size_t outChars) {
-    if (!state || outChars == 0)
+OverlayWindow::OverlayWindow(IOverlayEvents* events, AppConfig* config)
+    : events_(events), config_(config),
+      state_(std::make_unique<OverlayState>()),
+      resources_(std::make_unique<OverlayResources>()) {}
+
+OverlayWindow::~OverlayWindow() {
+    Destroy();
+}
+
+bool OverlayWindow::RegisterWindowClass(HINSTANCE hinstance) {
+    WNDCLASSEXW window_class{};
+    window_class.cbSize = sizeof(window_class);
+    window_class.style = CS_HREDRAW | CS_VREDRAW;
+    window_class.lpfnWndProc = &OverlayWindow::StaticWndProc;
+    window_class.hInstance = hinstance;
+    window_class.hCursor = LoadCursorW(nullptr, IDC_CROSS);
+    window_class.hbrBackground = nullptr;
+    window_class.lpszClassName = kOverlayWindowClass;
+    return RegisterClassExW(&window_class) != 0;
+}
+
+bool OverlayWindow::CreateAndShow(HINSTANCE hinstance) {
+    if (IsOpen()) {
+        return true;
+    }
+    hinstance_ = hinstance;
+    resources_->Reset();
+    state_->ResetForSession();
+    state_->window_rects.reserve(64);
+    state_->vertical_edges.reserve(128);
+    state_->horizontal_edges.reserve(128);
+
+    core::RectPx const bounds = GetVirtualDesktopBoundsPx();
+    HWND const hwnd = CreateWindowExW(
+        WS_EX_TOPMOST, kOverlayWindowClass, L"", WS_POPUP, bounds.left, bounds.top,
+        bounds.Width(), bounds.Height(), nullptr, nullptr, hinstance_, this);
+    if (!hwnd) {
+        hinstance_ = nullptr;
+        return false;
+    }
+
+    if (!CaptureVirtualDesktop(resources_->capture) ||
+        !resources_->InitializeForCapture()) {
+        DestroyWindow(hwnd);
+        return false;
+    }
+
+    state_->cached_monitors = GetMonitorsWithBounds();
+    ShowWindow(hwnd, SW_SHOW);
+    return true;
+}
+
+void OverlayWindow::Destroy() {
+    if (!IsOpen()) {
         return;
+    }
+    DestroyWindow(hwnd_);
+}
+
+bool OverlayWindow::IsOpen() const {
+    return hwnd_ != nullptr && IsWindow(hwnd_) != 0;
+}
+
+LRESULT CALLBACK OverlayWindow::StaticWndProc(HWND hwnd, UINT msg, WPARAM wparam,
+                                              LPARAM lparam) {
+    if (msg == WM_NCCREATE) {
+        CREATESTRUCTW const* create =
+            reinterpret_cast<CREATESTRUCTW const*>(lparam);
+        OverlayWindow* self =
+            reinterpret_cast<OverlayWindow*>(create->lpCreateParams);
+        if (!self) {
+            return FALSE;
+        }
+        self->hwnd_ = hwnd;
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
+        return TRUE;
+    }
+
+    OverlayWindow* self = reinterpret_cast<OverlayWindow*>(
+        GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+    if (!self) {
+        return DefWindowProcW(hwnd, msg, wparam, lparam);
+    }
+    LRESULT const result = self->WndProc(msg, wparam, lparam);
+    if (msg == WM_NCDESTROY) {
+        self->hwnd_ = nullptr;
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+    }
+    return result;
+}
+
+LRESULT OverlayWindow::WndProc(UINT msg, WPARAM wparam, LPARAM lparam) {
+    switch (msg) {
+    case WM_KEYDOWN:
+        return OnKeyDown(wparam, lparam);
+    case WM_KEYUP:
+        return OnKeyUp(wparam, lparam);
+    case WM_LBUTTONDOWN:
+        return OnLButtonDown();
+    case WM_MOUSEMOVE:
+        return OnMouseMove();
+    case WM_LBUTTONUP:
+        return OnLButtonUp();
+    case WM_PAINT:
+        return OnPaint();
+    case WM_SETCURSOR:
+        return OnSetCursor(wparam, lparam);
+    case WM_ERASEBKGND:
+        return 1;
+    case WM_DESTROY:
+        return OnDestroy();
+    case WM_CLOSE:
+        return OnClose();
+    case WM_NCDESTROY:
+        return DefWindowProcW(hwnd_, msg, wparam, lparam);
+    default:
+        return DefWindowProcW(hwnd_, msg, wparam, lparam);
+    }
+}
+
+void OverlayWindow::BuildDefaultSaveName(wchar_t* out, size_t out_chars) const {
+    if (!out || out_chars == 0) {
+        return;
+    }
     out[0] = L'\0';
-    SYSTEMTIME st = {};
+    SYSTEMTIME st{};
     GetLocalTime(&st);
     std::wstring window_title;
-    if (state->selection_window.has_value()) {
-        wchar_t buf[256] = {};
-        if (GetWindowTextW(*state->selection_window, buf, 256) > 0 && buf[0])
-            window_title = buf;
+    if (state_->selection_window.has_value()) {
+        wchar_t buffer[256] = {};
+        if (GetWindowTextW(*state_->selection_window, buffer, 256) > 0 && buffer[0]) {
+            window_title = buffer;
+        }
     }
-    greenflame::core::SaveTimestamp timestamp = {};
+    core::SaveTimestamp timestamp{};
     timestamp.day = st.wDay;
     timestamp.month = st.wMonth;
     timestamp.year_two_digits = st.wYear % 100;
     timestamp.hour = st.wHour;
     timestamp.minute = st.wMinute;
     timestamp.second = st.wSecond;
-    std::wstring const name = greenflame::core::BuildDefaultSaveName(
-        state->selection_source, state->selection_monitor_index, window_title,
+    std::wstring const name = core::BuildDefaultSaveName(
+        state_->selection_source, state_->selection_monitor_index, window_title,
         timestamp);
-    wcsncpy_s(out, outChars, name.c_str(), _TRUNCATE);
+    wcsncpy_s(out, out_chars, name.c_str(), _TRUNCATE);
 }
 
-OverlayState *GetState(HWND hwnd) {
-    return reinterpret_cast<OverlayState *>(
-        GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+void OverlayWindow::BuildSnapEdgesFromWindows() {
+    RECT overlay_rect{};
+    GetWindowRect(hwnd_, &overlay_rect);
+    int const origin_x = overlay_rect.left;
+    int const origin_y = overlay_rect.top;
+    state_->window_rects.clear();
+    GetVisibleTopLevelWindowRects(hwnd_, state_->window_rects);
+    core::SnapEdges const edges =
+        core::BuildSnapEdgesFromScreenRects(state_->window_rects, origin_x, origin_y);
+    state_->vertical_edges = edges.vertical;
+    state_->horizontal_edges = edges.horizontal;
 }
 
-greenflame::core::PointPx ClientCursorPx(HWND hwnd) {
-    POINT pt;
-    GetCursorPos(&pt);
-    ScreenToClient(hwnd, &pt);
-    return {pt.x, pt.y};
-}
-
-POINT CursorScreenPt() {
-    POINT pt;
-    GetCursorPos(&pt);
-    return pt;
-}
-
-void BuildSnapEdgesFromWindows(HWND hwnd, OverlayState *state) {
-    RECT overlayRect;
-    GetWindowRect(hwnd, &overlayRect);
-    int const ox = overlayRect.left;
-    int const oy = overlayRect.top;
-    state->window_rects.clear();
-    greenflame::GetVisibleTopLevelWindowRects(hwnd, state->window_rects);
-    greenflame::core::SnapEdges const edges =
-        greenflame::core::BuildSnapEdgesFromScreenRects(state->window_rects, ox,
-                                                        oy);
-    state->vertical_edges = edges.vertical;
-    state->horizontal_edges = edges.horizontal;
-}
-
-void UpdateModifierPreview(HWND hwnd, OverlayState *state, bool shift,
-                           bool ctrl) {
-    if (!state || state->dragging || state->handle_dragging)
+void OverlayWindow::UpdateModifierPreview(bool shift, bool ctrl) {
+    if (state_->dragging || state_->handle_dragging) {
         return;
-    if (!state->final_selection.IsEmpty())
+    }
+    if (!state_->final_selection.IsEmpty()) {
         return;
-    RECT overlayRect;
-    GetWindowRect(hwnd, &overlayRect);
-    int const ox = overlayRect.left;
-    int const oy = overlayRect.top;
+    }
+    RECT overlay_rect{};
+    GetWindowRect(hwnd_, &overlay_rect);
+    int const origin_x = overlay_rect.left;
+    int const origin_y = overlay_rect.top;
 
     if (shift && ctrl) {
-        greenflame::core::RectPx desktopScreen =
-            greenflame::GetVirtualDesktopBoundsPx();
-        state->live_rect =
-            greenflame::core::ScreenRectToClientRect(desktopScreen, ox, oy);
-        state->modifier_preview = true;
+        core::RectPx const desktop_screen = GetVirtualDesktopBoundsPx();
+        state_->live_rect =
+            core::ScreenRectToClientRect(desktop_screen, origin_x, origin_y);
+        state_->modifier_preview = true;
     } else if (shift) {
-        POINT screenPt = CursorScreenPt();
-        greenflame::core::PointPx cursorScreenPx = {screenPt.x, screenPt.y};
-        std::optional<size_t> idx = greenflame::core::IndexOfMonitorContaining(
-            cursorScreenPx, state->cached_monitors);
-        if (idx.has_value())
-            state->live_rect =
-                greenflame::core::ScreenRectToClientRect(
-                    state->cached_monitors[*idx].bounds, ox, oy);
-        else
-            state->live_rect = {};
-        state->modifier_preview = true;
+        core::PointPx const cursor_screen = GetCursorPosPx();
+        std::optional<size_t> index = core::IndexOfMonitorContaining(
+            cursor_screen, state_->cached_monitors);
+        if (index.has_value()) {
+            state_->live_rect = core::ScreenRectToClientRect(
+                state_->cached_monitors[*index].bounds, origin_x, origin_y);
+        } else {
+            state_->live_rect = {};
+        }
+        state_->modifier_preview = true;
     } else if (ctrl) {
-        POINT screenPt = CursorScreenPt();
-        std::optional<greenflame::core::RectPx> rect =
-            greenflame::GetWindowRectUnderCursor(screenPt, hwnd);
-        if (rect.has_value())
-            state->live_rect =
-                greenflame::core::ScreenRectToClientRect(*rect, ox, oy);
-        else
-            state->live_rect = {};
-        state->modifier_preview = true;
+        core::PointPx const cursor_screen = GetCursorPosPx();
+        std::optional<core::RectPx> rect =
+            GetWindowRectUnderCursor(ToPoint(cursor_screen), hwnd_);
+        if (rect.has_value()) {
+            state_->live_rect =
+                core::ScreenRectToClientRect(*rect, origin_x, origin_y);
+        } else {
+            state_->live_rect = {};
+        }
+        state_->modifier_preview = true;
     } else {
-        if (state->modifier_preview) {
-            state->modifier_preview = false;
-            state->live_rect = {};
+        if (state_->modifier_preview) {
+            state_->modifier_preview = false;
+            state_->live_rect = {};
         }
     }
 }
 
-// Returns true if path was saved and overlay was closed.
-static void SaveAsAndClose(HWND hwnd) {
-    OverlayState *state = GetState(hwnd);
-    if (!state || !state->capture.IsValid())
+void OverlayWindow::SaveAsAndClose() {
+    if (!resources_->capture.IsValid()) {
         return;
-    greenflame::core::RectPx const &r = state->final_selection;
-    if (r.IsEmpty())
-        return;
-
-    greenflame::GdiCaptureResult cropped;
-    if (!greenflame::CropCapture(state->capture, r.left, r.top, r.Width(),
-                                 r.Height(), cropped)) {
-        DestroyWindow(hwnd);
+    }
+    core::RectPx const& selection = state_->final_selection;
+    if (selection.IsEmpty()) {
         return;
     }
 
-    wchar_t defaultName[256] = {};
-    BuildDefaultSaveName(state, defaultName, 256);
+    GdiCaptureResult cropped;
+    if (!CropCapture(resources_->capture, selection.left, selection.top,
+                     selection.Width(), selection.Height(), cropped)) {
+        Destroy();
+        return;
+    }
+
+    wchar_t default_name[256] = {};
+    BuildDefaultSaveName(default_name, 256);
 
     OPENFILENAMEW ofn = {};
-    wchar_t pathBuf[MAX_PATH] = {};
-    wcscpy_s(pathBuf, defaultName);
+    wchar_t path_buffer[MAX_PATH] = {};
+    wcscpy_s(path_buffer, default_name);
     ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = hwnd;
+    ofn.hwndOwner = hwnd_;
     ofn.lpstrFilter = L"PNG (*.png)\0*.png\0JPEG "
                       L"(*.jpg;*.jpeg)\0*.jpg;*.jpeg\0BMP (*.bmp)\0*.bmp\0\0";
-    ofn.lpstrFile = pathBuf;
+    ofn.lpstrFile = path_buffer;
     ofn.nMaxFile = MAX_PATH;
     ofn.lpstrDefExt = L"png";
     ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_EXPLORER;
-    if (s_lastSaveDir[0] != L'\0') {
-        ofn.lpstrInitialDir = s_lastSaveDir;
+
+    std::wstring initial_dir;
+    if (config_ && !config_->last_save_dir.empty()) {
+        initial_dir = config_->last_save_dir;
     } else {
-        if (s_picturesDir[0] == L'\0')
-            SHGetFolderPathW(nullptr, CSIDL_MYPICTURES, nullptr, 0,
-                             s_picturesDir);
-        if (s_picturesDir[0] != L'\0')
-            ofn.lpstrInitialDir = s_picturesDir;
+        wchar_t pictures_dir[MAX_PATH] = {};
+        SHGetFolderPathW(nullptr, CSIDL_MYPICTURES, nullptr, 0, pictures_dir);
+        initial_dir = pictures_dir;
+    }
+    if (!initial_dir.empty()) {
+        ofn.lpstrInitialDir = initial_dir.c_str();
     }
 
     if (!GetSaveFileNameW(&ofn)) {
@@ -219,406 +433,352 @@ static void SaveAsAndClose(HWND hwnd) {
     }
 
     std::wstring const resolved_path =
-        greenflame::core::EnsureImageSaveExtension(pathBuf, ofn.nFilterIndex);
-    wcsncpy_s(pathBuf, MAX_PATH, resolved_path.c_str(), _TRUNCATE);
+        core::EnsureImageSaveExtension(path_buffer, ofn.nFilterIndex);
+    wcsncpy_s(path_buffer, MAX_PATH, resolved_path.c_str(), _TRUNCATE);
 
     bool saved = false;
-    greenflame::core::ImageSaveFormat const format =
-        greenflame::core::DetectImageSaveFormatFromPath(pathBuf);
-    if (format == greenflame::core::ImageSaveFormat::Jpeg)
-        saved = greenflame::SaveCaptureToJpeg(cropped, pathBuf);
-    else if (format == greenflame::core::ImageSaveFormat::Bmp)
-        saved = greenflame::SaveCaptureToBmp(cropped, pathBuf);
-    else
-        saved = greenflame::SaveCaptureToPng(cropped, pathBuf);
+    core::ImageSaveFormat const format =
+        core::DetectImageSaveFormatFromPath(path_buffer);
+    if (format == core::ImageSaveFormat::Jpeg) {
+        saved = SaveCaptureToJpeg(cropped, path_buffer);
+    } else if (format == core::ImageSaveFormat::Bmp) {
+        saved = SaveCaptureToBmp(cropped, path_buffer);
+    } else {
+        saved = SaveCaptureToPng(cropped, path_buffer);
+    }
 
     cropped.Free();
     if (saved) {
-        wchar_t *lastSlash = wcsrchr(pathBuf, L'\\');
-        if (lastSlash) {
-            size_t dirLen = static_cast<size_t>(lastSlash - pathBuf);
-            if (dirLen < MAX_PATH) {
-                wcsncpy_s(s_lastSaveDir, pathBuf, dirLen);
-                s_lastSaveDir[dirLen] = L'\0';
+        wchar_t* last_slash = wcsrchr(path_buffer, L'\\');
+        if (last_slash && config_) {
+            size_t const dir_len = static_cast<size_t>(last_slash - path_buffer);
+            if (dir_len < MAX_PATH) {
+                config_->last_save_dir.assign(path_buffer, dir_len);
+                config_->Normalize();
             }
         }
-        DestroyWindow(hwnd);
+        Destroy();
     }
 }
 
-static void CopyToClipboardAndClose(HWND hwnd) {
-    OverlayState *state = GetState(hwnd);
-    if (!state || !state->capture.IsValid())
+void OverlayWindow::CopyToClipboardAndClose() {
+    if (!resources_->capture.IsValid()) {
         return;
-    greenflame::core::RectPx const &r = state->final_selection;
-    if (r.IsEmpty())
-        return;
-
-    greenflame::GdiCaptureResult cropped;
-    if (!greenflame::CropCapture(state->capture, r.left, r.top, r.Width(),
-                                 r.Height(), cropped)) {
-        DestroyWindow(hwnd);
+    }
+    core::RectPx const& selection = state_->final_selection;
+    if (selection.IsEmpty()) {
         return;
     }
 
-    int const rowBytes = greenflame::RowBytes32(cropped.width);
-    size_t const imageSize =
-        static_cast<size_t>(rowBytes) * static_cast<size_t>(cropped.height);
-    BITMAPINFOHEADER info = {};
-    greenflame::FillBmi32TopDown(info, cropped.width, cropped.height);
-    info.biHeight = cropped.height; // bottom-up for clipboard CF_DIB
+    GdiCaptureResult cropped;
+    if (!CropCapture(resources_->capture, selection.left, selection.top,
+                     selection.Width(), selection.Height(), cropped)) {
+        Destroy();
+        return;
+    }
 
-    HGLOBAL hMem = nullptr;
+    int const row_bytes = RowBytes32(cropped.width);
+    size_t const image_size =
+        static_cast<size_t>(row_bytes) * static_cast<size_t>(cropped.height);
+    BITMAPINFOHEADER info{};
+    FillBmi32TopDown(info, cropped.width, cropped.height);
+    info.biHeight = cropped.height;
+
+    HGLOBAL memory = nullptr;
     HDC const dc = GetDC(nullptr);
     if (dc) {
-        size_t const dibSize = sizeof(BITMAPINFOHEADER) + imageSize;
-        hMem = GlobalAlloc(GMEM_MOVEABLE, dibSize);
-        if (hMem) {
-            void *const pMem = GlobalLock(hMem);
+        size_t const dib_size = sizeof(BITMAPINFOHEADER) + image_size;
+        memory = GlobalAlloc(GMEM_MOVEABLE, dib_size);
+        if (memory) {
+            void* const raw = GlobalLock(memory);
             bool ok = false;
-            if (pMem) {
-                memcpy(pMem, &info, sizeof(BITMAPINFOHEADER));
-                uint8_t *bits =
-                    static_cast<uint8_t *>(pMem) + sizeof(BITMAPINFOHEADER);
+            if (raw) {
+                memcpy(raw, &info, sizeof(BITMAPINFOHEADER));
+                uint8_t* bits = static_cast<uint8_t*>(raw) + sizeof(BITMAPINFOHEADER);
                 ok = GetDIBits(dc, cropped.bitmap, 0, cropped.height, bits,
-                               reinterpret_cast<BITMAPINFO *>(&info),
+                               reinterpret_cast<BITMAPINFO*>(&info),
                                DIB_RGB_COLORS) != 0;
-                GlobalUnlock(hMem);
+                GlobalUnlock(memory);
             }
             if (!ok) {
-                GlobalFree(hMem);
-                hMem = nullptr;
+                GlobalFree(memory);
+                memory = nullptr;
             }
         }
         ReleaseDC(nullptr, dc);
     }
     cropped.Free();
 
-    if (hMem && OpenClipboard(hwnd)) {
+    if (memory && OpenClipboard(hwnd_)) {
         EmptyClipboard();
-        SetClipboardData(CF_DIB, hMem);
+        SetClipboardData(CF_DIB, memory);
         CloseClipboard();
-    } else if (hMem) {
-        GlobalFree(hMem);
+    } else if (memory) {
+        GlobalFree(memory);
     }
-    DestroyWindow(hwnd);
+    Destroy();
 }
 
-LRESULT OnOverlayKeyDown(HWND hwnd, WPARAM wParam, LPARAM lParam) {
-    if (wParam == VK_ESCAPE) {
-        OverlayState *state = GetState(hwnd);
-        if (state && state->handle_dragging) {
-            state->handle_dragging = false;
-            state->resize_handle = std::nullopt;
-            state->live_rect = {};
-            InvalidateRect(hwnd, nullptr, TRUE);
-        } else if (state && state->dragging) {
-            state->dragging = false;
-            state->live_rect = {};
-            InvalidateRect(hwnd, nullptr, TRUE);
-        } else if (state && !state->final_selection.IsEmpty()) {
-            state->final_selection = {};
-            state->live_rect = {};
-            InvalidateRect(hwnd, nullptr, TRUE);
+LRESULT OverlayWindow::OnKeyDown(WPARAM wparam, LPARAM lparam) {
+    if (wparam == VK_ESCAPE) {
+        if (state_->handle_dragging) {
+            state_->handle_dragging = false;
+            state_->resize_handle = std::nullopt;
+            state_->live_rect = {};
+            InvalidateRect(hwnd_, nullptr, TRUE);
+        } else if (state_->dragging) {
+            state_->dragging = false;
+            state_->live_rect = {};
+            InvalidateRect(hwnd_, nullptr, TRUE);
+        } else if (!state_->final_selection.IsEmpty()) {
+            state_->final_selection = {};
+            state_->live_rect = {};
+            InvalidateRect(hwnd_, nullptr, TRUE);
         } else {
-            DestroyWindow(hwnd);
+            Destroy();
         }
         return 0;
     }
-    if (wParam == VK_RETURN) {
-        OverlayState *state = GetState(hwnd);
-        if (state && !state->final_selection.IsEmpty())
-            SaveAsAndClose(hwnd);
+    if (wparam == VK_RETURN) {
+        if (!state_->final_selection.IsEmpty()) {
+            SaveAsAndClose();
+        }
         return 0;
     }
-    if ((GetKeyState(VK_CONTROL) & 0x8000) != 0) {
-        OverlayState *state = GetState(hwnd);
-        if (state && !state->final_selection.IsEmpty()) {
-            if (wParam == L'S') {
-                SaveAsAndClose(hwnd);
-                return 0;
-            }
-            if (wParam == L'C') {
-                CopyToClipboardAndClose(hwnd);
-                return 0;
-            }
+    if ((GetKeyState(VK_CONTROL) & 0x8000) != 0 && !state_->final_selection.IsEmpty()) {
+        if (wparam == L'S') {
+            SaveAsAndClose();
+            return 0;
+        }
+        if (wparam == L'C') {
+            CopyToClipboardAndClose();
+            return 0;
         }
     }
-    if (wParam == VK_SHIFT || wParam == VK_CONTROL) {
-        OverlayState *state = GetState(hwnd);
-        if (state && !state->dragging && !state->handle_dragging) {
+    if (wparam == VK_SHIFT || wparam == VK_CONTROL) {
+        if (!state_->dragging && !state_->handle_dragging) {
             bool const shift =
-                (wParam == VK_SHIFT) || (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-            bool const ctrl = (wParam == VK_CONTROL) ||
-                              (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-            UpdateModifierPreview(hwnd, state, shift, ctrl);
-            InvalidateRect(hwnd, nullptr, TRUE);
+                (wparam == VK_SHIFT) || (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+            bool const ctrl =
+                (wparam == VK_CONTROL) || (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+            UpdateModifierPreview(shift, ctrl);
+            InvalidateRect(hwnd_, nullptr, TRUE);
         }
         return 0;
     }
-    if (wParam == VK_MENU) {
-        OverlayState *state = GetState(hwnd);
-        if (state && (state->dragging || state->handle_dragging))
-            InvalidateRect(hwnd, nullptr, TRUE);
+    if (wparam == VK_MENU) {
+        if (state_->dragging || state_->handle_dragging) {
+            InvalidateRect(hwnd_, nullptr, TRUE);
+        }
         return 0;
     }
-    return DefWindowProcW(hwnd, WM_KEYDOWN, wParam, lParam);
+    return DefWindowProcW(hwnd_, WM_KEYDOWN, wparam, lparam);
 }
 
-LRESULT OnOverlayKeyUp(HWND hwnd, WPARAM wParam, LPARAM lParam) {
-    if (wParam == VK_MENU) {
-        OverlayState *state = GetState(hwnd);
-        if (state && (state->dragging || state->handle_dragging))
-            InvalidateRect(hwnd, nullptr, TRUE);
+LRESULT OverlayWindow::OnKeyUp(WPARAM wparam, LPARAM lparam) {
+    if (wparam == VK_MENU) {
+        if (state_->dragging || state_->handle_dragging) {
+            InvalidateRect(hwnd_, nullptr, TRUE);
+        }
         return 0;
     }
-    if (wParam != VK_SHIFT && wParam != VK_CONTROL)
-        return DefWindowProcW(hwnd, WM_KEYUP, wParam, lParam);
-    OverlayState *state = GetState(hwnd);
-    if (state && state->modifier_preview) {
-        state->modifier_preview = false;
-        state->live_rect = {};
-        InvalidateRect(hwnd, nullptr, TRUE);
+    if (wparam != VK_SHIFT && wparam != VK_CONTROL) {
+        return DefWindowProcW(hwnd_, WM_KEYUP, wparam, lparam);
+    }
+    if (state_->modifier_preview) {
+        state_->modifier_preview = false;
+        state_->live_rect = {};
+        InvalidateRect(hwnd_, nullptr, TRUE);
     }
     return 0;
 }
 
-LRESULT OnOverlayLButtonDown(HWND hwnd) {
-    OverlayState *state = GetState(hwnd);
-    if (!state || !state->capture.IsValid())
-        return 0;
-    bool const shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-    bool const ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-    if ((shift || ctrl) && state->modifier_preview) {
-        state->final_selection = state->live_rect;
-        state->selection_window = std::nullopt;
-        state->selection_monitor_index = std::nullopt;
-        if (shift && ctrl) {
-            state->selection_source =
-                greenflame::core::SaveSelectionSource::Desktop;
-        } else if (shift) {
-            state->selection_source =
-                greenflame::core::SaveSelectionSource::Monitor;
-            POINT screenPt = CursorScreenPt();
-            greenflame::core::PointPx cursorScreenPx = {screenPt.x, screenPt.y};
-            std::optional<size_t> idx =
-                greenflame::core::IndexOfMonitorContaining(cursorScreenPx,
-                                                           state->cached_monitors);
-            if (idx.has_value())
-                state->selection_monitor_index = *idx;
-        } else {
-            state->selection_source =
-                greenflame::core::SaveSelectionSource::Window;
-            POINT screenPt = CursorScreenPt();
-            std::optional<HWND> win =
-                greenflame::GetWindowUnderCursor(screenPt, hwnd);
-            if (win.has_value())
-                state->selection_window = *win;
-        }
-        state->modifier_preview = false;
-        state->live_rect = {};
-        InvalidateRect(hwnd, nullptr, TRUE);
+LRESULT OverlayWindow::OnLButtonDown() {
+    if (!resources_->capture.IsValid()) {
         return 0;
     }
-    greenflame::core::PointPx cur = ClientCursorPx(hwnd);
-    if (!state->final_selection.IsEmpty() && !state->dragging &&
-        !state->handle_dragging) {
-        std::optional<greenflame::core::SelectionHandle> hit =
-            greenflame::core::HitTestSelectionHandle(state->final_selection,
-                                                     cur, kHandleGrabRadiusPx);
+    bool const shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+    bool const ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+    if ((shift || ctrl) && state_->modifier_preview) {
+        state_->final_selection = state_->live_rect;
+        state_->selection_window = std::nullopt;
+        state_->selection_monitor_index = std::nullopt;
+        if (shift && ctrl) {
+            state_->selection_source = core::SaveSelectionSource::Desktop;
+        } else if (shift) {
+            state_->selection_source = core::SaveSelectionSource::Monitor;
+            core::PointPx const cursor_screen = GetCursorPosPx();
+            std::optional<size_t> index = core::IndexOfMonitorContaining(
+                cursor_screen, state_->cached_monitors);
+            if (index.has_value()) {
+                state_->selection_monitor_index = *index;
+            }
+        } else {
+            state_->selection_source = core::SaveSelectionSource::Window;
+            core::PointPx const cursor_screen = GetCursorPosPx();
+            std::optional<HWND> window = GetWindowUnderCursor(ToPoint(cursor_screen), hwnd_);
+            if (window.has_value()) {
+                state_->selection_window = *window;
+            }
+        }
+        state_->modifier_preview = false;
+        state_->live_rect = {};
+        InvalidateRect(hwnd_, nullptr, TRUE);
+        return 0;
+    }
+
+    core::PointPx const cursor = GetClientCursorPosPx(hwnd_);
+    if (!state_->final_selection.IsEmpty() && !state_->dragging &&
+        !state_->handle_dragging) {
+        std::optional<core::SelectionHandle> hit = core::HitTestSelectionHandle(
+            state_->final_selection, cursor, kHandleGrabRadiusPx);
         if (hit.has_value()) {
-            state->handle_dragging = true;
-            state->resize_handle = hit;
-            state->resize_anchor_rect = state->final_selection;
-            state->live_rect = state->final_selection;
-            BuildSnapEdgesFromWindows(hwnd, state);
-            InvalidateRect(hwnd, nullptr, TRUE);
+            state_->handle_dragging = true;
+            state_->resize_handle = hit;
+            state_->resize_anchor_rect = state_->final_selection;
+            state_->live_rect = state_->final_selection;
+            BuildSnapEdgesFromWindows();
+            InvalidateRect(hwnd_, nullptr, TRUE);
             return 0;
         }
         return 0;
     }
-    state->start_px = cur;
-    state->dragging = true;
-    state->final_selection = {};
-    state->selection_source = greenflame::core::SaveSelectionSource::Region;
-    state->selection_window = std::nullopt;
-    state->selection_monitor_index = std::nullopt;
-    state->live_rect =
-        greenflame::core::RectPx::FromPoints(state->start_px, state->start_px);
-    BuildSnapEdgesFromWindows(hwnd, state);
-    InvalidateRect(hwnd, nullptr, TRUE);
+
+    state_->start_px = cursor;
+    state_->dragging = true;
+    state_->final_selection = {};
+    state_->selection_source = core::SaveSelectionSource::Region;
+    state_->selection_window = std::nullopt;
+    state_->selection_monitor_index = std::nullopt;
+    state_->live_rect = core::RectPx::FromPoints(state_->start_px, state_->start_px);
+    BuildSnapEdgesFromWindows();
+    InvalidateRect(hwnd_, nullptr, TRUE);
     return 0;
 }
 
-LRESULT OnOverlayMouseMove(HWND hwnd) {
-    OverlayState *state = GetState(hwnd);
-    if (state) {
-        if (state->handle_dragging && state->resize_handle.has_value()) {
-            greenflame::core::PointPx cur = ClientCursorPx(hwnd);
-            greenflame::core::RectPx candidate =
-                greenflame::core::ResizeRectFromHandle(
-                    state->resize_anchor_rect, *state->resize_handle, cur);
-            if ((GetKeyState(VK_MENU) & 0x8000) == 0) {
-                candidate = greenflame::core::SnapRectToEdges(
-                    candidate, state->vertical_edges, state->horizontal_edges,
-                    kSnapThresholdPx);
-            }
-            greenflame::core::PointPx anchor =
-                greenflame::core::AnchorPointForResizePolicy(
-                    state->resize_anchor_rect, *state->resize_handle);
-            state->live_rect = greenflame::core::AllowedSelectionRect(
-                candidate, anchor, state->cached_monitors);
-        } else if (state->dragging) {
-            greenflame::core::PointPx cur = ClientCursorPx(hwnd);
-            state->live_rect =
-                greenflame::core::RectPx::FromPoints(state->start_px, cur)
-                    .Normalized();
-        } else {
-            bool const shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-            bool const ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-            UpdateModifierPreview(hwnd, state, shift, ctrl);
+LRESULT OverlayWindow::OnMouseMove() {
+    if (state_->handle_dragging && state_->resize_handle.has_value()) {
+        core::PointPx const cursor = GetClientCursorPosPx(hwnd_);
+        core::RectPx candidate =
+            core::ResizeRectFromHandle(state_->resize_anchor_rect, *state_->resize_handle,
+                                       cursor);
+        if ((GetKeyState(VK_MENU) & 0x8000) == 0) {
+            candidate = core::SnapRectToEdges(candidate, state_->vertical_edges,
+                                              state_->horizontal_edges,
+                                              kSnapThresholdPx);
         }
-        ULONGLONG now = GetTickCount64();
-        if (now - state->last_invalidate_tick >= 16) {
-            state->last_invalidate_tick = now;
-            InvalidateRect(hwnd, nullptr, TRUE);
-        }
+        core::PointPx const anchor = core::AnchorPointForResizePolicy(
+            state_->resize_anchor_rect, *state_->resize_handle);
+        state_->live_rect =
+            core::AllowedSelectionRect(candidate, anchor, state_->cached_monitors);
+    } else if (state_->dragging) {
+        core::PointPx const cursor = GetClientCursorPosPx(hwnd_);
+        state_->live_rect =
+            core::RectPx::FromPoints(state_->start_px, cursor).Normalized();
+    } else {
+        bool const shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+        bool const ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+        UpdateModifierPreview(shift, ctrl);
+    }
+
+    ULONGLONG const now = GetTickCount64();
+    if (now - state_->last_invalidate_tick >= 16) {
+        state_->last_invalidate_tick = now;
+        InvalidateRect(hwnd_, nullptr, TRUE);
     }
     return 0;
 }
 
-LRESULT OnOverlayLButtonUp(HWND hwnd) {
-    OverlayState *state = GetState(hwnd);
-    if (!state)
-        return 0;
-    if (state->handle_dragging && state->resize_handle.has_value()) {
-        greenflame::core::RectPx to_commit = state->live_rect;
+LRESULT OverlayWindow::OnLButtonUp() {
+    if (state_->handle_dragging && state_->resize_handle.has_value()) {
+        core::RectPx to_commit = state_->live_rect;
         if ((GetKeyState(VK_MENU) & 0x8000) == 0) {
-            to_commit = greenflame::core::SnapRectToEdges(
-                to_commit, state->vertical_edges, state->horizontal_edges,
-                kSnapThresholdPx);
+            to_commit = core::SnapRectToEdges(to_commit, state_->vertical_edges,
+                                              state_->horizontal_edges,
+                                              kSnapThresholdPx);
         }
-        greenflame::core::PointPx anchor =
-            greenflame::core::AnchorPointForResizePolicy(
-                state->resize_anchor_rect, *state->resize_handle);
-        state->final_selection =
-            greenflame::core::AllowedSelectionRect(to_commit, anchor, state->cached_monitors);
-        state->handle_dragging = false;
-        state->resize_handle = std::nullopt;
-        state->live_rect = {};
-        InvalidateRect(hwnd, nullptr, TRUE);
+        core::PointPx const anchor = core::AnchorPointForResizePolicy(
+            state_->resize_anchor_rect, *state_->resize_handle);
+        state_->final_selection =
+            core::AllowedSelectionRect(to_commit, anchor, state_->cached_monitors);
+        state_->handle_dragging = false;
+        state_->resize_handle = std::nullopt;
+        state_->live_rect = {};
+        InvalidateRect(hwnd_, nullptr, TRUE);
         return 0;
     }
-    if (state->dragging) {
-        greenflame::core::PointPx cur = ClientCursorPx(hwnd);
-        greenflame::core::RectPx raw =
-            greenflame::core::RectPx::FromPoints(state->start_px, cur)
-                .Normalized();
+
+    if (state_->dragging) {
+        core::PointPx const cursor = GetClientCursorPosPx(hwnd_);
+        core::RectPx raw =
+            core::RectPx::FromPoints(state_->start_px, cursor).Normalized();
         if ((GetKeyState(VK_MENU) & 0x8000) == 0) {
-            raw = greenflame::core::SnapRectToEdges(raw, state->vertical_edges,
-                                                    state->horizontal_edges,
-                                                    kSnapThresholdPx);
+            raw = core::SnapRectToEdges(raw, state_->vertical_edges,
+                                        state_->horizontal_edges, kSnapThresholdPx);
         }
-        state->final_selection = greenflame::core::AllowedSelectionRect(
-            raw, state->start_px, state->cached_monitors);
-        state->selection_source = greenflame::core::SaveSelectionSource::Region;
-        state->selection_window = std::nullopt;
-        state->selection_monitor_index = std::nullopt;
-        state->dragging = false;
-        InvalidateRect(hwnd, nullptr, TRUE);
+        state_->final_selection =
+            core::AllowedSelectionRect(raw, state_->start_px, state_->cached_monitors);
+        state_->selection_source = core::SaveSelectionSource::Region;
+        state_->selection_window = std::nullopt;
+        state_->selection_monitor_index = std::nullopt;
+        state_->dragging = false;
+        InvalidateRect(hwnd_, nullptr, TRUE);
     }
     return 0;
 }
 
-LRESULT OnOverlayPaint(HWND hwnd) {
-    PAINTSTRUCT ps;
-    HDC hdc = BeginPaint(hwnd, &ps);
+LRESULT OverlayWindow::OnPaint() {
+    PAINTSTRUCT paint{};
+    HDC const hdc = BeginPaint(hwnd_, &paint);
     if (hdc) {
-        RECT rc;
-        GetClientRect(hwnd, &rc);
-        OverlayState *state = GetState(hwnd);
-        greenflame::PaintOverlayInput input = {};
-        if (state) {
-            input.capture = &state->capture;
-            input.dragging = state->dragging;
-            input.handle_dragging = state->handle_dragging;
-            input.modifier_preview = state->modifier_preview;
-            input.live_rect = state->live_rect;
-            input.final_selection = state->final_selection;
-            input.cursor_client_px = ClientCursorPx(hwnd);
-            input.paint_buffer = std::span<uint8_t>(state->paint_buffer);
-            input.resources = &state->resources;
-        }
-        greenflame::PaintOverlay(hdc, hwnd, rc, input);
-        EndPaint(hwnd, &ps);
+        RECT rect{};
+        GetClientRect(hwnd_, &rect);
+        PaintOverlayInput input{};
+        input.capture = &resources_->capture;
+        input.dragging = state_->dragging;
+        input.handle_dragging = state_->handle_dragging;
+        input.modifier_preview = state_->modifier_preview;
+        input.live_rect = state_->live_rect;
+        input.final_selection = state_->final_selection;
+        input.cursor_client_px = GetClientCursorPosPx(hwnd_);
+        input.paint_buffer = std::span<uint8_t>(resources_->paint_buffer);
+        input.resources = &resources_->paint;
+        PaintOverlay(hdc, hwnd_, rect, input);
+        EndPaint(hwnd_, &paint);
     }
     return 0;
 }
 
-LRESULT OnOverlayDestroy(HWND hwnd) {
-    OverlayState *state = GetState(hwnd);
-    if (state) {
-        state->capture.Free();
-        if (state->resources.font_dim) DeleteObject(state->resources.font_dim);
-        if (state->resources.font_center) DeleteObject(state->resources.font_center);
-        if (state->resources.crosshair_pen) DeleteObject(state->resources.crosshair_pen);
-        if (state->resources.border_pen) DeleteObject(state->resources.border_pen);
-        if (state->resources.handle_brush) DeleteObject(state->resources.handle_brush);
-        if (state->resources.handle_pen) DeleteObject(state->resources.handle_pen);
-        if (state->resources.sel_border_brush) DeleteObject(state->resources.sel_border_brush);
-        delete state;
-        SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+LRESULT OverlayWindow::OnDestroy() {
+    resources_->Reset();
+    state_->ResetForSession();
+    if (events_) {
+        events_->OnOverlayClosed();
     }
-    if (s_overlayHwnd == hwnd)
-        s_overlayHwnd = nullptr;
     return 0;
 }
 
-LRESULT OnOverlayClose(HWND hwnd) {
-    DestroyWindow(hwnd);
+LRESULT OverlayWindow::OnClose() {
+    Destroy();
     return 0;
 }
 
-HCURSOR CursorForHandle(greenflame::core::SelectionHandle h) {
-    using H = greenflame::core::SelectionHandle;
-    switch (h) {
-    case H::Top:
-    case H::Bottom:
-        return LoadCursorW(nullptr, IDC_SIZENS);
-    case H::Left:
-    case H::Right:
-        return LoadCursorW(nullptr, IDC_SIZEWE);
-    case H::TopLeft:
-    case H::BottomRight:
-        return LoadCursorW(nullptr, IDC_SIZENWSE);
-    case H::TopRight:
-    case H::BottomLeft:
-        return LoadCursorW(nullptr, IDC_SIZENESW);
+LRESULT OverlayWindow::OnSetCursor(WPARAM wparam, LPARAM lparam) {
+    if (LOWORD(lparam) != HTCLIENT) {
+        return DefWindowProcW(hwnd_, WM_SETCURSOR, wparam, lparam);
     }
-    return LoadCursorW(nullptr, IDC_ARROW);
-}
-
-LRESULT OnOverlaySetCursor(HWND hwnd, WPARAM wParam, LPARAM lParam) {
-    if (LOWORD(lParam) != HTCLIENT)
-        return DefWindowProcW(hwnd, WM_SETCURSOR, wParam, lParam);
-    OverlayState *state = GetState(hwnd);
-    if (!state) {
-        SetCursor(LoadCursorW(nullptr, IDC_CROSS));
+    if (state_->handle_dragging && state_->resize_handle.has_value()) {
+        SetCursor(CursorForHandle(*state_->resize_handle));
         return TRUE;
     }
-    if (state->handle_dragging && state->resize_handle.has_value()) {
-        SetCursor(CursorForHandle(*state->resize_handle));
-        return TRUE;
-    }
-    if (state->modifier_preview) {
+    if (state_->modifier_preview) {
         SetCursor(LoadCursorW(nullptr, IDC_ARROW));
         return TRUE;
     }
-    if (!state->final_selection.IsEmpty() && !state->dragging) {
-        greenflame::core::PointPx cur = ClientCursorPx(hwnd);
-        std::optional<greenflame::core::SelectionHandle> hit =
-            greenflame::core::HitTestSelectionHandle(state->final_selection,
-                                                     cur, kHandleGrabRadiusPx);
+    if (!state_->final_selection.IsEmpty() && !state_->dragging) {
+        core::PointPx const cursor = GetClientCursorPosPx(hwnd_);
+        std::optional<core::SelectionHandle> hit = core::HitTestSelectionHandle(
+            state_->final_selection, cursor, kHandleGrabRadiusPx);
         if (hit.has_value()) {
             SetCursor(CursorForHandle(*hit));
             return TRUE;
@@ -630,97 +790,5 @@ LRESULT OnOverlaySetCursor(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     return TRUE;
 }
 
-LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam,
-                                LPARAM lParam) {
-    switch (msg) {
-    case WM_KEYDOWN:
-        return OnOverlayKeyDown(hwnd, wParam, lParam);
-    case WM_KEYUP:
-        return OnOverlayKeyUp(hwnd, wParam, lParam);
-    case WM_LBUTTONDOWN:
-        return OnOverlayLButtonDown(hwnd);
-    case WM_MOUSEMOVE:
-        return OnOverlayMouseMove(hwnd);
-    case WM_LBUTTONUP:
-        return OnOverlayLButtonUp(hwnd);
-    case WM_PAINT:
-        return OnOverlayPaint(hwnd);
-    case WM_SETCURSOR:
-        return OnOverlaySetCursor(hwnd, wParam, lParam);
-    case WM_ERASEBKGND:
-        return 1;
-    case WM_DESTROY:
-        return OnOverlayDestroy(hwnd);
-    case WM_CLOSE:
-        return OnOverlayClose(hwnd);
-    default:
-        return DefWindowProcW(hwnd, msg, wParam, lParam);
-    }
-}
+}  // namespace greenflame
 
-void CreateOverlayIfNoneImpl(HINSTANCE hInstance) {
-    if (s_overlayHwnd != nullptr && IsWindow(s_overlayHwnd))
-        return;
-    greenflame::core::RectPx bounds = greenflame::GetVirtualDesktopBoundsPx();
-    DWORD exStyle = WS_EX_TOPMOST;
-    HWND hwnd = CreateWindowExW(
-        exStyle, kOverlayWindowClass, L"", WS_POPUP, bounds.left, bounds.top,
-        bounds.Width(), bounds.Height(), nullptr, nullptr, hInstance, nullptr);
-    if (!hwnd)
-        return;
-    OverlayState *state = new OverlayState;
-    state->window_rects.reserve(64);
-    state->vertical_edges.reserve(128);
-    state->horizontal_edges.reserve(128);
-    if (!greenflame::CaptureVirtualDesktop(state->capture)) {
-        delete state;
-        DestroyWindow(hwnd);
-        return;
-    }
-    // Pre-allocate paint buffer (reused every WM_PAINT, avoids per-frame heap allocation).
-    int const paintRowBytes = greenflame::RowBytes32(state->capture.width);
-    size_t const paintBufSize =
-        static_cast<size_t>(paintRowBytes) * static_cast<size_t>(state->capture.height);
-    state->paint_buffer.resize(paintBufSize);
-    // Create cached GDI resources (reused every WM_PAINT, avoids per-frame kernel calls).
-    state->resources.font_dim =
-        CreateFontW(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                    DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                    DEFAULT_QUALITY, FF_DONTCARE, L"Segoe UI");
-    state->resources.font_center =
-        CreateFontW(36, 0, 0, 0, FW_BLACK, FALSE, FALSE, FALSE,
-                    DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                    DEFAULT_QUALITY, FF_DONTCARE, L"Segoe UI");
-    state->resources.crosshair_pen = CreatePen(PS_SOLID, 1, RGB(0x20, 0xB2, 0xAA));
-    state->resources.border_pen = CreatePen(PS_SOLID, 1, RGB(46, 139, 87));
-    state->resources.handle_brush = CreateSolidBrush(RGB(0, 0x80, 0x80));
-    state->resources.handle_pen = CreatePen(PS_SOLID, 1, RGB(0, 0x80, 0x80));
-    state->resources.sel_border_brush = CreateSolidBrush(RGB(0, 0x80, 0x80));
-    // Cache monitor list (stable for overlay lifetime).
-    state->cached_monitors = greenflame::GetMonitorsWithBounds();
-    SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state));
-    s_overlayHwnd = hwnd;
-    ShowWindow(hwnd, SW_SHOW);
-}
-
-} // namespace
-
-namespace greenflame {
-
-bool RegisterOverlayClass(HINSTANCE hInstance) {
-    WNDCLASSEXW wc{};
-    wc.cbSize = sizeof(wc);
-    wc.style = CS_HREDRAW | CS_VREDRAW;
-    wc.lpfnWndProc = OverlayWndProc;
-    wc.hInstance = hInstance;
-    wc.hCursor = LoadCursorW(nullptr, IDC_CROSS);
-    wc.hbrBackground = nullptr;
-    wc.lpszClassName = kOverlayWindowClass;
-    return RegisterClassExW(&wc) != 0;
-}
-
-void CreateOverlayIfNone(HINSTANCE hInstance) {
-    CreateOverlayIfNoneImpl(hInstance);
-}
-
-} // namespace greenflame

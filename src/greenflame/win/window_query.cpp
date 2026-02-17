@@ -1,7 +1,7 @@
 #include "win/window_query.h"
 
-#include <windows.h>
 #include <dwmapi.h>
+#include <windows.h>
 
 namespace greenflame {
 
@@ -30,8 +30,8 @@ std::optional<HWND> GetWindowUnderCursor(POINT screen_pt, HWND exclude_hwnd) {
     return std::nullopt;
 }
 
-std::optional<greenflame::core::RectPx>
-GetWindowRectUnderCursor(POINT screen_pt, HWND exclude_hwnd) {
+std::optional<greenflame::core::RectPx> GetWindowRectUnderCursor(POINT screen_pt,
+                                                                 HWND exclude_hwnd) {
     std::optional<HWND> window = GetWindowUnderCursor(screen_pt, exclude_hwnd);
     if (!window.has_value()) {
         return std::nullopt;
@@ -47,8 +47,8 @@ GetWindowRectUnderCursor(POINT screen_pt, HWND exclude_hwnd) {
         static_cast<int32_t>(rect.right), static_cast<int32_t>(rect.bottom));
 }
 
-void GetVisibleTopLevelWindowRects(
-    HWND exclude_hwnd, std::vector<greenflame::core::RectPx>& out) {
+void GetVisibleTopLevelWindowRects(HWND exclude_hwnd,
+                                   std::vector<greenflame::core::RectPx> &out) {
     HWND hwnd = GetWindow(exclude_hwnd, GW_HWNDNEXT);
     while (hwnd != nullptr) {
         if (!IsWindowVisible(hwnd)) {
@@ -72,4 +72,4 @@ void GetVisibleTopLevelWindowRects(
     }
 }
 
-}  // namespace greenflame
+} // namespace greenflame

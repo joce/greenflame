@@ -3,9 +3,9 @@
 // BitBlt(SRCCOPY | CAPTUREBLT). SaveCaptureToBmp for validation.
 
 #include "gdi_capture.h"
-#include "win/display_queries.h"
 #include "greenflame_core/bmp.h"
 #include "greenflame_core/rect_px.h"
+#include "win/display_queries.h"
 
 #include <windows.h>
 
@@ -18,21 +18,19 @@ namespace {
 
 constexpr DWORD kCaptureRop = SRCCOPY | CAPTUREBLT;
 
-}  // namespace
+} // namespace
 
-void FillBmi32TopDown(BITMAPINFOHEADER& bmi, int width, int height) {
+void FillBmi32TopDown(BITMAPINFOHEADER &bmi, int width, int height) {
     bmi = {};
     bmi.biSize = sizeof(BITMAPINFOHEADER);
     bmi.biWidth = width;
-    bmi.biHeight = -height;  // top-down
+    bmi.biHeight = -height; // top-down
     bmi.biPlanes = 1;
     bmi.biBitCount = 32;
     bmi.biCompression = BI_RGB;
 }
 
-int RowBytes32(int width) {
-    return (width * 4 + 3) & ~3;
-}
+int RowBytes32(int width) { return (width * 4 + 3) & ~3; }
 
 void GdiCaptureResult::Free() noexcept {
     if (bitmap) {
@@ -43,18 +41,16 @@ void GdiCaptureResult::Free() noexcept {
     height = 0;
 }
 
-bool CaptureVirtualDesktop(GdiCaptureResult& out) {
+bool CaptureVirtualDesktop(GdiCaptureResult &out) {
     out.Free();
 
     greenflame::core::RectPx bounds = GetVirtualDesktopBoundsPx();
     int const w = bounds.Width();
     int const h = bounds.Height();
-    if (w <= 0 || h <= 0)
-        return false;
+    if (w <= 0 || h <= 0) return false;
 
     HDC const desktopDc = GetDC(GetDesktopWindow());
-    if (!desktopDc)
-        return false;
+    if (!desktopDc) return false;
 
     bool ok = false;
     HBITMAP dib = nullptr;
@@ -62,14 +58,14 @@ bool CaptureVirtualDesktop(GdiCaptureResult& out) {
     if (memDc) {
         BITMAPINFOHEADER bmi;
         FillBmi32TopDown(bmi, w, h);
-        void* bits = nullptr;
-        dib = CreateDIBSection(desktopDc, reinterpret_cast<BITMAPINFO*>(&bmi),
+        void *bits = nullptr;
+        dib = CreateDIBSection(desktopDc, reinterpret_cast<BITMAPINFO *>(&bmi),
                                DIB_RGB_COLORS, &bits, nullptr, 0);
         if (dib && bits) {
             HGDIOBJ const old = SelectObject(memDc, dib);
             if (old && old != HGDI_ERROR) {
-                ok = BitBlt(memDc, 0, 0, w, h, desktopDc, bounds.left,
-                            bounds.top, kCaptureRop) != 0;
+                ok = BitBlt(memDc, 0, 0, w, h, desktopDc, bounds.left, bounds.top,
+                            kCaptureRop) != 0;
                 SelectObject(memDc, old);
             }
         }
@@ -87,57 +83,54 @@ bool CaptureVirtualDesktop(GdiCaptureResult& out) {
     return ok;
 }
 
-bool SaveCaptureToBmp(GdiCaptureResult const& capture, wchar_t const* path) {
-    if (!capture.IsValid() || !path)
-        return false;
+bool SaveCaptureToBmp(GdiCaptureResult const &capture, wchar_t const *path) {
+    if (!capture.IsValid() || !path) return false;
 
     HDC const dc = GetDC(nullptr);
-    if (!dc)
-        return false;
+    if (!dc) return false;
 
     int const rowBytes = RowBytes32(capture.width);
-    size_t const imageSize = static_cast<size_t>(rowBytes) * static_cast<size_t>(capture.height);
+    size_t const imageSize =
+        static_cast<size_t>(rowBytes) * static_cast<size_t>(capture.height);
 
     BITMAPINFOHEADER info;
     FillBmi32TopDown(info, capture.width, capture.height);
-    info.biHeight = capture.height;  // positive = bottom-up for BMP file
+    info.biHeight = capture.height; // positive = bottom-up for BMP file
 
     std::vector<uint8_t> pixels(imageSize);
     if (GetDIBits(dc, capture.bitmap, 0, capture.height, pixels.data(),
-                                reinterpret_cast<BITMAPINFO*>(&info), DIB_RGB_COLORS) == 0) {
+                  reinterpret_cast<BITMAPINFO *>(&info), DIB_RGB_COLORS) == 0) {
         ReleaseDC(nullptr, dc);
         return false;
     }
     ReleaseDC(nullptr, dc);
 
-    std::vector<uint8_t> bmpBytes =
-            greenflame::core::BuildBmpBytes(pixels, capture.width, capture.height, rowBytes);
-    if (bmpBytes.empty())
-        return false;
+    std::vector<uint8_t> bmpBytes = greenflame::core::BuildBmpBytes(
+        pixels, capture.width, capture.height, rowBytes);
+    if (bmpBytes.empty()) return false;
 
     HANDLE const f = CreateFileW(path, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
-                                                              FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (f == INVALID_HANDLE_VALUE)
-        return false;
+                                 FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return false;
 
     DWORD written = 0;
-    bool ok = WriteFile(f, bmpBytes.data(), static_cast<DWORD>(bmpBytes.size()), &written, nullptr) &&
-                        written == static_cast<DWORD>(bmpBytes.size());
+    bool ok = WriteFile(f, bmpBytes.data(), static_cast<DWORD>(bmpBytes.size()),
+                        &written, nullptr) &&
+              written == static_cast<DWORD>(bmpBytes.size());
     CloseHandle(f);
     return ok;
 }
 
-bool CropCapture(GdiCaptureResult const& source, int left, int top, int width, int height,
-                 GdiCaptureResult& out) {
+bool CropCapture(GdiCaptureResult const &source, int left, int top, int width,
+                 int height, GdiCaptureResult &out) {
     out.Free();
-    if (width <= 0 || height <= 0 || !source.IsValid())
-        return false;
-    if (left < 0 || top < 0 || left + width > source.width || top + height > source.height)
+    if (width <= 0 || height <= 0 || !source.IsValid()) return false;
+    if (left < 0 || top < 0 || left + width > source.width ||
+        top + height > source.height)
         return false;
 
     HDC const dc = GetDC(nullptr);
-    if (!dc)
-        return false;
+    if (!dc) return false;
 
     bool ok = false;
     HBITMAP dib = nullptr;
@@ -147,16 +140,16 @@ bool CropCapture(GdiCaptureResult const& source, int left, int top, int width, i
         if (srcOld && srcOld != HGDI_ERROR) {
             BITMAPINFOHEADER bmi;
             FillBmi32TopDown(bmi, width, height);
-            void* bits = nullptr;
-            dib = CreateDIBSection(dc, reinterpret_cast<BITMAPINFO*>(&bmi),
+            void *bits = nullptr;
+            dib = CreateDIBSection(dc, reinterpret_cast<BITMAPINFO *>(&bmi),
                                    DIB_RGB_COLORS, &bits, nullptr, 0);
             if (dib) {
                 HDC const dstDc = CreateCompatibleDC(dc);
                 if (dstDc) {
                     HGDIOBJ const dstOld = SelectObject(dstDc, dib);
                     if (dstOld && dstOld != HGDI_ERROR) {
-                        ok = BitBlt(dstDc, 0, 0, width, height, srcDc, left,
-                                    top, SRCCOPY) != 0;
+                        ok = BitBlt(dstDc, 0, 0, width, height, srcDc, left, top,
+                                    SRCCOPY) != 0;
                         SelectObject(dstDc, dstOld);
                     }
                     DeleteDC(dstDc);
@@ -178,4 +171,4 @@ bool CropCapture(GdiCaptureResult const& source, int left, int top, int width, i
     return ok;
 }
 
-}  // namespace greenflame
+} // namespace greenflame

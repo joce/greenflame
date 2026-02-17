@@ -22,17 +22,18 @@ enum class SelectionHandle : uint8_t {
 // Hit-test: which handle (if any) is under the cursor?
 // Tests corners first so a corner wins when cursor is within radius of both.
 // Returns nullopt if selection is empty or cursor is not near any handle.
-[[nodiscard]] std::optional<SelectionHandle> HitTestSelectionHandle(
-        RectPx selection, PointPx cursor_client_px, int grab_radius_px) noexcept;
+[[nodiscard]] std::optional<SelectionHandle>
+HitTestSelectionHandle(RectPx selection, PointPx cursor_client_px,
+                       int grab_radius_px) noexcept;
 
 // Resize rect: anchor rect with the given handle moved to cursor position.
 // Opposite corner/edge stays fixed. Result is normalized and has minimum size 1x1.
 [[nodiscard]] RectPx ResizeRectFromHandle(RectPx anchor, SelectionHandle handle,
-        PointPx cursor_px) noexcept;
+                                          PointPx cursor_px) noexcept;
 
 // Anchor point for AllowedSelectionRect when resizing: the fixed corner when
 // dragging a corner, or the center of the fixed edge when dragging an edge.
 [[nodiscard]] PointPx AnchorPointForResizePolicy(RectPx rect,
-        SelectionHandle handle) noexcept;
+                                                 SelectionHandle handle) noexcept;
 
-}  // namespace greenflame::core
+} // namespace greenflame::core

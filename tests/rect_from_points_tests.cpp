@@ -4,7 +4,7 @@
 using namespace greenflame::core;
 
 TEST_CASE("RectPx::FromPoints — same point (zero width/height)",
-                    "[rect][from_points]") {
+          "[rect][from_points]") {
     PointPx p{100, 50};
     RectPx r = RectPx::FromPoints(p, p);
     REQUIRE(r.left == 100);
@@ -29,8 +29,7 @@ TEST_CASE("RectPx::FromPoints — opposite corners", "[rect][from_points]") {
     REQUIRE(!r.IsEmpty());
 }
 
-TEST_CASE("RectPx::FromPoints — reversed order (b then a)",
-                    "[rect][from_points]") {
+TEST_CASE("RectPx::FromPoints — reversed order (b then a)", "[rect][from_points]") {
     PointPx a{100, 80};
     PointPx b{10, 20};
     RectPx r = RectPx::FromPoints(a, b);
@@ -41,7 +40,7 @@ TEST_CASE("RectPx::FromPoints — reversed order (b then a)",
 }
 
 TEST_CASE("RectPx::FromPoints — negative coordinates (virtual desktop)",
-                    "[rect][from_points]") {
+          "[rect][from_points]") {
     PointPx a{-1920, 100};
     PointPx b{-100, 500};
     RectPx r = RectPx::FromPoints(a, b);
@@ -54,7 +53,7 @@ TEST_CASE("RectPx::FromPoints — negative coordinates (virtual desktop)",
 }
 
 TEST_CASE("RectPx::FromPoints — equivalence to Normalized when a,b swapped",
-                    "[rect][from_points]") {
+          "[rect][from_points]") {
     PointPx a{50, 60};
     PointPx b{10, 20};
     RectPx fromPoints = RectPx::FromPoints(a, b);

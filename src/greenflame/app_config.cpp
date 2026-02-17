@@ -22,7 +22,7 @@ std::filesystem::path GetConfigPath() {
     return path;
 }
 
-std::wstring ToWide(std::string const& value) {
+std::wstring ToWide(std::string const &value) {
     if (value.empty()) {
         return {};
     }
@@ -32,28 +32,26 @@ std::wstring ToWide(std::string const& value) {
         return {};
     }
     std::wstring out(static_cast<size_t>(required_chars - 1), L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, out.data(),
-                        required_chars);
+    MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, out.data(), required_chars);
     return out;
 }
 
-std::string ToUtf8(std::wstring const& value) {
+std::string ToUtf8(std::wstring const &value) {
     if (value.empty()) {
         return {};
     }
-    int const required_chars =
-        WideCharToMultiByte(CP_UTF8, 0, value.c_str(), -1, nullptr, 0, nullptr,
-                            nullptr);
+    int const required_chars = WideCharToMultiByte(CP_UTF8, 0, value.c_str(), -1,
+                                                   nullptr, 0, nullptr, nullptr);
     if (required_chars <= 1) {
         return {};
     }
     std::string out(static_cast<size_t>(required_chars - 1), '\0');
-    WideCharToMultiByte(CP_UTF8, 0, value.c_str(), -1, out.data(),
-                        required_chars, nullptr, nullptr);
+    WideCharToMultiByte(CP_UTF8, 0, value.c_str(), -1, out.data(), required_chars,
+                        nullptr, nullptr);
     return out;
 }
 
-}  // namespace
+} // namespace
 
 AppConfig AppConfig::Load() {
     AppConfig config;
@@ -64,18 +62,18 @@ AppConfig AppConfig::Load() {
     try {
         easyjson::JSON root = easyjson::JSON::load_file(path.string());
         if (root.has_key("ui")) {
-            easyjson::JSON const& ui = root["ui"];
+            easyjson::JSON const &ui = root["ui"];
             if (ui.has_key("show_balloons")) {
-                easyjson::JSON const& value = ui["show_balloons"];
+                easyjson::JSON const &value = ui["show_balloons"];
                 if (value.JSON_type() == easyjson::JSON::Class::Boolean) {
                     config.show_balloons = value.to_bool();
                 }
             }
         }
         if (root.has_key("save")) {
-            easyjson::JSON const& save = root["save"];
+            easyjson::JSON const &save = root["save"];
             if (save.has_key("last_save_dir")) {
-                easyjson::JSON const& value = save["last_save_dir"];
+                easyjson::JSON const &value = save["last_save_dir"];
                 if (value.JSON_type() == easyjson::JSON::Class::String) {
                     config.last_save_dir = ToWide(value.to_string());
                 }
@@ -116,5 +114,4 @@ void AppConfig::Normalize() {
     }
 }
 
-}  // namespace greenflame
-
+} // namespace greenflame

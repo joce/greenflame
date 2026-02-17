@@ -12,15 +12,14 @@ namespace {
     return static_cast<unsigned>(ch) < 0x20u || std::wcschr(kInvalid, ch) != nullptr;
 }
 
-[[nodiscard]] bool EndsWithNoCase(std::wstring_view s, std::wstring_view suffix) noexcept {
-    if (s.size() < suffix.size())
-        return false;
+[[nodiscard]] bool EndsWithNoCase(std::wstring_view s,
+                                  std::wstring_view suffix) noexcept {
+    if (s.size() < suffix.size()) return false;
     size_t const offset = s.size() - suffix.size();
     for (size_t i = 0; i < suffix.size(); ++i) {
         wchar_t const a = static_cast<wchar_t>(std::towlower(s[offset + i]));
         wchar_t const b = static_cast<wchar_t>(std::towlower(suffix[i]));
-        if (a != b)
-            return false;
+        if (a != b) return false;
     }
     return true;
 }
@@ -28,8 +27,7 @@ namespace {
 } // namespace
 
 std::wstring SanitizeFilenameSegment(std::wstring_view input, size_t max_chars) {
-    if (max_chars == 0)
-        return L"";
+    if (max_chars == 0) return L"";
     size_t const out_size = input.size() < max_chars ? input.size() : max_chars;
     std::wstring out;
     out.reserve(out_size);
@@ -40,15 +38,14 @@ std::wstring SanitizeFilenameSegment(std::wstring_view input, size_t max_chars) 
     return out;
 }
 
-std::wstring BuildDefaultSaveName(
-    SaveSelectionSource selection_source,
-    std::optional<size_t> selection_monitor_index_zero_based,
-    std::wstring_view window_title,
-    SaveTimestamp timestamp) {
+std::wstring
+BuildDefaultSaveName(SaveSelectionSource selection_source,
+                     std::optional<size_t> selection_monitor_index_zero_based,
+                     std::wstring_view window_title, SaveTimestamp timestamp) {
     wchar_t time_part[32] = {};
-    swprintf_s(time_part, L"%02u%02u%02u-%02u%02u%02u", timestamp.day,
-               timestamp.month, timestamp.year_two_digits, timestamp.hour,
-               timestamp.minute, timestamp.second);
+    swprintf_s(time_part, L"%02u%02u%02u-%02u%02u%02u", timestamp.day, timestamp.month,
+               timestamp.year_two_digits, timestamp.hour, timestamp.minute,
+               timestamp.second);
 
     switch (selection_source) {
     case SaveSelectionSource::Region:
@@ -64,8 +61,7 @@ std::wstring BuildDefaultSaveName(
         std::wstring window_name = L"window";
         if (!window_title.empty()) {
             std::wstring sanitized = SanitizeFilenameSegment(window_title, 50);
-            if (!sanitized.empty())
-                window_name = std::move(sanitized);
+            if (!sanitized.empty()) window_name = std::move(sanitized);
         }
         return std::wstring(L"Greenflame-") + window_name + L"-" + time_part;
     }
@@ -73,7 +69,8 @@ std::wstring BuildDefaultSaveName(
     return std::wstring(L"Greenflame-") + time_part;
 }
 
-std::wstring EnsureImageSaveExtension(std::wstring_view path, uint32_t filter_index_1_based) {
+std::wstring EnsureImageSaveExtension(std::wstring_view path,
+                                      uint32_t filter_index_1_based) {
     if (EndsWithNoCase(path, L".png") || EndsWithNoCase(path, L".jpg") ||
         EndsWithNoCase(path, L".jpeg") || EndsWithNoCase(path, L".bmp")) {
         return std::wstring(path);
@@ -92,8 +89,7 @@ std::wstring EnsureImageSaveExtension(std::wstring_view path, uint32_t filter_in
 ImageSaveFormat DetectImageSaveFormatFromPath(std::wstring_view path) noexcept {
     if (EndsWithNoCase(path, L".jpg") || EndsWithNoCase(path, L".jpeg"))
         return ImageSaveFormat::Jpeg;
-    if (EndsWithNoCase(path, L".bmp"))
-        return ImageSaveFormat::Bmp;
+    if (EndsWithNoCase(path, L".bmp")) return ImageSaveFormat::Bmp;
     return ImageSaveFormat::Png;
 }
 

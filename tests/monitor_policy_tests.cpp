@@ -19,11 +19,11 @@ static std::vector<MonitorWithBounds> TwoMonitorsSameDpi() {
 static std::vector<MonitorWithBounds> TwoMonitorsDifferentDpi() {
     std::vector<MonitorWithBounds> out;
     out.push_back(MonitorWithBounds{
-            RectPx::FromLtrb(0, 0, 1920, 1080),
-            MonitorInfo{MonitorDpiScale{150}, MonitorOrientation::Landscape}});
+        RectPx::FromLtrb(0, 0, 1920, 1080),
+        MonitorInfo{MonitorDpiScale{150}, MonitorOrientation::Landscape}});
     out.push_back(MonitorWithBounds{
-            RectPx::FromLtrb(1920, 0, 3840, 1080),
-            MonitorInfo{MonitorDpiScale{125}, MonitorOrientation::Landscape}});
+        RectPx::FromLtrb(1920, 0, 3840, 1080),
+        MonitorInfo{MonitorDpiScale{125}, MonitorOrientation::Landscape}});
     return out;
 }
 
@@ -31,24 +31,22 @@ static std::vector<MonitorWithBounds> TwoMonitorsDifferentDpi() {
 static std::vector<MonitorWithBounds> TwoMonitorsDifferentOrientation() {
     std::vector<MonitorWithBounds> out;
     out.push_back(MonitorWithBounds{
-            RectPx::FromLtrb(0, 0, 1920, 1080),
-            MonitorInfo{MonitorDpiScale{100}, MonitorOrientation::Landscape}});
+        RectPx::FromLtrb(0, 0, 1920, 1080),
+        MonitorInfo{MonitorDpiScale{100}, MonitorOrientation::Landscape}});
     out.push_back(MonitorWithBounds{
-            RectPx::FromLtrb(0, 1080, 1080, 1920 + 1080),
-            MonitorInfo{MonitorDpiScale{100}, MonitorOrientation::Portrait}});
+        RectPx::FromLtrb(0, 1080, 1080, 1920 + 1080),
+        MonitorInfo{MonitorDpiScale{100}, MonitorOrientation::Portrait}});
     return out;
 }
 
-TEST_CASE("IndexOfMonitorContaining — point in first monitor",
-                    "[monitor][policy]") {
+TEST_CASE("IndexOfMonitorContaining — point in first monitor", "[monitor][policy]") {
     auto monitors = TwoMonitorsSameDpi();
     auto idx = IndexOfMonitorContaining(PointPx{100, 100}, monitors);
     REQUIRE(idx.has_value());
     REQUIRE(*idx == 0u);
 }
 
-TEST_CASE("IndexOfMonitorContaining — point in second monitor",
-                    "[monitor][policy]") {
+TEST_CASE("IndexOfMonitorContaining — point in second monitor", "[monitor][policy]") {
     auto monitors = TwoMonitorsSameDpi();
     auto idx = IndexOfMonitorContaining(PointPx{2000, 500}, monitors);
     REQUIRE(idx.has_value());
@@ -56,14 +54,14 @@ TEST_CASE("IndexOfMonitorContaining — point in second monitor",
 }
 
 TEST_CASE("IndexOfMonitorContaining — point outside all monitors",
-                    "[monitor][policy]") {
+          "[monitor][policy]") {
     auto monitors = TwoMonitorsSameDpi();
     auto idx = IndexOfMonitorContaining(PointPx{-100, -100}, monitors);
     REQUIRE(!idx.has_value());
 }
 
 TEST_CASE("IndicesOfMonitorsIntersecting — rect in first monitor only",
-                    "[monitor][policy]") {
+          "[monitor][policy]") {
     auto monitors = TwoMonitorsSameDpi();
     RectPx r = RectPx::FromLtrb(100, 100, 500, 500);
     auto indices = IndicesOfMonitorsIntersecting(r, monitors);
@@ -72,7 +70,7 @@ TEST_CASE("IndicesOfMonitorsIntersecting — rect in first monitor only",
 }
 
 TEST_CASE("IndicesOfMonitorsIntersecting — rect spanning both monitors",
-                    "[monitor][policy]") {
+          "[monitor][policy]") {
     auto monitors = TwoMonitorsSameDpi();
     RectPx r = RectPx::FromLtrb(1000, 100, 2500, 500);
     auto indices = IndicesOfMonitorsIntersecting(r, monitors);
@@ -85,8 +83,8 @@ TEST_CASE("IndicesOfMonitorsIntersecting — rect spanning both monitors",
 }
 
 TEST_CASE("AllowedSelectionRect — same DPI + same orientation, candidate "
-                    "spanning both",
-                    "[monitor][policy]") {
+          "spanning both",
+          "[monitor][policy]") {
     auto monitors = TwoMonitorsSameDpi();
     PointPx start{100, 100};
     RectPx candidate = RectPx::FromLtrb(100, 100, 2500, 500);
@@ -98,8 +96,8 @@ TEST_CASE("AllowedSelectionRect — same DPI + same orientation, candidate "
 }
 
 TEST_CASE("AllowedSelectionRect — different DPI, candidate spanning both → "
-                    "clamped to start",
-                    "[monitor][policy]") {
+          "clamped to start",
+          "[monitor][policy]") {
     auto monitors = TwoMonitorsDifferentDpi();
     PointPx start{100, 100};                                  // in first monitor
     RectPx candidate = RectPx::FromLtrb(100, 100, 2500, 500); // spans both
@@ -112,7 +110,7 @@ TEST_CASE("AllowedSelectionRect — different DPI, candidate spanning both → "
 }
 
 TEST_CASE("AllowedSelectionRect — single monitor, candidate inside → unchanged",
-                    "[monitor][policy]") {
+          "[monitor][policy]") {
     auto monitors = TwoMonitorsSameDpi();
     PointPx start{500, 500};
     RectPx candidate = RectPx::FromLtrb(100, 100, 800, 600);
@@ -124,8 +122,8 @@ TEST_CASE("AllowedSelectionRect — single monitor, candidate inside → unchang
 }
 
 TEST_CASE("AllowedSelectionRect — start outside all monitors → clamped to "
-                    "first touched",
-                    "[monitor][policy]") {
+          "first touched",
+          "[monitor][policy]") {
     auto monitors = TwoMonitorsDifferentDpi();
     PointPx start{-100, -100};                                // outside all
     RectPx candidate = RectPx::FromLtrb(100, 100, 2500, 500); // spans both
@@ -139,11 +137,11 @@ TEST_CASE("AllowedSelectionRect — start outside all monitors → clamped to "
 }
 
 TEST_CASE("AllowedSelectionRect — empty candidate → returned as-is",
-                    "[monitor][policy]") {
+          "[monitor][policy]") {
     auto monitors = TwoMonitorsSameDpi();
     PointPx start{100, 100};
     RectPx candidate =
-            RectPx::FromPoints(PointPx{50, 50}, PointPx{50, 50}); // zero size
+        RectPx::FromPoints(PointPx{50, 50}, PointPx{50, 50}); // zero size
     RectPx allowed = AllowedSelectionRect(candidate, start, monitors);
     REQUIRE(allowed.IsEmpty());
     REQUIRE(allowed.left == 50);
@@ -153,7 +151,7 @@ TEST_CASE("AllowedSelectionRect — empty candidate → returned as-is",
 }
 
 TEST_CASE("AllowedSelectionRect — no monitors → candidate returned",
-                    "[monitor][policy]") {
+          "[monitor][policy]") {
     std::vector<MonitorWithBounds> empty;
     RectPx candidate = RectPx::FromLtrb(10, 20, 100, 200);
     RectPx allowed = AllowedSelectionRect(candidate, PointPx{50, 50}, empty);
@@ -163,13 +161,12 @@ TEST_CASE("AllowedSelectionRect — no monitors → candidate returned",
     REQUIRE(allowed.bottom == 200);
 }
 
-TEST_CASE(
-        "AllowedSelectionRect — different orientation → clamped to start monitor",
-        "[monitor][policy]") {
+TEST_CASE("AllowedSelectionRect — different orientation → clamped to start monitor",
+          "[monitor][policy]") {
     auto monitors = TwoMonitorsDifferentOrientation();
     PointPx start{100, 100}; // first (landscape)
     RectPx candidate =
-            RectPx::FromLtrb(100, 100, 500, 1500); // would span into portrait
+        RectPx::FromLtrb(100, 100, 500, 1500); // would span into portrait
     RectPx allowed = AllowedSelectionRect(candidate, start, monitors);
     // First monitor bounds: [0,0,1920,1080]
     REQUIRE(allowed.left == 100);

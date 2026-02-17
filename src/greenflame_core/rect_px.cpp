@@ -5,18 +5,15 @@
 namespace greenflame::core {
 RectPx RectPx::Normalized() const noexcept {
     RectPx r = *this;
-    if (r.left > r.right)
-        std::swap(r.left, r.right);
-    if (r.top > r.bottom)
-        std::swap(r.top, r.bottom);
+    if (r.left > r.right) std::swap(r.left, r.right);
+    if (r.top > r.bottom) std::swap(r.top, r.bottom);
     return r;
 }
 
 bool RectPx::Contains(PointPx p) const noexcept {
     const RectPx r = this->Normalized();
     // Inclusive/exclusive: [left, right) and [top, bottom)
-    return (p.x >= r.left) && (p.x < r.right) && (p.y >= r.top) &&
-                  (p.y < r.bottom);
+    return (p.x >= r.left) && (p.x < r.right) && (p.y >= r.top) && (p.y < r.bottom);
 }
 
 std::optional<RectPx> RectPx::Intersect(RectPx a, RectPx b) noexcept {
@@ -29,8 +26,7 @@ std::optional<RectPx> RectPx::Intersect(RectPx a, RectPx b) noexcept {
     out.right = std::min(a.right, b.right);
     out.bottom = std::min(a.bottom, b.bottom);
 
-    if (out.IsEmpty())
-        return std::nullopt;
+    if (out.IsEmpty()) return std::nullopt;
 
     return out;
 }
@@ -40,10 +36,8 @@ RectPx RectPx::Union(RectPx a, RectPx b) noexcept {
     b = b.Normalized();
 
     // If one is empty, return the other (normalized).
-    if (a.IsEmpty())
-        return b;
-    if (b.IsEmpty())
-        return a;
+    if (a.IsEmpty()) return b;
+    if (b.IsEmpty()) return a;
 
     RectPx out;
     out.left = std::min(a.left, b.left);

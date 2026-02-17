@@ -24,17 +24,16 @@ struct SaveTimestamp {
     unsigned second = 0;
 };
 
-[[nodiscard]] std::wstring SanitizeFilenameSegment(
-    std::wstring_view input, size_t max_chars);
+[[nodiscard]] std::wstring SanitizeFilenameSegment(std::wstring_view input,
+                                                   size_t max_chars);
 
-[[nodiscard]] std::wstring BuildDefaultSaveName(
-    SaveSelectionSource selection_source,
-    std::optional<size_t> selection_monitor_index_zero_based,
-    std::wstring_view window_title,
-    SaveTimestamp timestamp);
+[[nodiscard]] std::wstring
+BuildDefaultSaveName(SaveSelectionSource selection_source,
+                     std::optional<size_t> selection_monitor_index_zero_based,
+                     std::wstring_view window_title, SaveTimestamp timestamp);
 
-[[nodiscard]] std::wstring EnsureImageSaveExtension(
-    std::wstring_view path, uint32_t filter_index_1_based);
+[[nodiscard]] std::wstring EnsureImageSaveExtension(std::wstring_view path,
+                                                    uint32_t filter_index_1_based);
 
 enum class ImageSaveFormat : uint8_t {
     Png = 0,
@@ -42,7 +41,7 @@ enum class ImageSaveFormat : uint8_t {
     Bmp = 2,
 };
 
-[[nodiscard]] ImageSaveFormat DetectImageSaveFormatFromPath(
-    std::wstring_view path) noexcept;
+[[nodiscard]] ImageSaveFormat
+DetectImageSaveFormatFromPath(std::wstring_view path) noexcept;
 
 } // namespace greenflame::core

@@ -24,20 +24,18 @@ constexpr COLORREF kCoordTooltipBorderText = RGB(46, 139, 87); // SeaGreen
 
 constexpr int kHandleHalfSize = 4; // 8x8 handle centered on contour
 constexpr int kMagnifierSize = 256;
-constexpr int kMagnifierZoom =
-    8; // source size = kMagnifierSize / kMagnifierZoom
+constexpr int kMagnifierZoom = 8; // source size = kMagnifierSize / kMagnifierZoom
 constexpr int kMagnifierSource = kMagnifierSize / kMagnifierZoom; // 64
 constexpr int kMagnifierPadding = 8;
 // Magnifier crosshair and contour: 66% opaque.
-constexpr unsigned char kMagnifierCrosshairAlpha = 168;  // 255 * 66 / 100
+constexpr unsigned char kMagnifierCrosshairAlpha = 168; // 255 * 66 / 100
 // Greenshot-style: thick cross with white contour, center gap, margin from edge.
 constexpr int kMagnifierCrosshairThickness = 8;
-constexpr int kMagnifierCrosshairGap = 20;     // center to inner arm end
-constexpr int kMagnifierCrosshairMargin = 8;   // circle edge to outer arm end
+constexpr int kMagnifierCrosshairGap = 20;   // center to inner arm end
+constexpr int kMagnifierCrosshairMargin = 8; // circle edge to outer arm end
 
-void BlendMagnifierCrosshairOntoPixels(std::span<uint8_t> pixels, int width,
-                                       int height, int rowBytes, int magLeft,
-                                       int magTop) noexcept {
+void BlendMagnifierCrosshairOntoPixels(std::span<uint8_t> pixels, int width, int height,
+                                       int rowBytes, int magLeft, int magTop) noexcept {
     int const size = kMagnifierSize;
     int const center = size / 2;
     int const radiusSq = center * center;
@@ -48,12 +46,14 @@ void BlendMagnifierCrosshairOntoPixels(std::span<uint8_t> pixels, int width,
     float const ia = 1.f - a;
 
     // Four arm rectangles in magnifier-local coords [x0,x1) x [y0,y1).
-    struct Arm { int x0, y0, x1, y1; };
+    struct Arm {
+        int x0, y0, x1, y1;
+    };
     Arm const arms[4] = {
-        {center - half, margin,       center + half, center - gap}, // top
-        {center - half, center + gap, center + half, size - margin},// bottom
-        {margin,        center - half, center - gap, center + half},// left
-        {center + gap,  center - half, size - margin, center + half},// right
+        {center - half, margin, center + half, center - gap},        // top
+        {center - half, center + gap, center + half, size - margin}, // bottom
+        {margin, center - half, center - gap, center + half},        // left
+        {center + gap, center - half, size - margin, center + half}, // right
     };
 
     int const sy0 = std::max(0, magTop);
@@ -64,35 +64,32 @@ void BlendMagnifierCrosshairOntoPixels(std::span<uint8_t> pixels, int width,
     for (int y = sy0; y < sy1; ++y) {
         int const iy = y - magTop;
         int const dySq = (iy - center) * (iy - center);
-        uint8_t* row = pixels.data() + static_cast<size_t>(y) * rowBytes;
+        uint8_t *row = pixels.data() + static_cast<size_t>(y) * rowBytes;
         for (int x = sx0; x < sx1; ++x) {
             int const ix = x - magLeft;
-            if ((ix - center) * (ix - center) + dySq > radiusSq)
-                continue;
+            if ((ix - center) * (ix - center) + dySq > radiusSq) continue;
 
             // Classify: inside an arm (black) or on its 1px contour (white)?
             bool onArm = false;
             bool onContour = false;
-            for (auto const& r : arms) {
+            for (auto const &r : arms) {
                 if (ix >= r.x0 && ix < r.x1 && iy >= r.y0 && iy < r.y1) {
                     onArm = true;
                     break;
                 }
-                if (ix >= r.x0 - 1 && ix < r.x1 + 1 &&
-                    iy >= r.y0 - 1 && iy < r.y1 + 1)
+                if (ix >= r.x0 - 1 && ix < r.x1 + 1 && iy >= r.y0 - 1 && iy < r.y1 + 1)
                     onContour = true;
             }
             if (onArm) onContour = false;
             if (!onArm && !onContour) continue;
 
             size_t off = static_cast<size_t>(x) * 4;
-            if (off + 2 >= static_cast<size_t>(rowBytes))
-                continue;
+            if (off + 2 >= static_cast<size_t>(rowBytes)) continue;
             float const target = onContour ? 255.f : 0.f;
             int const blendB = static_cast<int>(ia * row[off] + a * target);
             int const blendG = static_cast<int>(ia * row[off + 1] + a * target);
             int const blendR = static_cast<int>(ia * row[off + 2] + a * target);
-            row[off]     = static_cast<uint8_t>(blendB > 255 ? 255 : blendB);
+            row[off] = static_cast<uint8_t>(blendB > 255 ? 255 : blendB);
             row[off + 1] = static_cast<uint8_t>(blendG > 255 ? 255 : blendG);
             row[off + 2] = static_cast<uint8_t>(blendR > 255 ? 255 : blendR);
         }
@@ -101,8 +98,7 @@ void BlendMagnifierCrosshairOntoPixels(std::span<uint8_t> pixels, int width,
 
 void DrawCaptureToBuffer(HDC bufDc, HDC hdc, int w, int h,
                          greenflame::GdiCaptureResult const *capture) {
-    if (!capture || !capture->IsValid())
-        return;
+    if (!capture || !capture->IsValid()) return;
     HDC srcDc = CreateCompatibleDC(hdc);
     if (srcDc) {
         HGDIOBJ oldSrc = SelectObject(srcDc, capture->bitmap);
@@ -114,18 +110,16 @@ void DrawCaptureToBuffer(HDC bufDc, HDC hdc, int w, int h,
 
 void DrawContourHandles(HDC bufDc, greenflame::core::RectPx const &sel,
                         greenflame::PaintResources const *res) {
-    if (sel.IsEmpty())
-        return;
+    if (sel.IsEmpty()) return;
     greenflame::core::RectPx const r = sel.Normalized();
     int const cx = (r.left + r.right) / 2;
     int const cy = (r.top + r.bottom) / 2;
-    if (!res || !res->handle_brush || !res->handle_pen)
-        return;
+    if (!res || !res->handle_brush || !res->handle_pen) return;
     HGDIOBJ oldBrush = SelectObject(bufDc, res->handle_brush);
     HGDIOBJ oldPen = SelectObject(bufDc, res->handle_pen);
     auto drawHandle = [bufDc](int hx, int hy) {
-        RECT hr = {hx - kHandleHalfSize, hy - kHandleHalfSize,
-                   hx + kHandleHalfSize, hy + kHandleHalfSize};
+        RECT hr = {hx - kHandleHalfSize, hy - kHandleHalfSize, hx + kHandleHalfSize,
+                   hy + kHandleHalfSize};
         Rectangle(bufDc, hr.left, hr.top, hr.right, hr.bottom);
     };
     drawHandle(r.left, r.top);
@@ -144,12 +138,10 @@ void DrawSelectionDimAndBorder(HDC bufDc, HBITMAP bufBmp, int w, int h,
                                greenflame::core::RectPx const &sel,
                                std::span<uint8_t> pixels,
                                greenflame::PaintResources const *res) {
-    if (sel.IsEmpty())
-        return;
+    if (sel.IsEmpty()) return;
     int const rowBytes = greenflame::RowBytes32(w);
     size_t const size = static_cast<size_t>(rowBytes) * static_cast<size_t>(h);
-    if (pixels.size() < size)
-        return;
+    if (pixels.size() < size) return;
     BITMAPINFOHEADER bmi;
     greenflame::FillBmi32TopDown(bmi, w, h);
     if (GetDIBits(bufDc, bufBmp, 0, static_cast<UINT>(h), pixels.data(),
@@ -165,22 +157,18 @@ void DrawSelectionDimAndBorder(HDC bufDc, HBITMAP bufBmp, int w, int h,
 }
 
 void DrawDimensionLabels(HDC bufDc, HBITMAP bufBmp, int w, int h,
-                         greenflame::core::RectPx const &sel,
-                         std::span<uint8_t> pixels,
+                         greenflame::core::RectPx const &sel, std::span<uint8_t> pixels,
                          greenflame::PaintResources const *res) {
     constexpr int kDimMargin = 4;
     constexpr int kDimGap = 4;
     constexpr int kCenterMarginV = 2;
     int const rowBytes = greenflame::RowBytes32(w);
-    size_t const pixSize =
-        static_cast<size_t>(rowBytes) * static_cast<size_t>(h);
-    if (pixels.size() < pixSize)
-        return;
+    size_t const pixSize = static_cast<size_t>(rowBytes) * static_cast<size_t>(h);
+    if (pixels.size() < pixSize) return;
     BITMAPINFOHEADER bmiDim;
     greenflame::FillBmi32TopDown(bmiDim, w, h);
     if (GetDIBits(bufDc, bufBmp, 0, static_cast<UINT>(h), pixels.data(),
-                  reinterpret_cast<BITMAPINFO *>(&bmiDim),
-                  DIB_RGB_COLORS) != 0) {
+                  reinterpret_cast<BITMAPINFO *>(&bmiDim), DIB_RGB_COLORS) != 0) {
         HFONT fontDim = res ? res->font_dim : nullptr;
         HFONT fontCenter = res ? res->font_center : nullptr;
         if (fontDim) {
@@ -192,17 +180,14 @@ void DrawDimensionLabels(HDC bufDc, HBITMAP bufBmp, int w, int h,
             swprintf_s(centerBuf, L"%d x %d", sel.Width(), sel.Height());
 
             SIZE widthSize = {}, heightSize = {}, centerSize = {};
-            GetTextExtentPoint32W(bufDc, widthBuf,
-                                  static_cast<int>(wcslen(widthBuf)),
+            GetTextExtentPoint32W(bufDc, widthBuf, static_cast<int>(wcslen(widthBuf)),
                                   &widthSize);
-            GetTextExtentPoint32W(bufDc, heightBuf,
-                                  static_cast<int>(wcslen(heightBuf)),
+            GetTextExtentPoint32W(bufDc, heightBuf, static_cast<int>(wcslen(heightBuf)),
                                   &heightSize);
             if (fontCenter) {
                 SelectObject(bufDc, fontCenter);
                 GetTextExtentPoint32W(bufDc, centerBuf,
-                                      static_cast<int>(wcslen(centerBuf)),
-                                      &centerSize);
+                                      static_cast<int>(wcslen(centerBuf)), &centerSize);
                 SelectObject(bufDc, fontDim);
             }
 
@@ -228,10 +213,8 @@ void DrawDimensionLabels(HDC bufDc, HBITMAP bufBmp, int w, int h,
                 widthBoxTop = (sel.top - widthBoxH - kDimGap >= h - widthBoxH)
                                   ? (sel.bottom + kDimGap)
                                   : (sel.top - widthBoxH - kDimGap);
-            if (widthBoxTop < 0)
-                widthBoxTop = 0;
-            if (widthBoxTop + widthBoxH > h)
-                widthBoxTop = h - widthBoxH;
+            if (widthBoxTop < 0) widthBoxTop = 0;
+            if (widthBoxTop + widthBoxH > h) widthBoxTop = h - widthBoxH;
 
             int heightBoxTop = centerY - heightBoxH / 2;
             int heightBoxLeft;
@@ -248,39 +231,33 @@ void DrawDimensionLabels(HDC bufDc, HBITMAP bufBmp, int w, int h,
                                     ? heightBoxRightRight
                                     : heightBoxRightLeft;
             }
-            if (heightBoxLeft < 0)
-                heightBoxLeft = 0;
-            if (heightBoxLeft + heightBoxW > w)
-                heightBoxLeft = w - heightBoxW;
+            if (heightBoxLeft < 0) heightBoxLeft = 0;
+            if (heightBoxLeft + heightBoxW > w) heightBoxLeft = w - heightBoxW;
 
             int centerBoxLeft = centerX - centerBoxW / 2;
             int centerBoxTop = centerY - centerBoxH / 2;
             constexpr int kCenterMinPadding = 24;
             int const selW = sel.Width();
             int const selH = sel.Height();
-            bool const centerFits =
-                (selW >= centerBoxW + 2 * kCenterMinPadding &&
-                 selH >= centerBoxH + 2 * kCenterMinPadding);
+            bool const centerFits = (selW >= centerBoxW + 2 * kCenterMinPadding &&
+                                     selH >= centerBoxH + 2 * kCenterMinPadding);
 
-            greenflame::core::RectPx widthBoxRect =
-                greenflame::core::RectPx::FromLtrb(widthBoxLeft, widthBoxTop,
-                                                   widthBoxLeft + widthBoxW,
-                                                   widthBoxTop + widthBoxH);
-            greenflame::core::RectPx heightBoxRect =
-                greenflame::core::RectPx::FromLtrb(heightBoxLeft, heightBoxTop,
-                                                   heightBoxLeft + heightBoxW,
-                                                   heightBoxTop + heightBoxH);
-            greenflame::core::RectPx centerBoxRect =
-                greenflame::core::RectPx::FromLtrb(centerBoxLeft, centerBoxTop,
-                                                   centerBoxLeft + centerBoxW,
-                                                   centerBoxTop + centerBoxH);
+            greenflame::core::RectPx widthBoxRect = greenflame::core::RectPx::FromLtrb(
+                widthBoxLeft, widthBoxTop, widthBoxLeft + widthBoxW,
+                widthBoxTop + widthBoxH);
+            greenflame::core::RectPx heightBoxRect = greenflame::core::RectPx::FromLtrb(
+                heightBoxLeft, heightBoxTop, heightBoxLeft + heightBoxW,
+                heightBoxTop + heightBoxH);
+            greenflame::core::RectPx centerBoxRect = greenflame::core::RectPx::FromLtrb(
+                centerBoxLeft, centerBoxTop, centerBoxLeft + centerBoxW,
+                centerBoxTop + centerBoxH);
 
-            greenflame::core::BlendRectOntoPixels(
-                pixels, w, h, rowBytes, widthBoxRect, kCoordTooltipBgR,
-                kCoordTooltipBgG, kCoordTooltipBgB, kCoordTooltipAlpha);
-            greenflame::core::BlendRectOntoPixels(
-                pixels, w, h, rowBytes, heightBoxRect, kCoordTooltipBgR,
-                kCoordTooltipBgG, kCoordTooltipBgB, kCoordTooltipAlpha);
+            greenflame::core::BlendRectOntoPixels(pixels, w, h, rowBytes, widthBoxRect,
+                                                  kCoordTooltipBgR, kCoordTooltipBgG,
+                                                  kCoordTooltipBgB, kCoordTooltipAlpha);
+            greenflame::core::BlendRectOntoPixels(pixels, w, h, rowBytes, heightBoxRect,
+                                                  kCoordTooltipBgR, kCoordTooltipBgG,
+                                                  kCoordTooltipBgB, kCoordTooltipAlpha);
             if (centerFits)
                 greenflame::core::BlendRectOntoPixels(
                     pixels, w, h, rowBytes, centerBoxRect, kCoordTooltipBgR,
@@ -292,25 +269,21 @@ void DrawDimensionLabels(HDC bufDc, HBITMAP bufBmp, int w, int h,
             if (dimBorderPen) {
                 HGDIOBJ oldDimPen = SelectObject(bufDc, dimBorderPen);
                 SelectObject(bufDc, GetStockObject(NULL_BRUSH));
-                Rectangle(bufDc, widthBoxLeft, widthBoxTop,
-                          widthBoxLeft + widthBoxW, widthBoxTop + widthBoxH);
+                Rectangle(bufDc, widthBoxLeft, widthBoxTop, widthBoxLeft + widthBoxW,
+                          widthBoxTop + widthBoxH);
                 Rectangle(bufDc, heightBoxLeft, heightBoxTop,
-                          heightBoxLeft + heightBoxW,
-                          heightBoxTop + heightBoxH);
+                          heightBoxLeft + heightBoxW, heightBoxTop + heightBoxH);
                 if (centerFits)
                     Rectangle(bufDc, centerBoxLeft, centerBoxTop,
-                              centerBoxLeft + centerBoxW,
-                              centerBoxTop + centerBoxH);
+                              centerBoxLeft + centerBoxW, centerBoxTop + centerBoxH);
                 SelectObject(bufDc, oldDimPen);
             }
             SetBkMode(bufDc, TRANSPARENT);
             SetTextColor(bufDc, kCoordTooltipBorderText);
-            RECT widthTextRc = {widthBoxLeft + kDimMargin,
-                                widthBoxTop + kDimMargin,
+            RECT widthTextRc = {widthBoxLeft + kDimMargin, widthBoxTop + kDimMargin,
                                 widthBoxLeft + widthBoxW - kDimMargin,
                                 widthBoxTop + widthBoxH - kDimMargin};
-            RECT heightTextRc = {heightBoxLeft + kDimMargin,
-                                 heightBoxTop + kDimMargin,
+            RECT heightTextRc = {heightBoxLeft + kDimMargin, heightBoxTop + kDimMargin,
                                  heightBoxLeft + heightBoxW - kDimMargin,
                                  heightBoxTop + heightBoxH - kDimMargin};
             RECT centerTextRc = {centerBoxLeft + kDimMargin,
@@ -331,13 +304,12 @@ void DrawDimensionLabels(HDC bufDc, HBITMAP bufBmp, int w, int h,
     }
 }
 
-void DrawCrosshairAndCoordTooltip(HDC bufDc, HBITMAP bufBmp, HWND hwnd, int w,
-                                  int h, int cx, int cy, bool dragging,
+void DrawCrosshairAndCoordTooltip(HDC bufDc, HBITMAP bufBmp, HWND hwnd, int w, int h,
+                                  int cx, int cy, bool dragging,
                                   std::span<uint8_t> pixels,
                                   greenflame::PaintResources const *res,
                                   greenflame::GdiCaptureResult const *capture) {
-    if (cx < 0 || cx >= w || cy < 0 || cy >= h)
-        return;
+    if (cx < 0 || cx >= w || cy < 0 || cy >= h) return;
 
     if (!dragging) {
         // Monitor bounds in client coords (for coord tooltip and magnifier).
@@ -381,18 +353,19 @@ void DrawCrosshairAndCoordTooltip(HDC bufDc, HBITMAP bufBmp, HWND hwnd, int w,
         int magLeft = 0, magTop = 0;
         if (sourceInBounds) {
             int const pad = kMagnifierPadding;
-            struct { int dx, dy; } constexpr quadrants[] = {
+            struct {
+                int dx, dy;
+            } constexpr quadrants[] = {
                 {+pad, +pad},                                   // bottom-right
                 {-pad - kMagnifierSize, +pad},                  // bottom-left
                 {+pad, -pad - kMagnifierSize},                  // top-right
                 {-pad - kMagnifierSize, -pad - kMagnifierSize}, // top-left
             };
             bool placed = false;
-            for (auto const& q : quadrants) {
+            for (auto const &q : quadrants) {
                 int const ml = cx + q.dx;
                 int const mt = cy + q.dy;
-                if (ml >= monLeft && mt >= monTop &&
-                    ml + kMagnifierSize <= monRight &&
+                if (ml >= monLeft && mt >= monTop && ml + kMagnifierSize <= monRight &&
                     mt + kMagnifierSize <= monBottom) {
                     magLeft = ml;
                     magTop = mt;
@@ -402,12 +375,12 @@ void DrawCrosshairAndCoordTooltip(HDC bufDc, HBITMAP bufBmp, HWND hwnd, int w,
             }
             if (!placed) {
                 magLeft = std::clamp(cx + pad, monLeft, monRight - kMagnifierSize);
-                magTop  = std::clamp(cy + pad, monTop, monBottom - kMagnifierSize);
+                magTop = std::clamp(cy + pad, monTop, monBottom - kMagnifierSize);
             }
-            // Draw magnifier from capture so dotted crosshair is not magnified (Greenshot does the same).
-            HRGN rgn =
-                CreateEllipticRgn(magLeft, magTop, magLeft + kMagnifierSize,
-                                  magTop + kMagnifierSize);
+            // Draw magnifier from capture so dotted crosshair is not magnified
+            // (Greenshot does the same).
+            HRGN rgn = CreateEllipticRgn(magLeft, magTop, magLeft + kMagnifierSize,
+                                         magTop + kMagnifierSize);
             if (rgn) {
                 SelectClipRgn(bufDc, rgn);
                 SetStretchBltMode(bufDc, COLORONCOLOR);
@@ -417,15 +390,14 @@ void DrawCrosshairAndCoordTooltip(HDC bufDc, HBITMAP bufBmp, HWND hwnd, int w,
                         HGDIOBJ oldCap = SelectObject(captureDc, capture->bitmap);
                         StretchBlt(bufDc, magLeft, magTop, kMagnifierSize,
                                    kMagnifierSize, captureDc, srcX, srcY,
-                                   kMagnifierSource, kMagnifierSource,
-                                   SRCCOPY);
+                                   kMagnifierSource, kMagnifierSource, SRCCOPY);
                         SelectObject(captureDc, oldCap);
                         DeleteDC(captureDc);
                     }
                 } else {
-                    StretchBlt(bufDc, magLeft, magTop, kMagnifierSize,
-                               kMagnifierSize, bufDc, srcX, srcY,
-                               kMagnifierSource, kMagnifierSource, SRCCOPY);
+                    StretchBlt(bufDc, magLeft, magTop, kMagnifierSize, kMagnifierSize,
+                               bufDc, srcX, srcY, kMagnifierSource, kMagnifierSource,
+                               SRCCOPY);
                 }
                 SelectClipRgn(bufDc, nullptr);
                 DeleteObject(rgn);
@@ -454,20 +426,15 @@ void DrawCrosshairAndCoordTooltip(HDC bufDc, HBITMAP bufBmp, HWND hwnd, int w,
             oldFont = SelectObject(bufDc, font);
             SIZE textSize = {};
             if (GetTextExtentPoint32W(bufDc, coordBuf,
-                                      static_cast<int>(wcslen(coordBuf)),
-                                      &textSize)) {
+                                      static_cast<int>(wcslen(coordBuf)), &textSize)) {
                 boxW = textSize.cx + 2 * kCoordMargin;
                 boxH = textSize.cy + 2 * kCoordMargin;
                 ttLeft = cx + kCoordPadding;
                 ttTop = cy + kCoordPadding;
-                if (ttLeft + boxW > monRight)
-                    ttLeft = cx - kCoordPadding - boxW;
-                if (ttTop + boxH > monBottom)
-                    ttTop = cy - kCoordPadding - boxH;
-                if (ttLeft < monLeft)
-                    ttLeft = monLeft;
-                if (ttTop < monTop)
-                    ttTop = monTop;
+                if (ttLeft + boxW > monRight) ttLeft = cx - kCoordPadding - boxW;
+                if (ttTop + boxH > monBottom) ttTop = cy - kCoordPadding - boxH;
+                if (ttLeft < monLeft) ttLeft = monLeft;
+                if (ttTop < monTop) ttTop = monTop;
                 boxRect = greenflame::core::RectPx::FromLtrb(
                     ttLeft, ttTop, ttLeft + boxW, ttTop + boxH);
                 tooltipReady = true;
@@ -477,27 +444,21 @@ void DrawCrosshairAndCoordTooltip(HDC bufDc, HBITMAP bufBmp, HWND hwnd, int w,
         // Single DIB round-trip for magnifier crosshair + tooltip background.
         bool const needPixels = sourceInBounds || tooltipReady;
         int const rowBytes = greenflame::RowBytes32(w);
-        size_t const pixSize =
-            static_cast<size_t>(rowBytes) * static_cast<size_t>(h);
+        size_t const pixSize = static_cast<size_t>(rowBytes) * static_cast<size_t>(h);
         if (needPixels && pixels.size() >= pixSize) {
             BITMAPINFOHEADER bmi;
             greenflame::FillBmi32TopDown(bmi, w, h);
-            if (GetDIBits(bufDc, bufBmp, 0, static_cast<UINT>(h),
-                          pixels.data(),
-                          reinterpret_cast<BITMAPINFO *>(&bmi),
-                          DIB_RGB_COLORS) != 0) {
+            if (GetDIBits(bufDc, bufBmp, 0, static_cast<UINT>(h), pixels.data(),
+                          reinterpret_cast<BITMAPINFO *>(&bmi), DIB_RGB_COLORS) != 0) {
                 if (sourceInBounds)
-                    BlendMagnifierCrosshairOntoPixels(pixels, w, h, rowBytes,
-                                                     magLeft, magTop);
+                    BlendMagnifierCrosshairOntoPixels(pixels, w, h, rowBytes, magLeft,
+                                                      magTop);
                 if (tooltipReady)
                     greenflame::core::BlendRectOntoPixels(
                         pixels, w, h, rowBytes, boxRect, kCoordTooltipBgR,
-                        kCoordTooltipBgG, kCoordTooltipBgB,
-                        kCoordTooltipAlpha);
-                SetDIBits(bufDc, bufBmp, 0, static_cast<UINT>(h),
-                          pixels.data(),
-                          reinterpret_cast<BITMAPINFO *>(&bmi),
-                          DIB_RGB_COLORS);
+                        kCoordTooltipBgG, kCoordTooltipBgB, kCoordTooltipAlpha);
+                SetDIBits(bufDc, bufBmp, 0, static_cast<UINT>(h), pixels.data(),
+                          reinterpret_cast<BITMAPINFO *>(&bmi), DIB_RGB_COLORS);
             }
         }
 
@@ -513,13 +474,11 @@ void DrawCrosshairAndCoordTooltip(HDC bufDc, HBITMAP bufBmp, HWND hwnd, int w,
             SetBkMode(bufDc, TRANSPARENT);
             SetTextColor(bufDc, kCoordTooltipBorderText);
             RECT textRc = {ttLeft + kCoordMargin, ttTop + kCoordMargin,
-                           ttLeft + boxW - kCoordMargin,
-                           ttTop + boxH - kCoordMargin};
+                           ttLeft + boxW - kCoordMargin, ttTop + boxH - kCoordMargin};
             DrawTextW(bufDc, coordBuf, -1, &textRc,
                       DT_LEFT | DT_VCENTER | DT_SINGLELINE);
         }
-        if (oldFont)
-            SelectObject(bufDc, oldFont);
+        if (oldFont) SelectObject(bufDc, oldFont);
     }
 }
 
@@ -527,8 +486,7 @@ void DrawCrosshairAndCoordTooltip(HDC bufDc, HBITMAP bufBmp, HWND hwnd, int w,
 
 namespace greenflame {
 
-void PaintOverlay(HDC hdc, HWND hwnd, const RECT &rc,
-                  const PaintOverlayInput &in) {
+void PaintOverlay(HDC hdc, HWND hwnd, const RECT &rc, const PaintOverlayInput &in) {
     int const w = rc.right - rc.left;
     int const h = rc.bottom - rc.top;
 
@@ -544,10 +502,8 @@ void PaintOverlay(HDC hdc, HWND hwnd, const RECT &rc,
     HDC bufDc = CreateCompatibleDC(hdc);
     HBITMAP bufBmp = CreateCompatibleBitmap(hdc, w, h);
     if (!bufDc || !bufBmp) {
-        if (bufBmp)
-            DeleteObject(bufBmp);
-        if (bufDc)
-            DeleteDC(bufDc);
+        if (bufBmp) DeleteObject(bufBmp);
+        if (bufDc) DeleteDC(bufDc);
         return;
     }
 
@@ -556,16 +512,12 @@ void PaintOverlay(HDC hdc, HWND hwnd, const RECT &rc,
     DrawCaptureToBuffer(bufDc, hdc, w, h, in.capture);
 
     greenflame::core::RectPx sel =
-        (in.modifier_preview || in.handle_dragging || in.dragging)
-            ? in.live_rect
-            : in.final_selection;
-    DrawSelectionDimAndBorder(bufDc, bufBmp, w, h, sel, in.paint_buffer,
-                              in.resources);
+        (in.modifier_preview || in.handle_dragging || in.dragging) ? in.live_rect
+                                                                   : in.final_selection;
+    DrawSelectionDimAndBorder(bufDc, bufBmp, w, h, sel, in.paint_buffer, in.resources);
 
-    if ((in.dragging || in.handle_dragging || in.modifier_preview) &&
-        !sel.IsEmpty())
-        DrawDimensionLabels(bufDc, bufBmp, w, h, sel, in.paint_buffer,
-                            in.resources);
+    if ((in.dragging || in.handle_dragging || in.modifier_preview) && !sel.IsEmpty())
+        DrawDimensionLabels(bufDc, bufBmp, w, h, sel, in.paint_buffer, in.resources);
 
     bool const show_crosshair = in.final_selection.IsEmpty() && !in.dragging &&
                                 !in.handle_dragging && !in.modifier_preview;

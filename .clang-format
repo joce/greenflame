@@ -3,3 +3,5 @@ BasedOnStyle: LLVM
 IndentWidth: 4
 TabWidth: 4
 UseTab: Never
+ColumnLimit: 88
+AllowShortIfStatementsOnASingleLine: true

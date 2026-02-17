@@ -11,8 +11,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int) {
             STARTUPINFOW si{};
             si.cb = sizeof(si);
             PROCESS_INFORMATION pi{};
-            if (CreateProcessW(path, nullptr, nullptr, nullptr, FALSE,
-                                                  DETACHED_PROCESS, nullptr, nullptr, &si, &pi)) {
+            if (CreateProcessW(path, nullptr, nullptr, nullptr, FALSE, DETACHED_PROCESS,
+                               nullptr, nullptr, &si, &pi)) {
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
                 ExitProcess(0);

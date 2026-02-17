@@ -1,0 +1,76 @@
+# clang-tidy: restrained baseline focused on correctness and signal.
+# Run from repo root with:
+#   clang-tidy -p build\x64-debug-clang src\greenflame\win\gdi_capture.cpp
+#
+# This allowlist avoids full "kitchen sink" churn while still catching real defects.
+Checks: >
+  -*,
+  clang-analyzer-*,
+  bugprone-branch-clone,
+  bugprone-infinite-loop,
+  bugprone-macro-parentheses,
+  bugprone-misplaced-widening-cast,
+  bugprone-sizeof-expression,
+  bugprone-suspicious-memory-comparison,
+  bugprone-use-after-move,
+  performance-for-range-copy,
+  performance-inefficient-vector-operation,
+  performance-move-const-arg,
+  performance-no-automatic-move,
+  performance-unnecessary-copy-initialization,
+  performance-unnecessary-value-param,
+  readability-identifier-naming,
+  readability-magic-numbers,
+  cppcoreguidelines-avoid-magic-numbers,
+  google-readability-braces-around-statements,
+  -bugprone-easily-swappable-parameters,
+  -performance-no-int-to-ptr,
+  -modernize-use-trailing-return-type,
+  -clang-analyzer-optin.core.EnumCastOutOfRange
+WarningsAsErrors: ""
+HeaderFilterRegex: '^.*greenflame[/\\](src|tests)[/\\].*'
+SystemHeaders: false
+
+CheckOptions:
+    - key: readability-identifier-naming.ClassCase
+      value: CamelCase
+    - key: readability-identifier-naming.StructCase
+      value: CamelCase
+    - key: readability-identifier-naming.EnumCase
+      value: CamelCase
+    - key: readability-identifier-naming.FunctionCase
+      value: Leading_upper_snake_case
+    - key: readability-identifier-naming.VariableCase
+      value: lower_case
+    - key: readability-identifier-naming.ParameterCase
+      value: lower_case
+    - key: readability-identifier-naming.LocalConstantCase
+      value: lower_case
+    - key: readability-identifier-naming.GlobalConstantCase
+      value: CamelCase
+    - key: readability-identifier-naming.GlobalConstantPrefix
+      value: k
+    - key: readability-identifier-naming.StaticConstantCase
+      value: CamelCase
+    - key: readability-identifier-naming.StaticConstantPrefix
+      value: k
+    - key: readability-identifier-naming.EnumConstantCase
+      value: CamelCase
+    - key: readability-identifier-naming.EnumConstantPrefix
+      value: ""
+    - key: readability-identifier-naming.MacroDefinitionCase
+      value: UPPER_CASE
+    - key: modernize-use-nullptr.NullMacros
+      value: "NULL"
+    # Magic numbers: keep flagged, but allow common literals.
+    - key: readability-magic-numbers.IgnoredIntegerValues
+      value: "0;1;2;3;10;100"
+    - key: cppcoreguidelines-avoid-magic-numbers.IgnoredIntegerValues
+      value: "0;1;2;3;10;100"
+    - key: readability-magic-numbers.IgnorePowersOf2IntegerValues
+      value: "true"
+    - key: cppcoreguidelines-avoid-magic-numbers.IgnorePowersOf2IntegerValues
+      value: "true"
+    # 1 means one-line statements can remain unbraced; 0 enforces braces for all.
+    - key: google-readability-braces-around-statements.ShortStatementLines
+      value: "1"

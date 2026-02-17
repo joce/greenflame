@@ -13,4 +13,4 @@ namespace greenflame {
 [[nodiscard]] core::RectPx GetVirtualDesktopBoundsPx();
 [[nodiscard]] std::vector<core::MonitorWithBounds> GetMonitorsWithBounds();
 
-}  // namespace greenflame
+} // namespace greenflame

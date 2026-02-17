@@ -11,7 +11,6 @@ namespace greenflame::core {
 // by GetDIBits with positive biHeight). rowBytes = (width * 4 + 3) & ~3.
 // Returns empty vector on invalid input.
 [[nodiscard]] std::vector<uint8_t> BuildBmpBytes(std::span<const uint8_t> pixels,
-                                                                                                  int width, int height,
-                                                                                                  int rowBytes);
+                                                 int width, int height, int rowBytes);
 
-}  // namespace greenflame::core
+} // namespace greenflame::core

@@ -10,7 +10,7 @@ void EnablePerMonitorDpiAwarenessV2() {
         return;
     }
     using SetDpiAwarenessContextFn =
-        DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
+        DPI_AWARENESS_CONTEXT(WINAPI *)(DPI_AWARENESS_CONTEXT);
     auto fn = reinterpret_cast<SetDpiAwarenessContextFn>(
         GetProcAddress(user32, "SetProcessDpiAwarenessContext"));
     if (fn) {
@@ -18,7 +18,7 @@ void EnablePerMonitorDpiAwarenessV2() {
     }
 }
 
-}  // namespace
+} // namespace
 
 namespace greenflame {
 
@@ -60,4 +60,4 @@ void GreenflameApp::OnOverlayClosed() {
     // Overlay lifecycle is managed by OverlayWindow; no app action needed.
 }
 
-}  // namespace greenflame
+} // namespace greenflame

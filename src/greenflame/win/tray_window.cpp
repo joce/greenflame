@@ -15,15 +15,13 @@ constexpr int kExitCommandId = 2;
 constexpr int kHotkeyId = 1;
 constexpr UINT kModNoRepeat = 0x4000u;
 
-}  // namespace
+} // namespace
 
 namespace greenflame {
 
-TrayWindow::TrayWindow(ITrayEvents* events) : events_(events) {}
+TrayWindow::TrayWindow(ITrayEvents *events) : events_(events) {}
 
-TrayWindow::~TrayWindow() {
-    Destroy();
-}
+TrayWindow::~TrayWindow() { Destroy(); }
 
 bool TrayWindow::RegisterWindowClass(HINSTANCE hinstance) {
     WNDCLASSEXW window_class{};
@@ -84,16 +82,13 @@ void TrayWindow::Destroy() {
     DestroyWindow(hwnd_);
 }
 
-bool TrayWindow::IsOpen() const {
-    return hwnd_ != nullptr && IsWindow(hwnd_) != 0;
-}
+bool TrayWindow::IsOpen() const { return hwnd_ != nullptr && IsWindow(hwnd_) != 0; }
 
 LRESULT CALLBACK TrayWindow::StaticWndProc(HWND hwnd, UINT msg, WPARAM wparam,
                                            LPARAM lparam) {
     if (msg == WM_NCCREATE) {
-        CREATESTRUCTW const* create =
-            reinterpret_cast<CREATESTRUCTW const*>(lparam);
-        TrayWindow* self = reinterpret_cast<TrayWindow*>(create->lpCreateParams);
+        CREATESTRUCTW const *create = reinterpret_cast<CREATESTRUCTW const *>(lparam);
+        TrayWindow *self = reinterpret_cast<TrayWindow *>(create->lpCreateParams);
         if (!self) {
             return FALSE;
         }
@@ -102,8 +97,8 @@ LRESULT CALLBACK TrayWindow::StaticWndProc(HWND hwnd, UINT msg, WPARAM wparam,
         return TRUE;
     }
 
-    TrayWindow* self = reinterpret_cast<TrayWindow*>(
-        GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+    TrayWindow *self =
+        reinterpret_cast<TrayWindow *>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
     if (!self) {
         return DefWindowProcW(hwnd, msg, wparam, lparam);
     }
@@ -166,8 +161,8 @@ void TrayWindow::ShowContextMenu() {
     POINT cursor{};
     GetCursorPos(&cursor);
     SetForegroundWindow(hwnd_);
-    TrackPopupMenuEx(menu, TPM_RIGHTALIGN | TPM_BOTTOMALIGN | TPM_RIGHTBUTTON,
-                     cursor.x, cursor.y, hwnd_, nullptr);
+    TrackPopupMenuEx(menu, TPM_RIGHTALIGN | TPM_BOTTOMALIGN | TPM_RIGHTBUTTON, cursor.x,
+                     cursor.y, hwnd_, nullptr);
     DestroyMenu(menu);
 }
 
@@ -177,4 +172,4 @@ void TrayWindow::NotifyStartCapture() {
     }
 }
 
-}  // namespace greenflame
+} // namespace greenflame

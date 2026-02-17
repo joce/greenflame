@@ -22,7 +22,8 @@ TEST_CASE("BuildSnapEdgesFromScreenRects handles empty input", "[snap_edges]") {
     REQUIRE(edges.horizontal.empty());
 }
 
-TEST_CASE("BuildSnapEdgesFromScreenRects builds left right top bottom edges", "[snap_edges]") {
+TEST_CASE("BuildSnapEdgesFromScreenRects builds left right top bottom edges",
+          "[snap_edges]") {
     std::vector<RectPx> const rects = {
         RectPx::FromLtrb(10, 20, 30, 40),
         RectPx::FromLtrb(-20, 5, 0, 10),

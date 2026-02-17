@@ -4,13 +4,12 @@
 
 using namespace greenflame::core;
 
-TEST_CASE("DimPixelsOutsideRect — 4x4 buffer, selection (1,1)-(3,3)",
-                    "[pixel_ops]") {
+TEST_CASE("DimPixelsOutsideRect — 4x4 buffer, selection (1,1)-(3,3)", "[pixel_ops]") {
     // 4x4 image, rowBytes = 16
     int const w = 4, h = 4, rowBytes = 16;
     std::vector<uint8_t> pixels(static_cast<size_t>(rowBytes) * h);
     for (size_t i = 0; i < pixels.size(); i += 4) {
-        pixels[i] = 200;      // B
+        pixels[i] = 200;     // B
         pixels[i + 1] = 200; // G
         pixels[i + 2] = 200; // R
         pixels[i + 3] = 255;
@@ -22,7 +21,8 @@ TEST_CASE("DimPixelsOutsideRect — 4x4 buffer, selection (1,1)-(3,3)",
     // Inside (1,1)-(3,3): unchanged 200,200,200
     for (int y = 1; y < 3; ++y) {
         for (int x = 1; x < 3; ++x) {
-            size_t off = (static_cast<size_t>(y) * rowBytes + static_cast<size_t>(x) * 4);
+            size_t off =
+                (static_cast<size_t>(y) * rowBytes + static_cast<size_t>(x) * 4);
             REQUIRE(pixels[off] == 200);
             REQUIRE(pixels[off + 1] == 200);
             REQUIRE(pixels[off + 2] == 200);
@@ -63,13 +63,14 @@ TEST_CASE("BlendRectOntoPixels — full opacity overwrites", "[pixel_ops]") {
     }
     RectPx rect = RectPx::FromLtrb(0, 0, 2, 2);
 
-    // Blend color (r, g, b) = (100, 150, 200) -> BGRA buffer is (B, G, R) = (200, 150, 100)
+    // Blend color (r, g, b) = (100, 150, 200) -> BGRA buffer is (B, G, R) = (200, 150,
+    // 100)
     BlendRectOntoPixels(pixels, w, h, rowBytes, rect, 100, 150, 200, 255);
 
     for (size_t i = 0; i < pixels.size(); i += 4) {
-        REQUIRE(pixels[i] == 200);   // B
-        REQUIRE(pixels[i + 1] == 150);  // G
-        REQUIRE(pixels[i + 2] == 100);   // R
+        REQUIRE(pixels[i] == 200);     // B
+        REQUIRE(pixels[i + 1] == 150); // G
+        REQUIRE(pixels[i + 2] == 100); // R
     }
 }
 

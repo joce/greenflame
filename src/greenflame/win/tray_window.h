@@ -5,19 +5,19 @@
 namespace greenflame {
 
 class ITrayEvents {
-public:
+  public:
     virtual ~ITrayEvents() = default;
     virtual void OnStartCaptureRequested() = 0;
     virtual void OnExitRequested() = 0;
 };
 
 class TrayWindow final {
-public:
-    explicit TrayWindow(ITrayEvents* events);
+  public:
+    explicit TrayWindow(ITrayEvents *events);
     ~TrayWindow();
 
-    TrayWindow(TrayWindow const&) = delete;
-    TrayWindow& operator=(TrayWindow const&) = delete;
+    TrayWindow(TrayWindow const &) = delete;
+    TrayWindow &operator=(TrayWindow const &) = delete;
 
     [[nodiscard]] static bool RegisterWindowClass(HINSTANCE hinstance);
     [[nodiscard]] bool Create(HINSTANCE hinstance);
@@ -25,16 +25,16 @@ public:
 
     [[nodiscard]] bool IsOpen() const;
 
-private:
+  private:
     static LRESULT CALLBACK StaticWndProc(HWND hwnd, UINT msg, WPARAM wparam,
                                           LPARAM lparam);
     LRESULT WndProc(UINT msg, WPARAM wparam, LPARAM lparam);
     void ShowContextMenu();
     void NotifyStartCapture();
 
-    ITrayEvents* events_ = nullptr;
+    ITrayEvents *events_ = nullptr;
     HWND hwnd_ = nullptr;
     HINSTANCE hinstance_ = nullptr;
 };
 
-}  // namespace greenflame
+} // namespace greenflame

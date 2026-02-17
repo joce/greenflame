@@ -9,6 +9,10 @@
 #include <vector>
 
 namespace greenflame::core {
+constexpr int32_t kDefaultMonitorScalePercent = 100;
+constexpr int32_t kMinMonitorScalePercent = 50;
+constexpr int32_t kMaxMonitorScalePercent = 500;
+
 enum class MonitorOrientation : uint8_t {
     Landscape = 0,
     Portrait = 1,
@@ -17,13 +21,12 @@ enum class MonitorOrientation : uint8_t {
 struct MonitorDpiScale final {
     // Windows "scale" is typically 100, 125, 150, 175, 200...
     // We store it as an integer percent to avoid floats.
-    int32_t percent{100};
+    int32_t percent{kDefaultMonitorScalePercent};
 
     [[nodiscard]] constexpr bool IsValid() const noexcept {
-        return percent >= 50 && percent <= 500;
+        return percent >= kMinMonitorScalePercent && percent <= kMaxMonitorScalePercent;
     }
-    [[nodiscard]] constexpr bool
-    operator==(const MonitorDpiScale &o) const noexcept {
+    [[nodiscard]] constexpr bool operator==(const MonitorDpiScale &o) const noexcept {
         return percent == o.percent;
     }
 };
@@ -60,11 +63,10 @@ enum class CrossMonitorSelectionDecision : uint8_t {
 // - identical orientation
 //
 // Resolution differences are allowed and intentionally ignored here.
-[[nodiscard]] CrossMonitorSelectionDecision DecideCrossMonitorSelection(
-    std::span<const MonitorInfo> touched_monitors) noexcept;
+[[nodiscard]] CrossMonitorSelectionDecision
+DecideCrossMonitorSelection(std::span<const MonitorInfo> touched_monitors) noexcept;
 
-[[nodiscard]] constexpr bool
-IsAllowed(CrossMonitorSelectionDecision d) noexcept {
+[[nodiscard]] constexpr bool IsAllowed(CrossMonitorSelectionDecision d) noexcept {
     return d == CrossMonitorSelectionDecision::Allowed;
 }
 
@@ -81,8 +83,9 @@ IndexOfMonitorContaining(PointPx p,
 
 // Returns indices of monitors whose bounds intersect r (non-empty
 // intersection).
-[[nodiscard]] std::vector<size_t> IndicesOfMonitorsIntersecting(
-    RectPx r, std::span<const MonitorWithBounds> monitors) noexcept;
+[[nodiscard]] std::vector<size_t>
+IndicesOfMonitorsIntersecting(RectPx r,
+                              std::span<const MonitorWithBounds> monitors) noexcept;
 
 // --- Selection policy ---
 // Returns the allowed selection rect: candidate unchanged if cross-monitor is

@@ -1,7 +1,7 @@
 #include "win/display_queries.h"
 
-#include <windows.h>
 #include <ShellScalingApi.h>
+#include <windows.h>
 
 #pragma comment(lib, "Shcore.lib")
 
@@ -40,20 +40,20 @@ struct MonitorEnumState {
 };
 
 BOOL CALLBACK EnumMonitorsProc(HMONITOR monitor, HDC, LPRECT rect, LPARAM lparam) {
-    auto* state = reinterpret_cast<MonitorEnumState*>(lparam);
+    auto *state = reinterpret_cast<MonitorEnumState *>(lparam);
     state->handles.push_back(monitor);
     state->rects.push_back(*rect);
     return TRUE;
 }
 
-core::MonitorOrientation OrientationFromRect(RECT const& rect) noexcept {
+core::MonitorOrientation OrientationFromRect(RECT const &rect) noexcept {
     long const width = rect.right - rect.left;
     long const height = rect.bottom - rect.top;
     return (width >= height) ? core::MonitorOrientation::Landscape
                              : core::MonitorOrientation::Portrait;
 }
 
-}  // namespace
+} // namespace
 
 std::vector<core::MonitorWithBounds> GetMonitorsWithBounds() {
     MonitorEnumState state;
@@ -66,13 +66,13 @@ std::vector<core::MonitorWithBounds> GetMonitorsWithBounds() {
     out.reserve(state.handles.size());
 
     for (size_t i = 0; i < state.handles.size(); ++i) {
-        RECT const& rect = state.rects[i];
+        RECT const &rect = state.rects[i];
         core::RectPx const bounds = core::RectPx::FromLtrb(
             static_cast<int32_t>(rect.left), static_cast<int32_t>(rect.top),
             static_cast<int32_t>(rect.right), static_cast<int32_t>(rect.bottom));
 
-        UINT dpi_x = 96;
-        UINT dpi_y = 96;
+        UINT dpi_x = USER_DEFAULT_SCREEN_DPI;
+        UINT dpi_y = USER_DEFAULT_SCREEN_DPI;
         (void)GetDpiForMonitor(state.handles[i], MDT_EFFECTIVE_DPI, &dpi_x, &dpi_y);
         int32_t const percent = core::DpiToScalePercent(static_cast<int>(dpi_x));
 
@@ -85,4 +85,4 @@ std::vector<core::MonitorWithBounds> GetMonitorsWithBounds() {
     return out;
 }
 
-}  // namespace greenflame
+} // namespace greenflame

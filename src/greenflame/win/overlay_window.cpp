@@ -15,9 +15,9 @@
 #include "win/save_image.h"
 #include "win/window_query.h"
 
-#include <windows.h>
 #include <ShlObj.h>
 #include <commdlg.h>
+#include <windows.h>
 
 #include <cstddef>
 #include <cstring>
@@ -58,7 +58,7 @@ constexpr int32_t kSnapThresholdPx = 10;
     return LoadCursorW(nullptr, IDC_ARROW);
 }
 
-}  // namespace
+} // namespace
 
 namespace greenflame {
 
@@ -68,12 +68,10 @@ struct OverlayWindow::OverlayResources {
     PaintResources paint = {};
 
     OverlayResources() = default;
-    ~OverlayResources() {
-        Reset();
-    }
+    ~OverlayResources() { Reset(); }
 
-    OverlayResources(OverlayResources const&) = delete;
-    OverlayResources& operator=(OverlayResources const&) = delete;
+    OverlayResources(OverlayResources const &) = delete;
+    OverlayResources &operator=(OverlayResources const &) = delete;
 
     [[nodiscard]] bool InitializeForCapture() {
         if (!capture.IsValid()) {
@@ -89,13 +87,13 @@ struct OverlayWindow::OverlayResources {
         }
 
         paint.font_dim =
-            CreateFontW(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                        DEFAULT_QUALITY, FF_DONTCARE, L"Segoe UI");
+            CreateFontW(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+                        FF_DONTCARE, L"Segoe UI");
         paint.font_center =
-            CreateFontW(36, 0, 0, 0, FW_BLACK, FALSE, FALSE, FALSE,
-                        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                        DEFAULT_QUALITY, FF_DONTCARE, L"Segoe UI");
+            CreateFontW(36, 0, 0, 0, FW_BLACK, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+                        FF_DONTCARE, L"Segoe UI");
         paint.crosshair_pen = CreatePen(PS_SOLID, 1, RGB(0x20, 0xB2, 0xAA));
         paint.border_pen = CreatePen(PS_SOLID, 1, RGB(46, 139, 87));
         paint.handle_brush = CreateSolidBrush(RGB(0, 0x80, 0x80));
@@ -177,14 +175,11 @@ struct OverlayWindow::OverlayState {
     }
 };
 
-OverlayWindow::OverlayWindow(IOverlayEvents* events, AppConfig* config)
-    : events_(events), config_(config),
-      state_(std::make_unique<OverlayState>()),
+OverlayWindow::OverlayWindow(IOverlayEvents *events, AppConfig *config)
+    : events_(events), config_(config), state_(std::make_unique<OverlayState>()),
       resources_(std::make_unique<OverlayResources>()) {}
 
-OverlayWindow::~OverlayWindow() {
-    Destroy();
-}
+OverlayWindow::~OverlayWindow() { Destroy(); }
 
 bool OverlayWindow::RegisterWindowClass(HINSTANCE hinstance) {
     WNDCLASSEXW window_class{};
@@ -236,17 +231,13 @@ void OverlayWindow::Destroy() {
     DestroyWindow(hwnd_);
 }
 
-bool OverlayWindow::IsOpen() const {
-    return hwnd_ != nullptr && IsWindow(hwnd_) != 0;
-}
+bool OverlayWindow::IsOpen() const { return hwnd_ != nullptr && IsWindow(hwnd_) != 0; }
 
 LRESULT CALLBACK OverlayWindow::StaticWndProc(HWND hwnd, UINT msg, WPARAM wparam,
                                               LPARAM lparam) {
     if (msg == WM_NCCREATE) {
-        CREATESTRUCTW const* create =
-            reinterpret_cast<CREATESTRUCTW const*>(lparam);
-        OverlayWindow* self =
-            reinterpret_cast<OverlayWindow*>(create->lpCreateParams);
+        CREATESTRUCTW const *create = reinterpret_cast<CREATESTRUCTW const *>(lparam);
+        OverlayWindow *self = reinterpret_cast<OverlayWindow *>(create->lpCreateParams);
         if (!self) {
             return FALSE;
         }
@@ -255,8 +246,8 @@ LRESULT CALLBACK OverlayWindow::StaticWndProc(HWND hwnd, UINT msg, WPARAM wparam
         return TRUE;
     }
 
-    OverlayWindow* self = reinterpret_cast<OverlayWindow*>(
-        GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+    OverlayWindow *self =
+        reinterpret_cast<OverlayWindow *>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
     if (!self) {
         return DefWindowProcW(hwnd, msg, wparam, lparam);
     }
@@ -297,7 +288,7 @@ LRESULT OverlayWindow::WndProc(UINT msg, WPARAM wparam, LPARAM lparam) {
     }
 }
 
-void OverlayWindow::BuildDefaultSaveName(wchar_t* out, size_t out_chars) const {
+void OverlayWindow::BuildDefaultSaveName(wchar_t *out, size_t out_chars) const {
     if (!out || out_chars == 0) {
         return;
     }
@@ -356,8 +347,8 @@ void OverlayWindow::UpdateModifierPreview(bool shift, bool ctrl) {
         state_->modifier_preview = true;
     } else if (shift) {
         core::PointPx const cursor_screen = GetCursorPosPx();
-        std::optional<size_t> index = core::IndexOfMonitorContaining(
-            cursor_screen, state_->cached_monitors);
+        std::optional<size_t> index =
+            core::IndexOfMonitorContaining(cursor_screen, state_->cached_monitors);
         if (index.has_value()) {
             state_->live_rect = core::ScreenRectToClientRect(
                 state_->cached_monitors[*index].bounds, origin_x, origin_y);
@@ -370,8 +361,7 @@ void OverlayWindow::UpdateModifierPreview(bool shift, bool ctrl) {
         std::optional<core::RectPx> rect =
             GetWindowRectUnderCursor(ToPoint(cursor_screen), hwnd_);
         if (rect.has_value()) {
-            state_->live_rect =
-                core::ScreenRectToClientRect(*rect, origin_x, origin_y);
+            state_->live_rect = core::ScreenRectToClientRect(*rect, origin_x, origin_y);
         } else {
             state_->live_rect = {};
         }
@@ -388,7 +378,7 @@ void OverlayWindow::SaveAsAndClose() {
     if (!resources_->capture.IsValid()) {
         return;
     }
-    core::RectPx const& selection = state_->final_selection;
+    core::RectPx const &selection = state_->final_selection;
     if (selection.IsEmpty()) {
         return;
     }
@@ -449,7 +439,7 @@ void OverlayWindow::SaveAsAndClose() {
 
     cropped.Free();
     if (saved) {
-        wchar_t* last_slash = wcsrchr(path_buffer, L'\\');
+        wchar_t *last_slash = wcsrchr(path_buffer, L'\\');
         if (last_slash && config_) {
             size_t const dir_len = static_cast<size_t>(last_slash - path_buffer);
             if (dir_len < MAX_PATH) {
@@ -465,7 +455,7 @@ void OverlayWindow::CopyToClipboardAndClose() {
     if (!resources_->capture.IsValid()) {
         return;
     }
-    core::RectPx const& selection = state_->final_selection;
+    core::RectPx const &selection = state_->final_selection;
     if (selection.IsEmpty()) {
         return;
     }
@@ -490,13 +480,13 @@ void OverlayWindow::CopyToClipboardAndClose() {
         size_t const dib_size = sizeof(BITMAPINFOHEADER) + image_size;
         memory = GlobalAlloc(GMEM_MOVEABLE, dib_size);
         if (memory) {
-            void* const raw = GlobalLock(memory);
+            void *const raw = GlobalLock(memory);
             bool ok = false;
             if (raw) {
                 memcpy(raw, &info, sizeof(BITMAPINFOHEADER));
-                uint8_t* bits = static_cast<uint8_t*>(raw) + sizeof(BITMAPINFOHEADER);
+                uint8_t *bits = static_cast<uint8_t *>(raw) + sizeof(BITMAPINFOHEADER);
                 ok = GetDIBits(dc, cropped.bitmap, 0, cropped.height, bits,
-                               reinterpret_cast<BITMAPINFO*>(&info),
+                               reinterpret_cast<BITMAPINFO *>(&info),
                                DIB_RGB_COLORS) != 0;
                 GlobalUnlock(memory);
             }
@@ -608,15 +598,16 @@ LRESULT OverlayWindow::OnLButtonDown() {
         } else if (shift) {
             state_->selection_source = core::SaveSelectionSource::Monitor;
             core::PointPx const cursor_screen = GetCursorPosPx();
-            std::optional<size_t> index = core::IndexOfMonitorContaining(
-                cursor_screen, state_->cached_monitors);
+            std::optional<size_t> index =
+                core::IndexOfMonitorContaining(cursor_screen, state_->cached_monitors);
             if (index.has_value()) {
                 state_->selection_monitor_index = *index;
             }
         } else {
             state_->selection_source = core::SaveSelectionSource::Window;
             core::PointPx const cursor_screen = GetCursorPosPx();
-            std::optional<HWND> window = GetWindowUnderCursor(ToPoint(cursor_screen), hwnd_);
+            std::optional<HWND> window =
+                GetWindowUnderCursor(ToPoint(cursor_screen), hwnd_);
             if (window.has_value()) {
                 state_->selection_window = *window;
             }
@@ -659,13 +650,12 @@ LRESULT OverlayWindow::OnLButtonDown() {
 LRESULT OverlayWindow::OnMouseMove() {
     if (state_->handle_dragging && state_->resize_handle.has_value()) {
         core::PointPx const cursor = GetClientCursorPosPx(hwnd_);
-        core::RectPx candidate =
-            core::ResizeRectFromHandle(state_->resize_anchor_rect, *state_->resize_handle,
-                                       cursor);
+        core::RectPx candidate = core::ResizeRectFromHandle(
+            state_->resize_anchor_rect, *state_->resize_handle, cursor);
         if ((GetKeyState(VK_MENU) & 0x8000) == 0) {
-            candidate = core::SnapRectToEdges(candidate, state_->vertical_edges,
-                                              state_->horizontal_edges,
-                                              kSnapThresholdPx);
+            candidate =
+                core::SnapRectToEdges(candidate, state_->vertical_edges,
+                                      state_->horizontal_edges, kSnapThresholdPx);
         }
         core::PointPx const anchor = core::AnchorPointForResizePolicy(
             state_->resize_anchor_rect, *state_->resize_handle);
@@ -693,9 +683,9 @@ LRESULT OverlayWindow::OnLButtonUp() {
     if (state_->handle_dragging && state_->resize_handle.has_value()) {
         core::RectPx to_commit = state_->live_rect;
         if ((GetKeyState(VK_MENU) & 0x8000) == 0) {
-            to_commit = core::SnapRectToEdges(to_commit, state_->vertical_edges,
-                                              state_->horizontal_edges,
-                                              kSnapThresholdPx);
+            to_commit =
+                core::SnapRectToEdges(to_commit, state_->vertical_edges,
+                                      state_->horizontal_edges, kSnapThresholdPx);
         }
         core::PointPx const anchor = core::AnchorPointForResizePolicy(
             state_->resize_anchor_rect, *state_->resize_handle);
@@ -790,5 +780,4 @@ LRESULT OverlayWindow::OnSetCursor(WPARAM wparam, LPARAM lparam) {
     return TRUE;
 }
 
-}  // namespace greenflame
-
+} // namespace greenflame

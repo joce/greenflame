@@ -5,7 +5,7 @@
 namespace greenflame {
 
 class AppConfig final {
-public:
+  public:
     bool show_balloons = true;
     std::wstring last_save_dir = {};
 
@@ -14,5 +14,4 @@ public:
     void Normalize();
 };
 
-}  // namespace greenflame
-
+} // namespace greenflame

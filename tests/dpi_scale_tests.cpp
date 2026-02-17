@@ -21,5 +21,5 @@ TEST_CASE("DpiToScalePercent — 192 -> 200", "[dpi]") {
 
 TEST_CASE("DpiToScalePercent — edge values", "[dpi]") {
     REQUIRE(DpiToScalePercent(0) == 0);
-    REQUIRE(DpiToScalePercent(48) == 50);   // rounding
+    REQUIRE(DpiToScalePercent(48) == 50); // rounding
 }

@@ -5,7 +5,7 @@
 
 namespace greenflame {
 
-std::optional<HWND> GetWindowUnderCursor(POINT screen_pt, HWND exclude_hwnd) {
+std::optional<HWND> Get_window_under_cursor(POINT screen_pt, HWND exclude_hwnd) {
     HWND hwnd = GetWindow(exclude_hwnd, GW_HWNDNEXT);
     while (hwnd != nullptr) {
         if (!IsWindowVisible(hwnd)) {
@@ -30,9 +30,9 @@ std::optional<HWND> GetWindowUnderCursor(POINT screen_pt, HWND exclude_hwnd) {
     return std::nullopt;
 }
 
-std::optional<greenflame::core::RectPx> GetWindowRectUnderCursor(POINT screen_pt,
-                                                                 HWND exclude_hwnd) {
-    std::optional<HWND> window = GetWindowUnderCursor(screen_pt, exclude_hwnd);
+std::optional<greenflame::core::RectPx>
+Get_window_rect_under_cursor(POINT screen_pt, HWND exclude_hwnd) {
+    std::optional<HWND> window = Get_window_under_cursor(screen_pt, exclude_hwnd);
     if (!window.has_value()) {
         return std::nullopt;
     }
@@ -42,13 +42,13 @@ std::optional<greenflame::core::RectPx> GetWindowRectUnderCursor(POINT screen_pt
     if (!SUCCEEDED(hr)) {
         GetWindowRect(*window, &rect);
     }
-    return greenflame::core::RectPx::FromLtrb(
+    return greenflame::core::RectPx::From_ltrb(
         static_cast<int32_t>(rect.left), static_cast<int32_t>(rect.top),
         static_cast<int32_t>(rect.right), static_cast<int32_t>(rect.bottom));
 }
 
-void GetVisibleTopLevelWindowRects(HWND exclude_hwnd,
-                                   std::vector<greenflame::core::RectPx> &out) {
+void Get_visible_top_level_window_rects(HWND exclude_hwnd,
+                                        std::vector<greenflame::core::RectPx> &out) {
     HWND hwnd = GetWindow(exclude_hwnd, GW_HWNDNEXT);
     while (hwnd != nullptr) {
         if (!IsWindowVisible(hwnd)) {
@@ -65,7 +65,7 @@ void GetVisibleTopLevelWindowRects(HWND exclude_hwnd,
         if (!SUCCEEDED(hr)) {
             GetWindowRect(hwnd, &rect);
         }
-        out.push_back(greenflame::core::RectPx::FromLtrb(
+        out.push_back(greenflame::core::RectPx::From_ltrb(
             static_cast<int32_t>(rect.left), static_cast<int32_t>(rect.top),
             static_cast<int32_t>(rect.right), static_cast<int32_t>(rect.bottom)));
         hwnd = GetWindow(hwnd, GW_HWNDNEXT);

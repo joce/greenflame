@@ -4,7 +4,7 @@
 
 #include "greenflame_app.h"
 
-int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int) {
+int WINAPI wWinMain(HINSTANCE h_instance, HINSTANCE, PWSTR, int) {
     if (GetConsoleWindow() != nullptr) {
         wchar_t path[MAX_PATH];
         if (GetModuleFileNameW(nullptr, path, MAX_PATH) != 0) {
@@ -19,6 +19,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int) {
             }
         }
     }
-    greenflame::GreenflameApp app(hInstance);
+    greenflame::GreenflameApp app(h_instance);
     return app.Run();
 }

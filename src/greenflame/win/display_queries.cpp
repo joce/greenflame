@@ -7,7 +7,7 @@
 
 namespace greenflame {
 
-core::PointPx GetCursorPosPx() {
+core::PointPx Get_cursor_pos_px() {
     POINT pt{};
     if (GetCursorPos(&pt)) {
         return {pt.x, pt.y};
@@ -15,7 +15,7 @@ core::PointPx GetCursorPosPx() {
     return {0, 0};
 }
 
-core::PointPx GetClientCursorPosPx(HWND hwnd) {
+core::PointPx Get_client_cursor_pos_px(HWND hwnd) {
     POINT pt{};
     if (!GetCursorPos(&pt)) {
         return {0, 0};
@@ -24,12 +24,12 @@ core::PointPx GetClientCursorPosPx(HWND hwnd) {
     return {pt.x, pt.y};
 }
 
-core::RectPx GetVirtualDesktopBoundsPx() {
+core::RectPx Get_virtual_desktop_bounds_px() {
     int const left = GetSystemMetrics(SM_XVIRTUALSCREEN);
     int const top = GetSystemMetrics(SM_YVIRTUALSCREEN);
     int const width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
     int const height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-    return core::RectPxFromVirtualScreenMetrics(left, top, width, height);
+    return core::Rect_px_from_virtual_screen_metrics(left, top, width, height);
 }
 
 namespace {
@@ -39,14 +39,14 @@ struct MonitorEnumState {
     std::vector<RECT> rects;
 };
 
-BOOL CALLBACK EnumMonitorsProc(HMONITOR monitor, HDC, LPRECT rect, LPARAM lparam) {
+BOOL CALLBACK Enum_monitors_proc(HMONITOR monitor, HDC, LPRECT rect, LPARAM lparam) {
     auto *state = reinterpret_cast<MonitorEnumState *>(lparam);
     state->handles.push_back(monitor);
     state->rects.push_back(*rect);
     return TRUE;
 }
 
-core::MonitorOrientation OrientationFromRect(RECT const &rect) noexcept {
+core::MonitorOrientation Orientation_from_rect(RECT const &rect) noexcept {
     long const width = rect.right - rect.left;
     long const height = rect.bottom - rect.top;
     return (width >= height) ? core::MonitorOrientation::Landscape
@@ -55,9 +55,9 @@ core::MonitorOrientation OrientationFromRect(RECT const &rect) noexcept {
 
 } // namespace
 
-std::vector<core::MonitorWithBounds> GetMonitorsWithBounds() {
+std::vector<core::MonitorWithBounds> Get_monitors_with_bounds() {
     MonitorEnumState state;
-    if (!EnumDisplayMonitors(nullptr, nullptr, EnumMonitorsProc,
+    if (!EnumDisplayMonitors(nullptr, nullptr, Enum_monitors_proc,
                              reinterpret_cast<LPARAM>(&state))) {
         return {};
     }
@@ -67,19 +67,19 @@ std::vector<core::MonitorWithBounds> GetMonitorsWithBounds() {
 
     for (size_t i = 0; i < state.handles.size(); ++i) {
         RECT const &rect = state.rects[i];
-        core::RectPx const bounds = core::RectPx::FromLtrb(
+        core::RectPx const bounds = core::RectPx::From_ltrb(
             static_cast<int32_t>(rect.left), static_cast<int32_t>(rect.top),
             static_cast<int32_t>(rect.right), static_cast<int32_t>(rect.bottom));
 
         UINT dpi_x = USER_DEFAULT_SCREEN_DPI;
         UINT dpi_y = USER_DEFAULT_SCREEN_DPI;
         (void)GetDpiForMonitor(state.handles[i], MDT_EFFECTIVE_DPI, &dpi_x, &dpi_y);
-        int32_t const percent = core::DpiToScalePercent(static_cast<int>(dpi_x));
+        int32_t const percent = core::Dpi_to_scale_percent(static_cast<int>(dpi_x));
 
         core::MonitorWithBounds monitor{};
         monitor.bounds = bounds;
         monitor.info.dpi_scale.percent = percent;
-        monitor.info.orientation = OrientationFromRect(rect);
+        monitor.info.orientation = Orientation_from_rect(rect);
         out.push_back(monitor);
     }
     return out;

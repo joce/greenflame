@@ -11,7 +11,7 @@ namespace greenflame {
 
 namespace {
 
-std::filesystem::path GetConfigPath() {
+std::filesystem::path Get_config_path() {
     wchar_t app_data[MAX_PATH];
     if (FAILED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, app_data))) {
         return {};
@@ -22,7 +22,7 @@ std::filesystem::path GetConfigPath() {
     return path;
 }
 
-std::wstring ToWide(std::string const &value) {
+std::wstring To_wide(std::string const &value) {
     if (value.empty()) {
         return {};
     }
@@ -36,7 +36,7 @@ std::wstring ToWide(std::string const &value) {
     return out;
 }
 
-std::string ToUtf8(std::wstring const &value) {
+std::string To_utf8(std::wstring const &value) {
     if (value.empty()) {
         return {};
     }
@@ -55,7 +55,7 @@ std::string ToUtf8(std::wstring const &value) {
 
 AppConfig AppConfig::Load() {
     AppConfig config;
-    std::filesystem::path const path = GetConfigPath();
+    std::filesystem::path const path = Get_config_path();
     if (path.empty() || !std::filesystem::exists(path)) {
         return config;
     }
@@ -75,7 +75,7 @@ AppConfig AppConfig::Load() {
             if (save.has_key("last_save_dir")) {
                 easyjson::JSON const &value = save["last_save_dir"];
                 if (value.JSON_type() == easyjson::JSON::Class::String) {
-                    config.last_save_dir = ToWide(value.to_string());
+                    config.last_save_dir = To_wide(value.to_string());
                 }
             }
         }
@@ -87,7 +87,7 @@ AppConfig AppConfig::Load() {
 }
 
 bool AppConfig::Save() const {
-    std::filesystem::path const path = GetConfigPath();
+    std::filesystem::path const path = Get_config_path();
     if (path.empty()) {
         return false;
     }
@@ -95,7 +95,7 @@ bool AppConfig::Save() const {
         std::filesystem::create_directories(path.parent_path());
         easyjson::JSON root = easyjson::object();
         root["ui"]["show_balloons"] = show_balloons;
-        root["save"]["last_save_dir"] = ToUtf8(last_save_dir);
+        root["save"]["last_save_dir"] = To_utf8(last_save_dir);
 
         std::ofstream file(path);
         if (!file) {

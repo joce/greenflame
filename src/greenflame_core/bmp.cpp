@@ -36,28 +36,28 @@ struct BmpInfoHeader {
 
 } // namespace
 
-std::vector<uint8_t> BuildBmpBytes(std::span<const uint8_t> pixels, int width,
-                                   int height, int rowBytes) {
-    if (width <= 0 || height <= 0 || rowBytes <= 0) return {};
-    size_t const imageSize =
-        static_cast<size_t>(rowBytes) * static_cast<size_t>(height);
-    if (pixels.size() < imageSize) return {};
+std::vector<uint8_t> Build_bmp_bytes(std::span<const uint8_t> pixels, int width,
+                                     int height, int row_bytes) {
+    if (width <= 0 || height <= 0 || row_bytes <= 0) return {};
+    size_t const image_size =
+        static_cast<size_t>(row_bytes) * static_cast<size_t>(height);
+    if (pixels.size() < image_size) return {};
 
-    BmpFileHeader fileHeader;
-    fileHeader.bfSize =
-        static_cast<uint32_t>(kFileHeaderSize + kInfoHeaderSize + imageSize);
+    BmpFileHeader file_header;
+    file_header.bfSize =
+        static_cast<uint32_t>(kFileHeaderSize + kInfoHeaderSize + image_size);
 
-    BmpInfoHeader infoHeader;
-    infoHeader.biWidth = width;
-    infoHeader.biHeight = height;
-    infoHeader.biSizeImage = static_cast<uint32_t>(imageSize);
+    BmpInfoHeader info_header;
+    info_header.biWidth = width;
+    info_header.biHeight = height;
+    info_header.biSizeImage = static_cast<uint32_t>(image_size);
 
     std::vector<uint8_t> out;
-    out.reserve(kFileHeaderSize + kInfoHeaderSize + imageSize);
+    out.reserve(kFileHeaderSize + kInfoHeaderSize + image_size);
     out.resize(kFileHeaderSize + kInfoHeaderSize);
-    std::memcpy(out.data(), &fileHeader, kFileHeaderSize);
-    std::memcpy(out.data() + kFileHeaderSize, &infoHeader, kInfoHeaderSize);
-    out.insert(out.end(), pixels.data(), pixels.data() + imageSize);
+    std::memcpy(out.data(), &file_header, kFileHeaderSize);
+    std::memcpy(out.data() + kFileHeaderSize, &info_header, kInfoHeaderSize);
+    out.insert(out.end(), pixels.data(), pixels.data() + image_size);
     return out;
 }
 

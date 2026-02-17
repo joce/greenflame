@@ -32,14 +32,14 @@ constexpr wchar_t kOverlayWindowClass[] = L"GreenflameOverlay";
 constexpr int kHandleGrabRadiusPx = 6;
 constexpr int32_t kSnapThresholdPx = 10;
 
-[[nodiscard]] POINT ToPoint(greenflame::core::PointPx p) {
+[[nodiscard]] POINT To_point(greenflame::core::PointPx p) {
     POINT out{};
     out.x = p.x;
     out.y = p.y;
     return out;
 }
 
-[[nodiscard]] HCURSOR CursorForHandle(greenflame::core::SelectionHandle handle) {
+[[nodiscard]] HCURSOR Cursor_for_handle(greenflame::core::SelectionHandle handle) {
     using Handle = greenflame::core::SelectionHandle;
     switch (handle) {
     case Handle::Top:
@@ -73,11 +73,11 @@ struct OverlayWindow::OverlayResources {
     OverlayResources(OverlayResources const &) = delete;
     OverlayResources &operator=(OverlayResources const &) = delete;
 
-    [[nodiscard]] bool InitializeForCapture() {
-        if (!capture.IsValid()) {
+    [[nodiscard]] bool Initialize_for_capture() {
+        if (!capture.Is_valid()) {
             return false;
         }
-        int const paint_row_bytes = RowBytes32(capture.width);
+        int const paint_row_bytes = Row_bytes32(capture.width);
         size_t const paint_buf_size =
             static_cast<size_t>(paint_row_bytes) * static_cast<size_t>(capture.height);
         try {
@@ -155,7 +155,7 @@ struct OverlayWindow::OverlayState {
     std::vector<int32_t> horizontal_edges = {};
     std::vector<greenflame::core::MonitorWithBounds> cached_monitors = {};
 
-    void ResetForSession() {
+    void Reset_for_session() {
         dragging = false;
         handle_dragging = false;
         modifier_preview = false;
@@ -181,11 +181,11 @@ OverlayWindow::OverlayWindow(IOverlayEvents *events, AppConfig *config)
 
 OverlayWindow::~OverlayWindow() { Destroy(); }
 
-bool OverlayWindow::RegisterWindowClass(HINSTANCE hinstance) {
+bool OverlayWindow::Register_window_class(HINSTANCE hinstance) {
     WNDCLASSEXW window_class{};
     window_class.cbSize = sizeof(window_class);
     window_class.style = CS_HREDRAW | CS_VREDRAW;
-    window_class.lpfnWndProc = &OverlayWindow::StaticWndProc;
+    window_class.lpfnWndProc = &OverlayWindow::Static_wnd_proc;
     window_class.hInstance = hinstance;
     window_class.hCursor = LoadCursorW(nullptr, IDC_CROSS);
     window_class.hbrBackground = nullptr;
@@ -193,18 +193,18 @@ bool OverlayWindow::RegisterWindowClass(HINSTANCE hinstance) {
     return RegisterClassExW(&window_class) != 0;
 }
 
-bool OverlayWindow::CreateAndShow(HINSTANCE hinstance) {
-    if (IsOpen()) {
+bool OverlayWindow::Create_and_show(HINSTANCE hinstance) {
+    if (Is_open()) {
         return true;
     }
     hinstance_ = hinstance;
     resources_->Reset();
-    state_->ResetForSession();
+    state_->Reset_for_session();
     state_->window_rects.reserve(64);
     state_->vertical_edges.reserve(128);
     state_->horizontal_edges.reserve(128);
 
-    core::RectPx const bounds = GetVirtualDesktopBoundsPx();
+    core::RectPx const bounds = Get_virtual_desktop_bounds_px();
     HWND const hwnd = CreateWindowExW(
         WS_EX_TOPMOST, kOverlayWindowClass, L"", WS_POPUP, bounds.left, bounds.top,
         bounds.Width(), bounds.Height(), nullptr, nullptr, hinstance_, this);
@@ -213,28 +213,28 @@ bool OverlayWindow::CreateAndShow(HINSTANCE hinstance) {
         return false;
     }
 
-    if (!CaptureVirtualDesktop(resources_->capture) ||
-        !resources_->InitializeForCapture()) {
+    if (!Capture_virtual_desktop(resources_->capture) ||
+        !resources_->Initialize_for_capture()) {
         DestroyWindow(hwnd);
         return false;
     }
 
-    state_->cached_monitors = GetMonitorsWithBounds();
+    state_->cached_monitors = Get_monitors_with_bounds();
     ShowWindow(hwnd, SW_SHOW);
     return true;
 }
 
 void OverlayWindow::Destroy() {
-    if (!IsOpen()) {
+    if (!Is_open()) {
         return;
     }
     DestroyWindow(hwnd_);
 }
 
-bool OverlayWindow::IsOpen() const { return hwnd_ != nullptr && IsWindow(hwnd_) != 0; }
+bool OverlayWindow::Is_open() const { return hwnd_ != nullptr && IsWindow(hwnd_) != 0; }
 
-LRESULT CALLBACK OverlayWindow::StaticWndProc(HWND hwnd, UINT msg, WPARAM wparam,
-                                              LPARAM lparam) {
+LRESULT CALLBACK OverlayWindow::Static_wnd_proc(HWND hwnd, UINT msg, WPARAM wparam,
+                                                LPARAM lparam) {
     if (msg == WM_NCCREATE) {
         CREATESTRUCTW const *create = reinterpret_cast<CREATESTRUCTW const *>(lparam);
         OverlayWindow *self = reinterpret_cast<OverlayWindow *>(create->lpCreateParams);
@@ -251,7 +251,7 @@ LRESULT CALLBACK OverlayWindow::StaticWndProc(HWND hwnd, UINT msg, WPARAM wparam
     if (!self) {
         return DefWindowProcW(hwnd, msg, wparam, lparam);
     }
-    LRESULT const result = self->WndProc(msg, wparam, lparam);
+    LRESULT const result = self->Wnd_proc(msg, wparam, lparam);
     if (msg == WM_NCDESTROY) {
         self->hwnd_ = nullptr;
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
@@ -259,28 +259,28 @@ LRESULT CALLBACK OverlayWindow::StaticWndProc(HWND hwnd, UINT msg, WPARAM wparam
     return result;
 }
 
-LRESULT OverlayWindow::WndProc(UINT msg, WPARAM wparam, LPARAM lparam) {
+LRESULT OverlayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
     switch (msg) {
     case WM_KEYDOWN:
-        return OnKeyDown(wparam, lparam);
+        return On_key_down(wparam, lparam);
     case WM_KEYUP:
-        return OnKeyUp(wparam, lparam);
+        return On_key_up(wparam, lparam);
     case WM_LBUTTONDOWN:
-        return OnLButtonDown();
+        return On_l_button_down();
     case WM_MOUSEMOVE:
-        return OnMouseMove();
+        return On_mouse_move();
     case WM_LBUTTONUP:
-        return OnLButtonUp();
+        return On_l_button_up();
     case WM_PAINT:
-        return OnPaint();
+        return On_paint();
     case WM_SETCURSOR:
-        return OnSetCursor(wparam, lparam);
+        return On_set_cursor(wparam, lparam);
     case WM_ERASEBKGND:
         return 1;
     case WM_DESTROY:
-        return OnDestroy();
+        return On_destroy();
     case WM_CLOSE:
-        return OnClose();
+        return On_close();
     case WM_NCDESTROY:
         return DefWindowProcW(hwnd_, msg, wparam, lparam);
     default:
@@ -288,7 +288,7 @@ LRESULT OverlayWindow::WndProc(UINT msg, WPARAM wparam, LPARAM lparam) {
     }
 }
 
-void OverlayWindow::BuildDefaultSaveName(wchar_t *out, size_t out_chars) const {
+void OverlayWindow::Build_default_save_name(wchar_t *out, size_t out_chars) const {
     if (!out || out_chars == 0) {
         return;
     }
@@ -309,30 +309,30 @@ void OverlayWindow::BuildDefaultSaveName(wchar_t *out, size_t out_chars) const {
     timestamp.hour = st.wHour;
     timestamp.minute = st.wMinute;
     timestamp.second = st.wSecond;
-    std::wstring const name = core::BuildDefaultSaveName(
+    std::wstring const name = core::Build_default_save_name(
         state_->selection_source, state_->selection_monitor_index, window_title,
         timestamp);
     wcsncpy_s(out, out_chars, name.c_str(), _TRUNCATE);
 }
 
-void OverlayWindow::BuildSnapEdgesFromWindows() {
+void OverlayWindow::Build_snap_edges_from_windows() {
     RECT overlay_rect{};
     GetWindowRect(hwnd_, &overlay_rect);
     int const origin_x = overlay_rect.left;
     int const origin_y = overlay_rect.top;
     state_->window_rects.clear();
-    GetVisibleTopLevelWindowRects(hwnd_, state_->window_rects);
-    core::SnapEdges const edges =
-        core::BuildSnapEdgesFromScreenRects(state_->window_rects, origin_x, origin_y);
+    Get_visible_top_level_window_rects(hwnd_, state_->window_rects);
+    core::SnapEdges const edges = core::Build_snap_edges_from_screen_rects(
+        state_->window_rects, origin_x, origin_y);
     state_->vertical_edges = edges.vertical;
     state_->horizontal_edges = edges.horizontal;
 }
 
-void OverlayWindow::UpdateModifierPreview(bool shift, bool ctrl) {
+void OverlayWindow::Update_modifier_preview(bool shift, bool ctrl) {
     if (state_->dragging || state_->handle_dragging) {
         return;
     }
-    if (!state_->final_selection.IsEmpty()) {
+    if (!state_->final_selection.Is_empty()) {
         return;
     }
     RECT overlay_rect{};
@@ -341,27 +341,28 @@ void OverlayWindow::UpdateModifierPreview(bool shift, bool ctrl) {
     int const origin_y = overlay_rect.top;
 
     if (shift && ctrl) {
-        core::RectPx const desktop_screen = GetVirtualDesktopBoundsPx();
+        core::RectPx const desktop_screen = Get_virtual_desktop_bounds_px();
         state_->live_rect =
-            core::ScreenRectToClientRect(desktop_screen, origin_x, origin_y);
+            core::Screen_rect_to_client_rect(desktop_screen, origin_x, origin_y);
         state_->modifier_preview = true;
     } else if (shift) {
-        core::PointPx const cursor_screen = GetCursorPosPx();
+        core::PointPx const cursor_screen = Get_cursor_pos_px();
         std::optional<size_t> index =
-            core::IndexOfMonitorContaining(cursor_screen, state_->cached_monitors);
+            core::Index_of_monitor_containing(cursor_screen, state_->cached_monitors);
         if (index.has_value()) {
-            state_->live_rect = core::ScreenRectToClientRect(
+            state_->live_rect = core::Screen_rect_to_client_rect(
                 state_->cached_monitors[*index].bounds, origin_x, origin_y);
         } else {
             state_->live_rect = {};
         }
         state_->modifier_preview = true;
     } else if (ctrl) {
-        core::PointPx const cursor_screen = GetCursorPosPx();
+        core::PointPx const cursor_screen = Get_cursor_pos_px();
         std::optional<core::RectPx> rect =
-            GetWindowRectUnderCursor(ToPoint(cursor_screen), hwnd_);
+            Get_window_rect_under_cursor(To_point(cursor_screen), hwnd_);
         if (rect.has_value()) {
-            state_->live_rect = core::ScreenRectToClientRect(*rect, origin_x, origin_y);
+            state_->live_rect =
+                core::Screen_rect_to_client_rect(*rect, origin_x, origin_y);
         } else {
             state_->live_rect = {};
         }
@@ -374,24 +375,24 @@ void OverlayWindow::UpdateModifierPreview(bool shift, bool ctrl) {
     }
 }
 
-void OverlayWindow::SaveAsAndClose() {
-    if (!resources_->capture.IsValid()) {
+void OverlayWindow::Save_as_and_close() {
+    if (!resources_->capture.Is_valid()) {
         return;
     }
     core::RectPx const &selection = state_->final_selection;
-    if (selection.IsEmpty()) {
+    if (selection.Is_empty()) {
         return;
     }
 
     GdiCaptureResult cropped;
-    if (!CropCapture(resources_->capture, selection.left, selection.top,
-                     selection.Width(), selection.Height(), cropped)) {
+    if (!Crop_capture(resources_->capture, selection.left, selection.top,
+                      selection.Width(), selection.Height(), cropped)) {
         Destroy();
         return;
     }
 
     wchar_t default_name[256] = {};
-    BuildDefaultSaveName(default_name, 256);
+    Build_default_save_name(default_name, 256);
 
     OPENFILENAMEW ofn = {};
     wchar_t path_buffer[MAX_PATH] = {};
@@ -423,18 +424,18 @@ void OverlayWindow::SaveAsAndClose() {
     }
 
     std::wstring const resolved_path =
-        core::EnsureImageSaveExtension(path_buffer, ofn.nFilterIndex);
+        core::Ensure_image_save_extension(path_buffer, ofn.nFilterIndex);
     wcsncpy_s(path_buffer, MAX_PATH, resolved_path.c_str(), _TRUNCATE);
 
     bool saved = false;
     core::ImageSaveFormat const format =
-        core::DetectImageSaveFormatFromPath(path_buffer);
+        core::Detect_image_save_format_from_path(path_buffer);
     if (format == core::ImageSaveFormat::Jpeg) {
-        saved = SaveCaptureToJpeg(cropped, path_buffer);
+        saved = Save_capture_to_jpeg(cropped, path_buffer);
     } else if (format == core::ImageSaveFormat::Bmp) {
-        saved = SaveCaptureToBmp(cropped, path_buffer);
+        saved = Save_capture_to_bmp(cropped, path_buffer);
     } else {
-        saved = SaveCaptureToPng(cropped, path_buffer);
+        saved = Save_capture_to_png(cropped, path_buffer);
     }
 
     cropped.Free();
@@ -451,27 +452,27 @@ void OverlayWindow::SaveAsAndClose() {
     }
 }
 
-void OverlayWindow::CopyToClipboardAndClose() {
-    if (!resources_->capture.IsValid()) {
+void OverlayWindow::Copy_to_clipboard_and_close() {
+    if (!resources_->capture.Is_valid()) {
         return;
     }
     core::RectPx const &selection = state_->final_selection;
-    if (selection.IsEmpty()) {
+    if (selection.Is_empty()) {
         return;
     }
 
     GdiCaptureResult cropped;
-    if (!CropCapture(resources_->capture, selection.left, selection.top,
-                     selection.Width(), selection.Height(), cropped)) {
+    if (!Crop_capture(resources_->capture, selection.left, selection.top,
+                      selection.Width(), selection.Height(), cropped)) {
         Destroy();
         return;
     }
 
-    int const row_bytes = RowBytes32(cropped.width);
+    int const row_bytes = Row_bytes32(cropped.width);
     size_t const image_size =
         static_cast<size_t>(row_bytes) * static_cast<size_t>(cropped.height);
     BITMAPINFOHEADER info{};
-    FillBmi32TopDown(info, cropped.width, cropped.height);
+    Fill_bmi32_top_down(info, cropped.width, cropped.height);
     info.biHeight = cropped.height;
 
     HGLOBAL memory = nullptr;
@@ -509,7 +510,7 @@ void OverlayWindow::CopyToClipboardAndClose() {
     Destroy();
 }
 
-LRESULT OverlayWindow::OnKeyDown(WPARAM wparam, LPARAM lparam) {
+LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
     if (wparam == VK_ESCAPE) {
         if (state_->handle_dragging) {
             state_->handle_dragging = false;
@@ -520,7 +521,7 @@ LRESULT OverlayWindow::OnKeyDown(WPARAM wparam, LPARAM lparam) {
             state_->dragging = false;
             state_->live_rect = {};
             InvalidateRect(hwnd_, nullptr, TRUE);
-        } else if (!state_->final_selection.IsEmpty()) {
+        } else if (!state_->final_selection.Is_empty()) {
             state_->final_selection = {};
             state_->live_rect = {};
             InvalidateRect(hwnd_, nullptr, TRUE);
@@ -530,18 +531,19 @@ LRESULT OverlayWindow::OnKeyDown(WPARAM wparam, LPARAM lparam) {
         return 0;
     }
     if (wparam == VK_RETURN) {
-        if (!state_->final_selection.IsEmpty()) {
-            SaveAsAndClose();
+        if (!state_->final_selection.Is_empty()) {
+            Save_as_and_close();
         }
         return 0;
     }
-    if ((GetKeyState(VK_CONTROL) & 0x8000) != 0 && !state_->final_selection.IsEmpty()) {
+    if ((GetKeyState(VK_CONTROL) & 0x8000) != 0 &&
+        !state_->final_selection.Is_empty()) {
         if (wparam == L'S') {
-            SaveAsAndClose();
+            Save_as_and_close();
             return 0;
         }
         if (wparam == L'C') {
-            CopyToClipboardAndClose();
+            Copy_to_clipboard_and_close();
             return 0;
         }
     }
@@ -551,7 +553,7 @@ LRESULT OverlayWindow::OnKeyDown(WPARAM wparam, LPARAM lparam) {
                 (wparam == VK_SHIFT) || (GetKeyState(VK_SHIFT) & 0x8000) != 0;
             bool const ctrl =
                 (wparam == VK_CONTROL) || (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-            UpdateModifierPreview(shift, ctrl);
+            Update_modifier_preview(shift, ctrl);
             InvalidateRect(hwnd_, nullptr, TRUE);
         }
         return 0;
@@ -565,7 +567,7 @@ LRESULT OverlayWindow::OnKeyDown(WPARAM wparam, LPARAM lparam) {
     return DefWindowProcW(hwnd_, WM_KEYDOWN, wparam, lparam);
 }
 
-LRESULT OverlayWindow::OnKeyUp(WPARAM wparam, LPARAM lparam) {
+LRESULT OverlayWindow::On_key_up(WPARAM wparam, LPARAM lparam) {
     if (wparam == VK_MENU) {
         if (state_->dragging || state_->handle_dragging) {
             InvalidateRect(hwnd_, nullptr, TRUE);
@@ -583,8 +585,8 @@ LRESULT OverlayWindow::OnKeyUp(WPARAM wparam, LPARAM lparam) {
     return 0;
 }
 
-LRESULT OverlayWindow::OnLButtonDown() {
-    if (!resources_->capture.IsValid()) {
+LRESULT OverlayWindow::On_l_button_down() {
+    if (!resources_->capture.Is_valid()) {
         return 0;
     }
     bool const shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
@@ -597,17 +599,17 @@ LRESULT OverlayWindow::OnLButtonDown() {
             state_->selection_source = core::SaveSelectionSource::Desktop;
         } else if (shift) {
             state_->selection_source = core::SaveSelectionSource::Monitor;
-            core::PointPx const cursor_screen = GetCursorPosPx();
-            std::optional<size_t> index =
-                core::IndexOfMonitorContaining(cursor_screen, state_->cached_monitors);
+            core::PointPx const cursor_screen = Get_cursor_pos_px();
+            std::optional<size_t> index = core::Index_of_monitor_containing(
+                cursor_screen, state_->cached_monitors);
             if (index.has_value()) {
                 state_->selection_monitor_index = *index;
             }
         } else {
             state_->selection_source = core::SaveSelectionSource::Window;
-            core::PointPx const cursor_screen = GetCursorPosPx();
+            core::PointPx const cursor_screen = Get_cursor_pos_px();
             std::optional<HWND> window =
-                GetWindowUnderCursor(ToPoint(cursor_screen), hwnd_);
+                Get_window_under_cursor(To_point(cursor_screen), hwnd_);
             if (window.has_value()) {
                 state_->selection_window = *window;
             }
@@ -618,17 +620,17 @@ LRESULT OverlayWindow::OnLButtonDown() {
         return 0;
     }
 
-    core::PointPx const cursor = GetClientCursorPosPx(hwnd_);
-    if (!state_->final_selection.IsEmpty() && !state_->dragging &&
+    core::PointPx const cursor = Get_client_cursor_pos_px(hwnd_);
+    if (!state_->final_selection.Is_empty() && !state_->dragging &&
         !state_->handle_dragging) {
-        std::optional<core::SelectionHandle> hit = core::HitTestSelectionHandle(
+        std::optional<core::SelectionHandle> hit = core::Hit_test_selection_handle(
             state_->final_selection, cursor, kHandleGrabRadiusPx);
         if (hit.has_value()) {
             state_->handle_dragging = true;
             state_->resize_handle = hit;
             state_->resize_anchor_rect = state_->final_selection;
             state_->live_rect = state_->final_selection;
-            BuildSnapEdgesFromWindows();
+            Build_snap_edges_from_windows();
             InvalidateRect(hwnd_, nullptr, TRUE);
             return 0;
         }
@@ -641,34 +643,34 @@ LRESULT OverlayWindow::OnLButtonDown() {
     state_->selection_source = core::SaveSelectionSource::Region;
     state_->selection_window = std::nullopt;
     state_->selection_monitor_index = std::nullopt;
-    state_->live_rect = core::RectPx::FromPoints(state_->start_px, state_->start_px);
-    BuildSnapEdgesFromWindows();
+    state_->live_rect = core::RectPx::From_points(state_->start_px, state_->start_px);
+    Build_snap_edges_from_windows();
     InvalidateRect(hwnd_, nullptr, TRUE);
     return 0;
 }
 
-LRESULT OverlayWindow::OnMouseMove() {
+LRESULT OverlayWindow::On_mouse_move() {
     if (state_->handle_dragging && state_->resize_handle.has_value()) {
-        core::PointPx const cursor = GetClientCursorPosPx(hwnd_);
-        core::RectPx candidate = core::ResizeRectFromHandle(
+        core::PointPx const cursor = Get_client_cursor_pos_px(hwnd_);
+        core::RectPx candidate = core::Resize_rect_from_handle(
             state_->resize_anchor_rect, *state_->resize_handle, cursor);
         if ((GetKeyState(VK_MENU) & 0x8000) == 0) {
             candidate =
-                core::SnapRectToEdges(candidate, state_->vertical_edges,
-                                      state_->horizontal_edges, kSnapThresholdPx);
+                core::Snap_rect_to_edges(candidate, state_->vertical_edges,
+                                         state_->horizontal_edges, kSnapThresholdPx);
         }
-        core::PointPx const anchor = core::AnchorPointForResizePolicy(
+        core::PointPx const anchor = core::Anchor_point_for_resize_policy(
             state_->resize_anchor_rect, *state_->resize_handle);
         state_->live_rect =
-            core::AllowedSelectionRect(candidate, anchor, state_->cached_monitors);
+            core::Allowed_selection_rect(candidate, anchor, state_->cached_monitors);
     } else if (state_->dragging) {
-        core::PointPx const cursor = GetClientCursorPosPx(hwnd_);
+        core::PointPx const cursor = Get_client_cursor_pos_px(hwnd_);
         state_->live_rect =
-            core::RectPx::FromPoints(state_->start_px, cursor).Normalized();
+            core::RectPx::From_points(state_->start_px, cursor).Normalized();
     } else {
         bool const shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
         bool const ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-        UpdateModifierPreview(shift, ctrl);
+        Update_modifier_preview(shift, ctrl);
     }
 
     ULONGLONG const now = GetTickCount64();
@@ -679,18 +681,18 @@ LRESULT OverlayWindow::OnMouseMove() {
     return 0;
 }
 
-LRESULT OverlayWindow::OnLButtonUp() {
+LRESULT OverlayWindow::On_l_button_up() {
     if (state_->handle_dragging && state_->resize_handle.has_value()) {
         core::RectPx to_commit = state_->live_rect;
         if ((GetKeyState(VK_MENU) & 0x8000) == 0) {
             to_commit =
-                core::SnapRectToEdges(to_commit, state_->vertical_edges,
-                                      state_->horizontal_edges, kSnapThresholdPx);
+                core::Snap_rect_to_edges(to_commit, state_->vertical_edges,
+                                         state_->horizontal_edges, kSnapThresholdPx);
         }
-        core::PointPx const anchor = core::AnchorPointForResizePolicy(
+        core::PointPx const anchor = core::Anchor_point_for_resize_policy(
             state_->resize_anchor_rect, *state_->resize_handle);
         state_->final_selection =
-            core::AllowedSelectionRect(to_commit, anchor, state_->cached_monitors);
+            core::Allowed_selection_rect(to_commit, anchor, state_->cached_monitors);
         state_->handle_dragging = false;
         state_->resize_handle = std::nullopt;
         state_->live_rect = {};
@@ -699,15 +701,15 @@ LRESULT OverlayWindow::OnLButtonUp() {
     }
 
     if (state_->dragging) {
-        core::PointPx const cursor = GetClientCursorPosPx(hwnd_);
+        core::PointPx const cursor = Get_client_cursor_pos_px(hwnd_);
         core::RectPx raw =
-            core::RectPx::FromPoints(state_->start_px, cursor).Normalized();
+            core::RectPx::From_points(state_->start_px, cursor).Normalized();
         if ((GetKeyState(VK_MENU) & 0x8000) == 0) {
-            raw = core::SnapRectToEdges(raw, state_->vertical_edges,
-                                        state_->horizontal_edges, kSnapThresholdPx);
+            raw = core::Snap_rect_to_edges(raw, state_->vertical_edges,
+                                           state_->horizontal_edges, kSnapThresholdPx);
         }
-        state_->final_selection =
-            core::AllowedSelectionRect(raw, state_->start_px, state_->cached_monitors);
+        state_->final_selection = core::Allowed_selection_rect(raw, state_->start_px,
+                                                               state_->cached_monitors);
         state_->selection_source = core::SaveSelectionSource::Region;
         state_->selection_window = std::nullopt;
         state_->selection_monitor_index = std::nullopt;
@@ -717,7 +719,7 @@ LRESULT OverlayWindow::OnLButtonUp() {
     return 0;
 }
 
-LRESULT OverlayWindow::OnPaint() {
+LRESULT OverlayWindow::On_paint() {
     PAINTSTRUCT paint{};
     HDC const hdc = BeginPaint(hwnd_, &paint);
     if (hdc) {
@@ -730,47 +732,47 @@ LRESULT OverlayWindow::OnPaint() {
         input.modifier_preview = state_->modifier_preview;
         input.live_rect = state_->live_rect;
         input.final_selection = state_->final_selection;
-        input.cursor_client_px = GetClientCursorPosPx(hwnd_);
+        input.cursor_client_px = Get_client_cursor_pos_px(hwnd_);
         input.paint_buffer = std::span<uint8_t>(resources_->paint_buffer);
         input.resources = &resources_->paint;
-        PaintOverlay(hdc, hwnd_, rect, input);
+        Paint_overlay(hdc, hwnd_, rect, input);
         EndPaint(hwnd_, &paint);
     }
     return 0;
 }
 
-LRESULT OverlayWindow::OnDestroy() {
+LRESULT OverlayWindow::On_destroy() {
     resources_->Reset();
-    state_->ResetForSession();
+    state_->Reset_for_session();
     if (events_) {
-        events_->OnOverlayClosed();
+        events_->On_overlay_closed();
     }
     return 0;
 }
 
-LRESULT OverlayWindow::OnClose() {
+LRESULT OverlayWindow::On_close() {
     Destroy();
     return 0;
 }
 
-LRESULT OverlayWindow::OnSetCursor(WPARAM wparam, LPARAM lparam) {
+LRESULT OverlayWindow::On_set_cursor(WPARAM wparam, LPARAM lparam) {
     if (LOWORD(lparam) != HTCLIENT) {
         return DefWindowProcW(hwnd_, WM_SETCURSOR, wparam, lparam);
     }
     if (state_->handle_dragging && state_->resize_handle.has_value()) {
-        SetCursor(CursorForHandle(*state_->resize_handle));
+        SetCursor(Cursor_for_handle(*state_->resize_handle));
         return TRUE;
     }
     if (state_->modifier_preview) {
         SetCursor(LoadCursorW(nullptr, IDC_ARROW));
         return TRUE;
     }
-    if (!state_->final_selection.IsEmpty() && !state_->dragging) {
-        core::PointPx const cursor = GetClientCursorPosPx(hwnd_);
-        std::optional<core::SelectionHandle> hit = core::HitTestSelectionHandle(
+    if (!state_->final_selection.Is_empty() && !state_->dragging) {
+        core::PointPx const cursor = Get_client_cursor_pos_px(hwnd_);
+        std::optional<core::SelectionHandle> hit = core::Hit_test_selection_handle(
             state_->final_selection, cursor, kHandleGrabRadiusPx);
         if (hit.has_value()) {
-            SetCursor(CursorForHandle(*hit));
+            SetCursor(Cursor_for_handle(*hit));
             return TRUE;
         }
         SetCursor(LoadCursorW(nullptr, IDC_ARROW));

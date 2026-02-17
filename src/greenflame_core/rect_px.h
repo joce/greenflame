@@ -17,7 +17,7 @@ struct SizePx final {
     int32_t w{0};
     int32_t h{0};
 
-    [[nodiscard]] constexpr bool IsEmpty() const noexcept { return w <= 0 || h <= 0; }
+    [[nodiscard]] constexpr bool Is_empty() const noexcept { return w <= 0 || h <= 0; }
 
     constexpr bool operator==(const SizePx &) const noexcept = default;
 };
@@ -32,12 +32,12 @@ struct RectPx final {
 
     [[nodiscard]] constexpr int32_t Width() const noexcept { return right - left; }
     [[nodiscard]] constexpr int32_t Height() const noexcept { return bottom - top; }
-    [[nodiscard]] constexpr bool IsEmpty() const noexcept {
+    [[nodiscard]] constexpr bool Is_empty() const noexcept {
         return Width() <= 0 || Height() <= 0;
     }
 
-    [[nodiscard]] constexpr PointPx TopLeft() const noexcept { return {left, top}; }
-    [[nodiscard]] constexpr PointPx BottomRight() const noexcept {
+    [[nodiscard]] constexpr PointPx Top_left() const noexcept { return {left, top}; }
+    [[nodiscard]] constexpr PointPx Bottom_right() const noexcept {
         return {right, bottom};
     }
 
@@ -61,27 +61,27 @@ struct RectPx final {
 
     // Build from left/top/right/bottom (any order; use Normalized() if invariant
     // needed).
-    [[nodiscard]] static constexpr RectPx FromLtrb(int32_t l, int32_t t, int32_t r,
-                                                   int32_t b) noexcept {
+    [[nodiscard]] static constexpr RectPx From_ltrb(int32_t l, int32_t t, int32_t r,
+                                                    int32_t b) noexcept {
         return RectPx{l, t, r, b};
     }
 
     // Normalized rectangle spanning both points (drag-from-any-corner).
     // Width/height may be zero.
-    [[nodiscard]] static RectPx FromPoints(PointPx a, PointPx b) noexcept;
+    [[nodiscard]] static RectPx From_points(PointPx a, PointPx b) noexcept;
 };
 
 // Convenience: build from origin + size.
-[[nodiscard]] constexpr RectPx MakeRectPx(PointPx origin, SizePx size) noexcept {
+[[nodiscard]] constexpr RectPx Make_rect_px(PointPx origin, SizePx size) noexcept {
     return RectPx{origin.x, origin.y, origin.x + size.w, origin.y + size.h};
 }
 
 // Virtual desktop: build RectPx from virtual-screen metrics (left, top, width,
 // height). Used by overlay; virtual desktop may have negative left/top on
 // multi-monitor. No Win32; fully unit-testable.
-[[nodiscard]] constexpr RectPx RectPxFromVirtualScreenMetrics(int32_t left, int32_t top,
-                                                              int32_t width,
-                                                              int32_t height) noexcept {
-    return MakeRectPx(PointPx{left, top}, SizePx{width, height});
+[[nodiscard]] constexpr RectPx
+Rect_px_from_virtual_screen_metrics(int32_t left, int32_t top, int32_t width,
+                                    int32_t height) noexcept {
+    return Make_rect_px(PointPx{left, top}, SizePx{width, height});
 }
 } // namespace greenflame::core

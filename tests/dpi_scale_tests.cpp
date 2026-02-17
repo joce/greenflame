@@ -3,23 +3,23 @@
 
 using namespace greenflame::core;
 
-TEST_CASE("DpiToScalePercent — 96 -> 100", "[dpi]") {
-    REQUIRE(DpiToScalePercent(96) == 100);
+TEST_CASE("Dpi_to_scale_percent — 96 -> 100", "[dpi]") {
+    REQUIRE(Dpi_to_scale_percent(96) == 100);
 }
 
-TEST_CASE("DpiToScalePercent — 120 -> 125", "[dpi]") {
-    REQUIRE(DpiToScalePercent(120) == 125);
+TEST_CASE("Dpi_to_scale_percent — 120 -> 125", "[dpi]") {
+    REQUIRE(Dpi_to_scale_percent(120) == 125);
 }
 
-TEST_CASE("DpiToScalePercent — 144 -> 150", "[dpi]") {
-    REQUIRE(DpiToScalePercent(144) == 150);
+TEST_CASE("Dpi_to_scale_percent — 144 -> 150", "[dpi]") {
+    REQUIRE(Dpi_to_scale_percent(144) == 150);
 }
 
-TEST_CASE("DpiToScalePercent — 192 -> 200", "[dpi]") {
-    REQUIRE(DpiToScalePercent(192) == 200);
+TEST_CASE("Dpi_to_scale_percent — 192 -> 200", "[dpi]") {
+    REQUIRE(Dpi_to_scale_percent(192) == 200);
 }
 
-TEST_CASE("DpiToScalePercent — edge values", "[dpi]") {
-    REQUIRE(DpiToScalePercent(0) == 0);
-    REQUIRE(DpiToScalePercent(48) == 50); // rounding
+TEST_CASE("Dpi_to_scale_percent — edge values", "[dpi]") {
+    REQUIRE(Dpi_to_scale_percent(0) == 0);
+    REQUIRE(Dpi_to_scale_percent(48) == 50); // rounding
 }

@@ -14,9 +14,9 @@ class GreenflameApp final : public ITrayEvents, public IOverlayEvents {
     [[nodiscard]] int Run();
 
   private:
-    void OnStartCaptureRequested() override;
-    void OnExitRequested() override;
-    void OnOverlayClosed() override;
+    void On_start_capture_requested() override;
+    void On_exit_requested() override;
+    void On_overlay_closed() override;
 
     HINSTANCE hinstance_ = nullptr;
     AppConfig config_ = {};

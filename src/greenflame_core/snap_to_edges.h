@@ -12,9 +12,9 @@ namespace greenflame::core {
 // horizontal_edges_px: y-positions to snap top/bottom to (e.g. window
 // top/bottom). Each edge is snapped independently; rect is then normalized and
 // enforced to minimum size 1x1. No memory allocation.
-[[nodiscard]] RectPx SnapRectToEdges(RectPx rect,
-                                     std::span<const int32_t> vertical_edges_px,
-                                     std::span<const int32_t> horizontal_edges_px,
-                                     int32_t threshold_px) noexcept;
+[[nodiscard]] RectPx Snap_rect_to_edges(RectPx rect,
+                                        std::span<const int32_t> vertical_edges_px,
+                                        std::span<const int32_t> horizontal_edges_px,
+                                        int32_t threshold_px) noexcept;
 
 } // namespace greenflame::core

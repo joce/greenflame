@@ -4,7 +4,7 @@
 
 namespace {
 
-void EnablePerMonitorDpiAwarenessV2() {
+void Enable_per_monitor_dpi_awareness_v2() {
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
     if (!user32) {
         return;
@@ -26,9 +26,9 @@ GreenflameApp::GreenflameApp(HINSTANCE hinstance)
     : hinstance_(hinstance), tray_window_(this), overlay_window_(this, &config_) {}
 
 int GreenflameApp::Run() {
-    EnablePerMonitorDpiAwarenessV2();
-    if (!OverlayWindow::RegisterWindowClass(hinstance_) ||
-        !TrayWindow::RegisterWindowClass(hinstance_)) {
+    Enable_per_monitor_dpi_awareness_v2();
+    if (!OverlayWindow::Register_window_class(hinstance_) ||
+        !TrayWindow::Register_window_class(hinstance_)) {
         return 1;
     }
 
@@ -47,16 +47,16 @@ int GreenflameApp::Run() {
     return static_cast<int>(message.wParam);
 }
 
-void GreenflameApp::OnStartCaptureRequested() {
-    (void)overlay_window_.CreateAndShow(hinstance_);
+void GreenflameApp::On_start_capture_requested() {
+    (void)overlay_window_.Create_and_show(hinstance_);
 }
 
-void GreenflameApp::OnExitRequested() {
+void GreenflameApp::On_exit_requested() {
     overlay_window_.Destroy();
     tray_window_.Destroy();
 }
 
-void GreenflameApp::OnOverlayClosed() {
+void GreenflameApp::On_overlay_closed() {
     // Overlay lifecycle is managed by OverlayWindow; no app action needed.
 }
 

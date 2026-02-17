@@ -37,6 +37,6 @@ struct PaintOverlayInput {
     PaintResources const *resources = nullptr;
 };
 
-void PaintOverlay(HDC hdc, HWND hwnd, const RECT &rc, const PaintOverlayInput &in);
+void Paint_overlay(HDC hdc, HWND hwnd, const RECT &rc, const PaintOverlayInput &in);
 
 } // namespace greenflame

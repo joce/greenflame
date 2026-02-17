@@ -45,12 +45,12 @@ TEST_CASE("Cross-monitor selection rule", "[monitor][policy]") {
     MonitorInfo m2{MonitorDpiScale{150}, MonitorOrientation::Landscape};
     MonitorInfo m3{MonitorDpiScale{125}, MonitorOrientation::Landscape};
 
-    REQUIRE(IsAllowed(DecideCrossMonitorSelection(std::span{&m1, 1})));
+    REQUIRE(Is_allowed(Decide_cross_monitor_selection(std::span{&m1, 1})));
 
     MonitorInfo pair1[] = {m1, m2};
-    REQUIRE(IsAllowed(DecideCrossMonitorSelection(pair1)));
+    REQUIRE(Is_allowed(Decide_cross_monitor_selection(pair1)));
 
     MonitorInfo pair2[] = {m1, m3};
-    REQUIRE(DecideCrossMonitorSelection(pair2) ==
+    REQUIRE(Decide_cross_monitor_selection(pair2) ==
             CrossMonitorSelectionDecision::RefusedDifferentDpiScale);
 }

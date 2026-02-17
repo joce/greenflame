@@ -8,9 +8,9 @@
 
 namespace greenflame {
 
-[[nodiscard]] core::PointPx GetCursorPosPx();
-[[nodiscard]] core::PointPx GetClientCursorPosPx(HWND hwnd);
-[[nodiscard]] core::RectPx GetVirtualDesktopBoundsPx();
-[[nodiscard]] std::vector<core::MonitorWithBounds> GetMonitorsWithBounds();
+[[nodiscard]] core::PointPx Get_cursor_pos_px();
+[[nodiscard]] core::PointPx Get_client_cursor_pos_px(HWND hwnd);
+[[nodiscard]] core::RectPx Get_virtual_desktop_bounds_px();
+[[nodiscard]] std::vector<core::MonitorWithBounds> Get_monitors_with_bounds();
 
 } // namespace greenflame

@@ -12,7 +12,7 @@ class AppConfig;
 class IOverlayEvents {
   public:
     virtual ~IOverlayEvents() = default;
-    virtual void OnOverlayClosed() = 0;
+    virtual void On_overlay_closed() = 0;
 };
 
 class OverlayWindow final {
@@ -23,35 +23,35 @@ class OverlayWindow final {
     OverlayWindow(OverlayWindow const &) = delete;
     OverlayWindow &operator=(OverlayWindow const &) = delete;
 
-    [[nodiscard]] static bool RegisterWindowClass(HINSTANCE hinstance);
-    [[nodiscard]] bool CreateAndShow(HINSTANCE hinstance);
+    [[nodiscard]] static bool Register_window_class(HINSTANCE hinstance);
+    [[nodiscard]] bool Create_and_show(HINSTANCE hinstance);
     void Destroy();
 
-    [[nodiscard]] bool IsOpen() const;
+    [[nodiscard]] bool Is_open() const;
 
   private:
     struct OverlayResources;
     struct OverlayState;
 
-    static LRESULT CALLBACK StaticWndProc(HWND hwnd, UINT msg, WPARAM wparam,
-                                          LPARAM lparam);
-    LRESULT WndProc(UINT msg, WPARAM wparam, LPARAM lparam);
+    static LRESULT CALLBACK Static_wnd_proc(HWND hwnd, UINT msg, WPARAM wparam,
+                                            LPARAM lparam);
+    LRESULT Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam);
 
-    void BuildDefaultSaveName(wchar_t *out, size_t out_chars) const;
-    void BuildSnapEdgesFromWindows();
-    void UpdateModifierPreview(bool shift, bool ctrl);
-    void SaveAsAndClose();
-    void CopyToClipboardAndClose();
+    void Build_default_save_name(wchar_t *out, size_t out_chars) const;
+    void Build_snap_edges_from_windows();
+    void Update_modifier_preview(bool shift, bool ctrl);
+    void Save_as_and_close();
+    void Copy_to_clipboard_and_close();
 
-    LRESULT OnKeyDown(WPARAM wparam, LPARAM lparam);
-    LRESULT OnKeyUp(WPARAM wparam, LPARAM lparam);
-    LRESULT OnLButtonDown();
-    LRESULT OnMouseMove();
-    LRESULT OnLButtonUp();
-    LRESULT OnPaint();
-    LRESULT OnDestroy();
-    LRESULT OnClose();
-    LRESULT OnSetCursor(WPARAM wparam, LPARAM lparam);
+    LRESULT On_key_down(WPARAM wparam, LPARAM lparam);
+    LRESULT On_key_up(WPARAM wparam, LPARAM lparam);
+    LRESULT On_l_button_down();
+    LRESULT On_mouse_move();
+    LRESULT On_l_button_up();
+    LRESULT On_paint();
+    LRESULT On_destroy();
+    LRESULT On_close();
+    LRESULT On_set_cursor(WPARAM wparam, LPARAM lparam);
 
     IOverlayEvents *events_ = nullptr;
     AppConfig *config_ = nullptr;

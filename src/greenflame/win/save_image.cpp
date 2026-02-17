@@ -36,9 +36,9 @@ struct CoInitGuard {
     CoInitGuard &operator=(const CoInitGuard &) = delete;
 };
 
-bool SaveCaptureViaWic(GdiCaptureResult const &capture, wchar_t const *path,
-                       REFGUID containerFormat) {
-    if (!capture.IsValid() || !path) return false;
+bool Save_capture_via_wic(GdiCaptureResult const &capture, wchar_t const *path,
+                          REFGUID container_format) {
+    if (!capture.Is_valid() || !path) return false;
 
     HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     bool coinit = SUCCEEDED(hr);
@@ -46,18 +46,18 @@ bool SaveCaptureViaWic(GdiCaptureResult const &capture, wchar_t const *path,
         coinit = false;
     else if (FAILED(hr))
         return false;
-    CoInitGuard coGuard(coinit);
+    CoInitGuard co_guard(coinit);
 
     ComPtr<IWICImagingFactory> factory;
     hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
                           IID_PPV_ARGS(&factory));
     if (FAILED(hr) || !factory) return false;
 
-    ComPtr<IWICBitmap> wicBitmap;
+    ComPtr<IWICBitmap> wic_bitmap;
     hr = factory->CreateBitmapFromHBITMAP(
         capture.bitmap, nullptr, WICBitmapAlphaChannelOption::WICBitmapUseAlpha,
-        &wicBitmap);
-    if (FAILED(hr) || !wicBitmap) return false;
+        &wic_bitmap);
+    if (FAILED(hr) || !wic_bitmap) return false;
 
     ComPtr<IWICStream> stream;
     hr = factory->CreateStream(&stream);
@@ -67,36 +67,36 @@ bool SaveCaptureViaWic(GdiCaptureResult const &capture, wchar_t const *path,
     if (FAILED(hr)) return false;
 
     ComPtr<IWICBitmapEncoder> encoder;
-    hr = factory->CreateEncoder(containerFormat, nullptr, &encoder);
+    hr = factory->CreateEncoder(container_format, nullptr, &encoder);
     if (FAILED(hr) || !encoder) return false;
 
     hr = encoder->Initialize(stream.p, WICBitmapEncoderNoCache);
     if (FAILED(hr)) return false;
 
-    ComPtr<IWICBitmapFrameEncode> frameEncode;
+    ComPtr<IWICBitmapFrameEncode> frame_encode;
     IPropertyBag2 *props = nullptr;
-    hr = encoder->CreateNewFrame(&frameEncode, &props);
-    if (FAILED(hr) || !frameEncode) return false;
+    hr = encoder->CreateNewFrame(&frame_encode, &props);
+    if (FAILED(hr) || !frame_encode) return false;
     if (props) {
         props->Release();
         props = nullptr;
     }
 
-    hr = frameEncode->Initialize(nullptr);
+    hr = frame_encode->Initialize(nullptr);
     if (FAILED(hr)) return false;
 
-    hr = frameEncode->SetSize(static_cast<UINT>(capture.width),
-                              static_cast<UINT>(capture.height));
+    hr = frame_encode->SetSize(static_cast<UINT>(capture.width),
+                               static_cast<UINT>(capture.height));
     if (FAILED(hr)) return false;
 
-    WICPixelFormatGUID pixelFormat = GUID_WICPixelFormat32bppBGRA;
-    hr = frameEncode->SetPixelFormat(&pixelFormat);
+    WICPixelFormatGUID pixel_format = GUID_WICPixelFormat32bppBGRA;
+    hr = frame_encode->SetPixelFormat(&pixel_format);
     if (FAILED(hr)) return false;
 
-    hr = frameEncode->WriteSource(wicBitmap.p, nullptr);
+    hr = frame_encode->WriteSource(wic_bitmap.p, nullptr);
     if (FAILED(hr)) return false;
 
-    hr = frameEncode->Commit();
+    hr = frame_encode->Commit();
     if (FAILED(hr)) return false;
 
     hr = encoder->Commit();
@@ -105,12 +105,12 @@ bool SaveCaptureViaWic(GdiCaptureResult const &capture, wchar_t const *path,
 
 } // namespace
 
-bool SaveCaptureToPng(GdiCaptureResult const &capture, wchar_t const *path) {
-    return SaveCaptureViaWic(capture, path, GUID_ContainerFormatPng);
+bool Save_capture_to_png(GdiCaptureResult const &capture, wchar_t const *path) {
+    return Save_capture_via_wic(capture, path, GUID_ContainerFormatPng);
 }
 
-bool SaveCaptureToJpeg(GdiCaptureResult const &capture, wchar_t const *path) {
-    return SaveCaptureViaWic(capture, path, GUID_ContainerFormatJpeg);
+bool Save_capture_to_jpeg(GdiCaptureResult const &capture, wchar_t const *path) {
+    return Save_capture_via_wic(capture, path, GUID_ContainerFormatJpeg);
 }
 
 } // namespace greenflame

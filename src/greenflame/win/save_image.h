@@ -7,7 +7,7 @@
 namespace greenflame {
 
 // Writes the capture to PNG or JPEG. Path is UTF-16 (wchar_t).
-bool SaveCaptureToPng(GdiCaptureResult const &capture, wchar_t const *path);
-bool SaveCaptureToJpeg(GdiCaptureResult const &capture, wchar_t const *path);
+bool Save_capture_to_png(GdiCaptureResult const &capture, wchar_t const *path);
+bool Save_capture_to_jpeg(GdiCaptureResult const &capture, wchar_t const *path);
 
 } // namespace greenflame

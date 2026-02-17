@@ -7,13 +7,13 @@ namespace greenflame::core {
 
 namespace {
 
-[[nodiscard]] bool IsInvalidFilenameChar(wchar_t ch) noexcept {
+[[nodiscard]] bool Is_invalid_filename_char(wchar_t ch) noexcept {
     static wchar_t const *const kInvalid = L"\\/:*?\"<>|";
     return static_cast<unsigned>(ch) < 0x20u || std::wcschr(kInvalid, ch) != nullptr;
 }
 
-[[nodiscard]] bool EndsWithNoCase(std::wstring_view s,
-                                  std::wstring_view suffix) noexcept {
+[[nodiscard]] bool Ends_with_no_case(std::wstring_view s,
+                                     std::wstring_view suffix) noexcept {
     if (s.size() < suffix.size()) return false;
     size_t const offset = s.size() - suffix.size();
     for (size_t i = 0; i < suffix.size(); ++i) {
@@ -26,22 +26,22 @@ namespace {
 
 } // namespace
 
-std::wstring SanitizeFilenameSegment(std::wstring_view input, size_t max_chars) {
+std::wstring Sanitize_filename_segment(std::wstring_view input, size_t max_chars) {
     if (max_chars == 0) return L"";
     size_t const out_size = input.size() < max_chars ? input.size() : max_chars;
     std::wstring out;
     out.reserve(out_size);
     for (size_t i = 0; i < out_size; ++i) {
         wchar_t const ch = input[i];
-        out.push_back(IsInvalidFilenameChar(ch) ? L'_' : ch);
+        out.push_back(Is_invalid_filename_char(ch) ? L'_' : ch);
     }
     return out;
 }
 
 std::wstring
-BuildDefaultSaveName(SaveSelectionSource selection_source,
-                     std::optional<size_t> selection_monitor_index_zero_based,
-                     std::wstring_view window_title, SaveTimestamp timestamp) {
+Build_default_save_name(SaveSelectionSource selection_source,
+                        std::optional<size_t> selection_monitor_index_zero_based,
+                        std::wstring_view window_title, SaveTimestamp timestamp) {
     wchar_t time_part[32] = {};
     swprintf_s(time_part, L"%02u%02u%02u-%02u%02u%02u", timestamp.day, timestamp.month,
                timestamp.year_two_digits, timestamp.hour, timestamp.minute,
@@ -60,7 +60,7 @@ BuildDefaultSaveName(SaveSelectionSource selection_source,
     case SaveSelectionSource::Window: {
         std::wstring window_name = L"window";
         if (!window_title.empty()) {
-            std::wstring sanitized = SanitizeFilenameSegment(window_title, 50);
+            std::wstring sanitized = Sanitize_filename_segment(window_title, 50);
             if (!sanitized.empty()) window_name = std::move(sanitized);
         }
         return std::wstring(L"Greenflame-") + window_name + L"-" + time_part;
@@ -69,10 +69,10 @@ BuildDefaultSaveName(SaveSelectionSource selection_source,
     return std::wstring(L"Greenflame-") + time_part;
 }
 
-std::wstring EnsureImageSaveExtension(std::wstring_view path,
-                                      uint32_t filter_index_1_based) {
-    if (EndsWithNoCase(path, L".png") || EndsWithNoCase(path, L".jpg") ||
-        EndsWithNoCase(path, L".jpeg") || EndsWithNoCase(path, L".bmp")) {
+std::wstring Ensure_image_save_extension(std::wstring_view path,
+                                         uint32_t filter_index_1_based) {
+    if (Ends_with_no_case(path, L".png") || Ends_with_no_case(path, L".jpg") ||
+        Ends_with_no_case(path, L".jpeg") || Ends_with_no_case(path, L".bmp")) {
         return std::wstring(path);
     }
     std::wstring out(path);
@@ -86,10 +86,10 @@ std::wstring EnsureImageSaveExtension(std::wstring_view path,
     return out;
 }
 
-ImageSaveFormat DetectImageSaveFormatFromPath(std::wstring_view path) noexcept {
-    if (EndsWithNoCase(path, L".jpg") || EndsWithNoCase(path, L".jpeg"))
+ImageSaveFormat Detect_image_save_format_from_path(std::wstring_view path) noexcept {
+    if (Ends_with_no_case(path, L".jpg") || Ends_with_no_case(path, L".jpeg"))
         return ImageSaveFormat::Jpeg;
-    if (EndsWithNoCase(path, L".bmp")) return ImageSaveFormat::Bmp;
+    if (Ends_with_no_case(path, L".bmp")) return ImageSaveFormat::Bmp;
     return ImageSaveFormat::Png;
 }
 

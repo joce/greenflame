@@ -10,7 +10,7 @@ namespace greenflame::core {
 // Pixels are assumed in BMP row order: row 0 = bottom of image (as returned
 // by GetDIBits with positive biHeight). rowBytes = (width * 4 + 3) & ~3.
 // Returns empty vector on invalid input.
-[[nodiscard]] std::vector<uint8_t> BuildBmpBytes(std::span<const uint8_t> pixels,
-                                                 int width, int height, int rowBytes);
+[[nodiscard]] std::vector<uint8_t>
+Build_bmp_bytes(std::span<const uint8_t> pixels, int width, int height, int row_bytes);
 
 } // namespace greenflame::core

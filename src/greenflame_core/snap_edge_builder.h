@@ -13,11 +13,12 @@ struct SnapEdges {
     std::vector<int32_t> horizontal;
 };
 
-[[nodiscard]] RectPx ScreenRectToClientRect(RectPx screen_rect, int32_t client_origin_x,
-                                            int32_t client_origin_y) noexcept;
+[[nodiscard]] RectPx Screen_rect_to_client_rect(RectPx screen_rect,
+                                                int32_t client_origin_x,
+                                                int32_t client_origin_y) noexcept;
 
 [[nodiscard]] SnapEdges
-BuildSnapEdgesFromScreenRects(std::span<const RectPx> screen_rects,
-                              int32_t client_origin_x, int32_t client_origin_y);
+Build_snap_edges_from_screen_rects(std::span<const RectPx> screen_rects,
+                                   int32_t client_origin_x, int32_t client_origin_y);
 
 } // namespace greenflame::core

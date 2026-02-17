@@ -2,8 +2,10 @@
 
 #include "win/tray_window.h"
 
+// clang-format off
 #include <windows.h>
 #include <shellapi.h>
+// clang-format on
 
 namespace {
 
@@ -23,17 +25,17 @@ TrayWindow::TrayWindow(ITrayEvents *events) : events_(events) {}
 
 TrayWindow::~TrayWindow() { Destroy(); }
 
-bool TrayWindow::RegisterWindowClass(HINSTANCE hinstance) {
+bool TrayWindow::Register_window_class(HINSTANCE hinstance) {
     WNDCLASSEXW window_class{};
     window_class.cbSize = sizeof(window_class);
-    window_class.lpfnWndProc = &TrayWindow::StaticWndProc;
+    window_class.lpfnWndProc = &TrayWindow::Static_wnd_proc;
     window_class.hInstance = hinstance;
     window_class.lpszClassName = kTrayWindowClass;
     return RegisterClassExW(&window_class) != 0;
 }
 
 bool TrayWindow::Create(HINSTANCE hinstance) {
-    if (IsOpen()) {
+    if (Is_open()) {
         return true;
     }
     hinstance_ = hinstance;
@@ -76,16 +78,16 @@ bool TrayWindow::Create(HINSTANCE hinstance) {
 }
 
 void TrayWindow::Destroy() {
-    if (!IsOpen()) {
+    if (!Is_open()) {
         return;
     }
     DestroyWindow(hwnd_);
 }
 
-bool TrayWindow::IsOpen() const { return hwnd_ != nullptr && IsWindow(hwnd_) != 0; }
+bool TrayWindow::Is_open() const { return hwnd_ != nullptr && IsWindow(hwnd_) != 0; }
 
-LRESULT CALLBACK TrayWindow::StaticWndProc(HWND hwnd, UINT msg, WPARAM wparam,
-                                           LPARAM lparam) {
+LRESULT CALLBACK TrayWindow::Static_wnd_proc(HWND hwnd, UINT msg, WPARAM wparam,
+                                             LPARAM lparam) {
     if (msg == WM_NCCREATE) {
         CREATESTRUCTW const *create = reinterpret_cast<CREATESTRUCTW const *>(lparam);
         TrayWindow *self = reinterpret_cast<TrayWindow *>(create->lpCreateParams);
@@ -102,7 +104,7 @@ LRESULT CALLBACK TrayWindow::StaticWndProc(HWND hwnd, UINT msg, WPARAM wparam,
     if (!self) {
         return DefWindowProcW(hwnd, msg, wparam, lparam);
     }
-    LRESULT const result = self->WndProc(msg, wparam, lparam);
+    LRESULT const result = self->Wnd_proc(msg, wparam, lparam);
     if (msg == WM_NCDESTROY) {
         self->hwnd_ = nullptr;
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
@@ -110,22 +112,22 @@ LRESULT CALLBACK TrayWindow::StaticWndProc(HWND hwnd, UINT msg, WPARAM wparam,
     return result;
 }
 
-LRESULT TrayWindow::WndProc(UINT msg, WPARAM wparam, LPARAM lparam) {
+LRESULT TrayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
     switch (msg) {
     case WM_COMMAND: {
         int const command = LOWORD(wparam);
         if (command == kStartCaptureCommandId) {
-            NotifyStartCapture();
+            Notify_start_capture();
         } else if (command == kExitCommandId) {
             if (events_) {
-                events_->OnExitRequested();
+                events_->On_exit_requested();
             }
         }
         return 0;
     }
     case WM_HOTKEY:
         if (wparam == kHotkeyId) {
-            NotifyStartCapture();
+            Notify_start_capture();
         }
         return 0;
     case WM_DESTROY: {
@@ -143,7 +145,7 @@ LRESULT TrayWindow::WndProc(UINT msg, WPARAM wparam, LPARAM lparam) {
     default:
         if (msg == kTrayCallbackMessage) {
             if (LOWORD(lparam) == WM_RBUTTONUP) {
-                ShowContextMenu();
+                Show_context_menu();
             }
             return 0;
         }
@@ -151,7 +153,7 @@ LRESULT TrayWindow::WndProc(UINT msg, WPARAM wparam, LPARAM lparam) {
     }
 }
 
-void TrayWindow::ShowContextMenu() {
+void TrayWindow::Show_context_menu() {
     HMENU const menu = CreatePopupMenu();
     if (!menu) {
         return;
@@ -166,9 +168,9 @@ void TrayWindow::ShowContextMenu() {
     DestroyMenu(menu);
 }
 
-void TrayWindow::NotifyStartCapture() {
+void TrayWindow::Notify_start_capture() {
     if (events_) {
-        events_->OnStartCaptureRequested();
+        events_->On_start_capture_requested();
     }
 }
 

@@ -4,9 +4,9 @@ namespace greenflame::core {
 
 namespace {
 
-constexpr int32_t MinSize = 1;
+constexpr int32_t kMinSize = 1;
 
-bool WithinRadiusSq(PointPx a, PointPx b, int radius_px) noexcept {
+bool Within_radius_sq(PointPx a, PointPx b, int radius_px) noexcept {
     if (radius_px <= 0) return false;
     const int64_t dx = static_cast<int64_t>(a.x) - static_cast<int64_t>(b.x);
     const int64_t dy = static_cast<int64_t>(a.y) - static_cast<int64_t>(b.y);
@@ -14,14 +14,14 @@ bool WithinRadiusSq(PointPx a, PointPx b, int radius_px) noexcept {
     return dx * dx + dy * dy <= r * r;
 }
 
-PointPx CornerPosition(RectPx const &r, SelectionHandle h) noexcept {
+PointPx Corner_position(RectPx const &r, SelectionHandle h) noexcept {
     switch (h) {
     case SelectionHandle::TopLeft:
-        return r.TopLeft();
+        return r.Top_left();
     case SelectionHandle::TopRight:
         return {r.right, r.top};
     case SelectionHandle::BottomRight:
-        return r.BottomRight();
+        return r.Bottom_right();
     case SelectionHandle::BottomLeft:
         return {r.left, r.bottom};
     default:
@@ -29,7 +29,7 @@ PointPx CornerPosition(RectPx const &r, SelectionHandle h) noexcept {
     }
 }
 
-PointPx EdgeMidpointPosition(RectPx const &r, SelectionHandle h) noexcept {
+PointPx Edge_midpoint_position(RectPx const &r, SelectionHandle h) noexcept {
     int const cx = (r.left + r.right) / 2;
     int const cy = (r.top + r.bottom) / 2;
     switch (h) {
@@ -48,18 +48,18 @@ PointPx EdgeMidpointPosition(RectPx const &r, SelectionHandle h) noexcept {
 
 } // namespace
 
-std::optional<SelectionHandle> HitTestSelectionHandle(RectPx selection,
-                                                      PointPx cursor_client_px,
-                                                      int grab_radius_px) noexcept {
+std::optional<SelectionHandle> Hit_test_selection_handle(RectPx selection,
+                                                         PointPx cursor_client_px,
+                                                         int grab_radius_px) noexcept {
     RectPx const r = selection.Normalized();
-    if (r.IsEmpty()) return std::nullopt;
+    if (r.Is_empty()) return std::nullopt;
 
     // Corners first (priority over edges).
     static constexpr SelectionHandle kCorners[] = {
         SelectionHandle::TopLeft, SelectionHandle::TopRight,
         SelectionHandle::BottomRight, SelectionHandle::BottomLeft};
     for (SelectionHandle h : kCorners) {
-        if (WithinRadiusSq(CornerPosition(r, h), cursor_client_px, grab_radius_px))
+        if (Within_radius_sq(Corner_position(r, h), cursor_client_px, grab_radius_px))
             return h;
     }
 
@@ -68,18 +68,18 @@ std::optional<SelectionHandle> HitTestSelectionHandle(RectPx selection,
         SelectionHandle::Top, SelectionHandle::Right, SelectionHandle::Bottom,
         SelectionHandle::Left};
     for (SelectionHandle h : kEdges) {
-        if (WithinRadiusSq(EdgeMidpointPosition(r, h), cursor_client_px,
-                           grab_radius_px))
+        if (Within_radius_sq(Edge_midpoint_position(r, h), cursor_client_px,
+                             grab_radius_px))
             return h;
     }
 
     return std::nullopt;
 }
 
-RectPx ResizeRectFromHandle(RectPx anchor, SelectionHandle handle,
-                            PointPx cursor_px) noexcept {
+RectPx Resize_rect_from_handle(RectPx anchor, SelectionHandle handle,
+                               PointPx cursor_px) noexcept {
     RectPx r = anchor.Normalized();
-    if (r.IsEmpty()) return r;
+    if (r.Is_empty()) return r;
 
     switch (handle) {
     case SelectionHandle::TopLeft:
@@ -117,36 +117,36 @@ RectPx ResizeRectFromHandle(RectPx anchor, SelectionHandle handle,
     // Enforce minimum size 1x1 (keep the fixed corner/edge, shrink the moving side).
     int const w = r.Width();
     int const height = r.Height();
-    if (w < MinSize) {
+    if (w < kMinSize) {
         if (handle == SelectionHandle::Left || handle == SelectionHandle::TopLeft ||
             handle == SelectionHandle::BottomLeft)
-            r.left = r.right - MinSize;
+            r.left = r.right - kMinSize;
         else
-            r.right = r.left + MinSize;
+            r.right = r.left + kMinSize;
     }
-    if (height < MinSize) {
+    if (height < kMinSize) {
         if (handle == SelectionHandle::Top || handle == SelectionHandle::TopLeft ||
             handle == SelectionHandle::TopRight)
-            r.top = r.bottom - MinSize;
+            r.top = r.bottom - kMinSize;
         else
-            r.bottom = r.top + MinSize;
+            r.bottom = r.top + kMinSize;
     }
 
     return r.Normalized();
 }
 
-PointPx AnchorPointForResizePolicy(RectPx rect, SelectionHandle handle) noexcept {
+PointPx Anchor_point_for_resize_policy(RectPx rect, SelectionHandle handle) noexcept {
     RectPx r = rect.Normalized();
     int const cx = (r.left + r.right) / 2;
     int const cy = (r.top + r.bottom) / 2;
 
     switch (handle) {
     case SelectionHandle::TopLeft:
-        return r.BottomRight();
+        return r.Bottom_right();
     case SelectionHandle::TopRight:
         return {r.left, r.bottom};
     case SelectionHandle::BottomRight:
-        return r.TopLeft();
+        return r.Top_left();
     case SelectionHandle::BottomLeft:
         return {r.right, r.top};
     case SelectionHandle::Top:

@@ -126,8 +126,9 @@ bool Crop_capture(GdiCaptureResult const &source, int left, int top, int width,
     out.Free();
     if (width <= 0 || height <= 0 || !source.Is_valid()) return false;
     if (left < 0 || top < 0 || left + width > source.width ||
-        top + height > source.height)
+        top + height > source.height) {
         return false;
+    }
 
     HDC const dc = GetDC(nullptr);
     if (!dc) return false;

@@ -6,6 +6,7 @@
 namespace greenflame::core {
 
 namespace {
+constexpr size_t kMaxWindowTitleChars = 50;
 
 [[nodiscard]] bool Is_invalid_filename_char(wchar_t ch) noexcept {
     static wchar_t const *const kInvalid = L"\\/:*?\"<>|";
@@ -60,7 +61,8 @@ Build_default_save_name(SaveSelectionSource selection_source,
     case SaveSelectionSource::Window: {
         std::wstring window_name = L"window";
         if (!window_title.empty()) {
-            std::wstring sanitized = Sanitize_filename_segment(window_title, 50);
+            std::wstring sanitized =
+                Sanitize_filename_segment(window_title, kMaxWindowTitleChars);
             if (!sanitized.empty()) window_name = std::move(sanitized);
         }
         return std::wstring(L"Greenflame-") + window_name + L"-" + time_part;
@@ -87,8 +89,9 @@ std::wstring Ensure_image_save_extension(std::wstring_view path,
 }
 
 ImageSaveFormat Detect_image_save_format_from_path(std::wstring_view path) noexcept {
-    if (Ends_with_no_case(path, L".jpg") || Ends_with_no_case(path, L".jpeg"))
+    if (Ends_with_no_case(path, L".jpg") || Ends_with_no_case(path, L".jpeg")) {
         return ImageSaveFormat::Jpeg;
+    }
     if (Ends_with_no_case(path, L".bmp")) return ImageSaveFormat::Bmp;
     return ImageSaveFormat::Png;
 }

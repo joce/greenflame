@@ -33,6 +33,8 @@ constexpr unsigned char kMagnifierCrosshairAlpha = 168; // 255 * 66 / 100
 constexpr int kMagnifierCrosshairThickness = 8;
 constexpr int kMagnifierCrosshairGap = 20;   // center to inner arm end
 constexpr int kMagnifierCrosshairMargin = 8; // circle edge to outer arm end
+constexpr int kColorChannelMax = 255;
+constexpr float kColorChannelMaxF = static_cast<float>(kColorChannelMax);
 
 void Blend_magnifier_crosshair_onto_pixels(std::span<uint8_t> pixels, int width,
                                            int height, int row_bytes, int mag_left,
@@ -78,21 +80,26 @@ void Blend_magnifier_crosshair_onto_pixels(std::span<uint8_t> pixels, int width,
                     on_arm = true;
                     break;
                 }
-                if (ix >= r.x0 - 1 && ix < r.x1 + 1 && iy >= r.y0 - 1 && iy < r.y1 + 1)
+                if (ix >= r.x0 - 1 && ix < r.x1 + 1 && iy >= r.y0 - 1 &&
+                    iy < r.y1 + 1) {
                     on_contour = true;
+                }
             }
             if (on_arm) on_contour = false;
             if (!on_arm && !on_contour) continue;
 
             size_t off = static_cast<size_t>(x) * 4;
             if (off + 2 >= static_cast<size_t>(row_bytes)) continue;
-            float const target = on_contour ? 255.f : 0.f;
+            float const target = on_contour ? kColorChannelMaxF : 0.f;
             int const blend_b = static_cast<int>(ia * row[off] + a * target);
             int const blend_g = static_cast<int>(ia * row[off + 1] + a * target);
             int const blend_r = static_cast<int>(ia * row[off + 2] + a * target);
-            row[off] = static_cast<uint8_t>(blend_b > 255 ? 255 : blend_b);
-            row[off + 1] = static_cast<uint8_t>(blend_g > 255 ? 255 : blend_g);
-            row[off + 2] = static_cast<uint8_t>(blend_r > 255 ? 255 : blend_r);
+            row[off] = static_cast<uint8_t>(
+                blend_b > kColorChannelMax ? kColorChannelMax : blend_b);
+            row[off + 1] = static_cast<uint8_t>(
+                blend_g > kColorChannelMax ? kColorChannelMax : blend_g);
+            row[off + 2] = static_cast<uint8_t>(
+                blend_r > kColorChannelMax ? kColorChannelMax : blend_r);
         }
     }
 }
@@ -208,14 +215,15 @@ void Draw_dimension_labels(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
             int width_box_top;
             bool above_fits = (sel.top - width_box_h - k_dim_gap >= 0);
             bool below_fits = (sel.bottom + k_dim_gap + width_box_h <= h);
-            if (above_fits)
+            if (above_fits) {
                 width_box_top = sel.top - width_box_h - k_dim_gap;
-            else if (below_fits)
+            } else if (below_fits) {
                 width_box_top = sel.bottom + k_dim_gap;
-            else
+            } else {
                 width_box_top = (sel.top - width_box_h - k_dim_gap >= h - width_box_h)
                                     ? (sel.bottom + k_dim_gap)
                                     : (sel.top - width_box_h - k_dim_gap);
+            }
             if (width_box_top < 0) width_box_top = 0;
             if (width_box_top + width_box_h > h) width_box_top = h - width_box_h;
 
@@ -265,10 +273,11 @@ void Draw_dimension_labels(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
             greenflame::core::Blend_rect_onto_pixels(
                 pixels, w, h, row_bytes, height_box_rect, kCoordTooltipBgR,
                 kCoordTooltipBgG, kCoordTooltipBgB, kCoordTooltipAlpha);
-            if (center_fits)
+            if (center_fits) {
                 greenflame::core::Blend_rect_onto_pixels(
                     pixels, w, h, row_bytes, center_box_rect, kCoordTooltipBgR,
                     kCoordTooltipBgG, kCoordTooltipBgB, kCoordTooltipAlpha);
+            }
             SetDIBits(buf_dc, buf_bmp, 0, static_cast<UINT>(h), pixels.data(),
                       reinterpret_cast<BITMAPINFO *>(&bmi_dim), DIB_RGB_COLORS);
 
@@ -281,10 +290,11 @@ void Draw_dimension_labels(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
                 Rectangle(buf_dc, height_box_left, height_box_top,
                           height_box_left + height_box_w,
                           height_box_top + height_box_h);
-                if (center_fits)
+                if (center_fits) {
                     Rectangle(buf_dc, center_box_left, center_box_top,
                               center_box_left + center_box_w,
                               center_box_top + center_box_h);
+                }
                 SelectObject(buf_dc, old_dim_pen);
             }
             SetBkMode(buf_dc, TRANSPARENT);
@@ -463,13 +473,15 @@ void Draw_crosshair_and_coord_tooltip(HDC buf_dc, HBITMAP buf_bmp, HWND hwnd, in
             greenflame::Fill_bmi32_top_down(bmi, w, h);
             if (GetDIBits(buf_dc, buf_bmp, 0, static_cast<UINT>(h), pixels.data(),
                           reinterpret_cast<BITMAPINFO *>(&bmi), DIB_RGB_COLORS) != 0) {
-                if (source_in_bounds)
+                if (source_in_bounds) {
                     Blend_magnifier_crosshair_onto_pixels(pixels, w, h, row_bytes,
                                                           mag_left, mag_top);
-                if (tooltip_ready)
+                }
+                if (tooltip_ready) {
                     greenflame::core::Blend_rect_onto_pixels(
                         pixels, w, h, row_bytes, box_rect, kCoordTooltipBgR,
                         kCoordTooltipBgG, kCoordTooltipBgB, kCoordTooltipAlpha);
+                }
                 SetDIBits(buf_dc, buf_bmp, 0, static_cast<UINT>(h), pixels.data(),
                           reinterpret_cast<BITMAPINFO *>(&bmi), DIB_RGB_COLORS);
             }
@@ -531,23 +543,25 @@ void Paint_overlay(HDC hdc, HWND hwnd, const RECT &rc, const PaintOverlayInput &
     Draw_selection_dim_and_border(buf_dc, buf_bmp, w, h, sel, in.paint_buffer,
                                   in.resources);
 
-    if ((in.dragging || in.handle_dragging || in.modifier_preview) && !sel.Is_empty())
+    if ((in.dragging || in.handle_dragging || in.modifier_preview) && !sel.Is_empty()) {
         Draw_dimension_labels(buf_dc, buf_bmp, w, h, sel, in.paint_buffer,
                               in.resources);
+    }
 
     bool const show_crosshair = in.final_selection.Is_empty() && !in.dragging &&
                                 !in.handle_dragging && !in.modifier_preview;
     int const cx = in.cursor_client_px.x;
     int const cy = in.cursor_client_px.y;
-    if (show_crosshair)
+    if (show_crosshair) {
         Draw_crosshair_and_coord_tooltip(buf_dc, buf_bmp, hwnd, w, h, cx, cy, false,
                                          in.paint_buffer, in.resources, in.capture);
-    // Resize handles only when committed or resizing; never in Object_selection
-    // (modifier_preview).
-    else if (in.handle_dragging && !in.live_rect.Is_empty())
+        // Resize handles only when committed or resizing; never in Object_selection
+        // (modifier_preview).
+    } else if (in.handle_dragging && !in.live_rect.Is_empty()) {
         Draw_contour_handles(buf_dc, in.live_rect, in.resources);
-    else if (!in.final_selection.Is_empty() && !in.modifier_preview)
+    } else if (!in.final_selection.Is_empty() && !in.modifier_preview) {
         Draw_contour_handles(buf_dc, in.final_selection, in.resources);
+    }
 
     BitBlt(hdc, 0, 0, w, h, buf_dc, 0, 0, SRCCOPY);
     SelectObject(buf_dc, old_buf);

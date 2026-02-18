@@ -40,8 +40,9 @@ TEST_CASE("Dim_pixels_outside_rect — 4x4 buffer, selection (1,1)-(3,3)",
 TEST_CASE("Dim_pixels_outside_rect — empty selection dims all", "[pixel_ops]") {
     int const w = 2, h = 2, row_bytes = 8;
     std::vector<uint8_t> pixels(static_cast<size_t>(row_bytes) * h, 200);
-    for (size_t i = 3; i < pixels.size(); i += 4)
+    for (size_t i = 3; i < pixels.size(); i += 4) {
         pixels[i] = 255;
+    }
     RectPx empty_sel = RectPx::From_ltrb(0, 0, 0, 0);
 
     Dim_pixels_outside_rect(pixels, w, h, row_bytes, empty_sel);

@@ -16,23 +16,28 @@ int32_t Dpi_to_scale_percent(int dpi) noexcept {
 
 CrossMonitorSelectionDecision
 Decide_cross_monitor_selection(std::span<const MonitorInfo> touched_monitors) noexcept {
-    if (touched_monitors.empty())
+    if (touched_monitors.empty()) {
         return CrossMonitorSelectionDecision::RefusedInvalidInput;
+    }
 
     const MonitorInfo &first = touched_monitors.front();
 
-    if (!first.dpi_scale.Is_valid())
+    if (!first.dpi_scale.Is_valid()) {
         return CrossMonitorSelectionDecision::RefusedInvalidInput;
+    }
 
     for (const MonitorInfo &m : touched_monitors) {
-        if (!m.dpi_scale.Is_valid())
+        if (!m.dpi_scale.Is_valid()) {
             return CrossMonitorSelectionDecision::RefusedInvalidInput;
+        }
 
-        if (!(m.dpi_scale == first.dpi_scale))
+        if (!(m.dpi_scale == first.dpi_scale)) {
             return CrossMonitorSelectionDecision::RefusedDifferentDpiScale;
+        }
 
-        if (m.orientation != first.orientation)
+        if (m.orientation != first.orientation) {
             return CrossMonitorSelectionDecision::RefusedDifferentOrientation;
+        }
     }
 
     return CrossMonitorSelectionDecision::Allowed;
@@ -70,8 +75,9 @@ RectPx Allowed_selection_rect(RectPx candidate, PointPx start,
 
     std::vector<MonitorInfo> touched_infos;
     touched_infos.reserve(touched.size());
-    for (size_t i : touched)
+    for (size_t i : touched) {
         touched_infos.push_back(monitors[i].info);
+    }
 
     if (Is_allowed(Decide_cross_monitor_selection(touched_infos))) return candidate;
 

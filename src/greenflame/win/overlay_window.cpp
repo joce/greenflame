@@ -31,6 +31,8 @@ namespace {
 constexpr wchar_t kOverlayWindowClass[] = L"GreenflameOverlay";
 constexpr int kHandleGrabRadiusPx = 6;
 constexpr int32_t kSnapThresholdPx = 10;
+constexpr int kDimensionFontHeight = 14;
+constexpr int kCenterFontHeight = 36;
 
 [[nodiscard]] POINT To_point(greenflame::core::PointPx p) {
     POINT out{};
@@ -87,13 +89,13 @@ struct OverlayWindow::OverlayResources {
         }
 
         paint.font_dim =
-            CreateFontW(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-                        FF_DONTCARE, L"Segoe UI");
+            CreateFontW(kDimensionFontHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                        DEFAULT_QUALITY, FF_DONTCARE, L"Segoe UI");
         paint.font_center =
-            CreateFontW(36, 0, 0, 0, FW_BLACK, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-                        FF_DONTCARE, L"Segoe UI");
+            CreateFontW(kCenterFontHeight, 0, 0, 0, FW_BLACK, FALSE, FALSE, FALSE,
+                        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                        DEFAULT_QUALITY, FF_DONTCARE, L"Segoe UI");
         paint.crosshair_pen = CreatePen(PS_SOLID, 1, RGB(0x20, 0xB2, 0xAA));
         paint.border_pen = CreatePen(PS_SOLID, 1, RGB(46, 139, 87));
         paint.handle_brush = CreateSolidBrush(RGB(0, 0x80, 0x80));
@@ -281,8 +283,6 @@ LRESULT OverlayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
         return On_destroy();
     case WM_CLOSE:
         return On_close();
-    case WM_NCDESTROY:
-        return DefWindowProcW(hwnd_, msg, wparam, lparam);
     default:
         return DefWindowProcW(hwnd_, msg, wparam, lparam);
     }

@@ -42,10 +42,11 @@ bool Save_capture_via_wic(GdiCaptureResult const &capture, wchar_t const *path,
 
     HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     bool coinit = SUCCEEDED(hr);
-    if (hr == RPC_E_CHANGED_MODE)
+    if (hr == RPC_E_CHANGED_MODE) {
         coinit = false;
-    else if (FAILED(hr))
+    } else if (FAILED(hr)) {
         return false;
+    }
     CoInitGuard co_guard(coinit);
 
     ComPtr<IWICImagingFactory> factory;

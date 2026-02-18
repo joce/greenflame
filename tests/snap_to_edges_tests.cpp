@@ -70,6 +70,8 @@ TEST_CASE("Snap_rect_to_edges does not snap left if would invert rect",
     std::array<int32_t, 1> vertical = {199}; // would make left 199, right 200 ok
     std::array<int32_t, 0> horizontal = {};
     RectPx out = Snap_rect_to_edges(rect, vertical, horizontal, kThreshold);
+    REQUIRE(out.left == 199);
+    REQUIRE(out.right == 200);
     // Snapping right to 199 would require right > left; 199 > 195 so we could snap
     // right to 199. Snapping left to 199: left would become 199, right 200, so
     // left < right, that's valid. So left could snap to 199. Let me re-read

@@ -59,8 +59,9 @@ std::optional<SelectionHandle> Hit_test_selection_handle(RectPx selection,
         SelectionHandle::TopLeft, SelectionHandle::TopRight,
         SelectionHandle::BottomRight, SelectionHandle::BottomLeft};
     for (SelectionHandle h : kCorners) {
-        if (Within_radius_sq(Corner_position(r, h), cursor_client_px, grab_radius_px))
+        if (Within_radius_sq(Corner_position(r, h), cursor_client_px, grab_radius_px)) {
             return h;
+        }
     }
 
     // Then edges.
@@ -69,8 +70,9 @@ std::optional<SelectionHandle> Hit_test_selection_handle(RectPx selection,
         SelectionHandle::Left};
     for (SelectionHandle h : kEdges) {
         if (Within_radius_sq(Edge_midpoint_position(r, h), cursor_client_px,
-                             grab_radius_px))
+                             grab_radius_px)) {
             return h;
+        }
     }
 
     return std::nullopt;
@@ -119,17 +121,19 @@ RectPx Resize_rect_from_handle(RectPx anchor, SelectionHandle handle,
     int const height = r.Height();
     if (w < kMinSize) {
         if (handle == SelectionHandle::Left || handle == SelectionHandle::TopLeft ||
-            handle == SelectionHandle::BottomLeft)
+            handle == SelectionHandle::BottomLeft) {
             r.left = r.right - kMinSize;
-        else
+        } else {
             r.right = r.left + kMinSize;
+        }
     }
     if (height < kMinSize) {
         if (handle == SelectionHandle::Top || handle == SelectionHandle::TopLeft ||
-            handle == SelectionHandle::TopRight)
+            handle == SelectionHandle::TopRight) {
             r.top = r.bottom - kMinSize;
-        else
+        } else {
             r.bottom = r.top + kMinSize;
+        }
     }
 
     return r.Normalized();

@@ -4,6 +4,11 @@
 
 namespace greenflame::core {
 
+namespace {
+constexpr int kColorChannelMax = 255;
+constexpr float kColorChannelMaxF = static_cast<float>(kColorChannelMax);
+} // namespace
+
 void Dim_pixels_outside_rect(std::span<uint8_t> pixels, int width, int height,
                              int row_bytes, RectPx selection) noexcept {
     if (width <= 0 || height <= 0 || row_bytes <= 0) return;
@@ -27,7 +32,7 @@ void Blend_rect_onto_pixels(std::span<uint8_t> pixels, int width, int height,
                             int row_bytes, RectPx rect, uint8_t r, uint8_t g, uint8_t b,
                             uint8_t alpha) noexcept {
     if (width <= 0 || height <= 0 || row_bytes <= 0 || alpha == 0) return;
-    float const a = static_cast<float>(alpha) / 255.f;
+    float const a = static_cast<float>(alpha) / kColorChannelMaxF;
     float const ia = 1.f - a;
     int const x0 = std::max(0, rect.left);
     int const y0 = std::max(0, rect.top);
@@ -44,9 +49,12 @@ void Blend_rect_onto_pixels(std::span<uint8_t> pixels, int width, int height,
                     static_cast<int>(ia * row[off + 1] + a * static_cast<float>(g));
                 int const blend_r =
                     static_cast<int>(ia * row[off + 2] + a * static_cast<float>(r));
-                row[off] = static_cast<uint8_t>(blend_b > 255 ? 255 : blend_b);
-                row[off + 1] = static_cast<uint8_t>(blend_g > 255 ? 255 : blend_g);
-                row[off + 2] = static_cast<uint8_t>(blend_r > 255 ? 255 : blend_r);
+                row[off] = static_cast<uint8_t>(
+                    blend_b > kColorChannelMax ? kColorChannelMax : blend_b);
+                row[off + 1] = static_cast<uint8_t>(
+                    blend_g > kColorChannelMax ? kColorChannelMax : blend_g);
+                row[off + 2] = static_cast<uint8_t>(
+                    blend_r > kColorChannelMax ? kColorChannelMax : blend_r);
             }
         }
     }

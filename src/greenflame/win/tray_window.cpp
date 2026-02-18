@@ -16,6 +16,7 @@ constexpr int kStartCaptureCommandId = 1;
 constexpr int kExitCommandId = 2;
 constexpr int kHotkeyId = 1;
 constexpr UINT kModNoRepeat = 0x4000u;
+constexpr UINT kClipboardBalloonTimeoutMs = 2000;
 
 } // namespace
 
@@ -85,6 +86,23 @@ void TrayWindow::Destroy() {
 }
 
 bool TrayWindow::Is_open() const { return hwnd_ != nullptr && IsWindow(hwnd_) != 0; }
+
+void TrayWindow::Show_clipboard_copied_balloon() {
+    if (!Is_open()) {
+        return;
+    }
+
+    NOTIFYICONDATAW notify_data{};
+    notify_data.cbSize = sizeof(notify_data);
+    notify_data.hWnd = hwnd_;
+    notify_data.uID = kTrayIconId;
+    notify_data.uFlags = NIF_INFO;
+    notify_data.dwInfoFlags = NIIF_INFO;
+    notify_data.uTimeout = kClipboardBalloonTimeoutMs;
+    wcscpy_s(notify_data.szInfoTitle, L"Greenflame");
+    wcscpy_s(notify_data.szInfo, L"Selection copied to clipboard.");
+    (void)Shell_NotifyIconW(NIM_MODIFY, &notify_data);
+}
 
 LRESULT CALLBACK TrayWindow::Static_wnd_proc(HWND hwnd, UINT msg, WPARAM wparam,
                                              LPARAM lparam) {

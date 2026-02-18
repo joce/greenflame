@@ -60,4 +60,10 @@ void GreenflameApp::On_overlay_closed() {
     // Overlay lifecycle is managed by OverlayWindow; no app action needed.
 }
 
+void GreenflameApp::On_selection_copied_to_clipboard() {
+    if (config_.show_balloons) {
+        tray_window_.Show_clipboard_copied_balloon();
+    }
+}
+
 } // namespace greenflame

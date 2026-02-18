@@ -500,12 +500,19 @@ void OverlayWindow::Copy_to_clipboard_and_close() {
     }
     cropped.Free();
 
+    bool copied_to_clipboard = false;
     if (memory && OpenClipboard(hwnd_)) {
-        EmptyClipboard();
-        SetClipboardData(CF_DIB, memory);
+        if (EmptyClipboard() != 0 && SetClipboardData(CF_DIB, memory) != nullptr) {
+            copied_to_clipboard = true;
+            memory = nullptr; // Clipboard owns memory after SetClipboardData succeeds.
+        }
         CloseClipboard();
-    } else if (memory) {
+    }
+    if (memory) {
         GlobalFree(memory);
+    }
+    if (copied_to_clipboard && events_) {
+        events_->On_selection_copied_to_clipboard();
     }
     Destroy();
 }

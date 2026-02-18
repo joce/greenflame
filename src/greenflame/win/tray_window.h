@@ -22,6 +22,7 @@ class TrayWindow final {
     [[nodiscard]] static bool Register_window_class(HINSTANCE hinstance);
     [[nodiscard]] bool Create(HINSTANCE hinstance);
     void Destroy();
+    void Show_clipboard_copied_balloon();
 
     [[nodiscard]] bool Is_open() const;
 

@@ -13,6 +13,7 @@ class IOverlayEvents {
   public:
     virtual ~IOverlayEvents() = default;
     virtual void On_overlay_closed() = 0;
+    virtual void On_selection_copied_to_clipboard() = 0;
 };
 
 class OverlayWindow final {

@@ -4,6 +4,9 @@
 
 namespace {
 
+constexpr wchar_t kClipboardCopiedBalloonMessage[] = L"Selection copied to clipboard.";
+constexpr wchar_t kSelectionSavedBalloonMessage[] = L"Selection saved.";
+
 void Enable_per_monitor_dpi_awareness_v2() {
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
     if (!user32) {
@@ -62,7 +65,14 @@ void GreenflameApp::On_overlay_closed() {
 
 void GreenflameApp::On_selection_copied_to_clipboard() {
     if (config_.show_balloons) {
-        tray_window_.Show_clipboard_copied_balloon();
+        tray_window_.Show_balloon(TrayBalloonIcon::Info,
+                                  kClipboardCopiedBalloonMessage);
+    }
+}
+
+void GreenflameApp::On_selection_saved_to_file() {
+    if (config_.show_balloons) {
+        tray_window_.Show_balloon(TrayBalloonIcon::Info, kSelectionSavedBalloonMessage);
     }
 }
 

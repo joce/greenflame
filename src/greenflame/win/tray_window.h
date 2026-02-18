@@ -4,6 +4,12 @@
 
 namespace greenflame {
 
+enum class TrayBalloonIcon {
+    Info,
+    Warning,
+    Error,
+};
+
 class ITrayEvents {
   public:
     virtual ~ITrayEvents() = default;
@@ -22,7 +28,7 @@ class TrayWindow final {
     [[nodiscard]] static bool Register_window_class(HINSTANCE hinstance);
     [[nodiscard]] bool Create(HINSTANCE hinstance);
     void Destroy();
-    void Show_clipboard_copied_balloon();
+    void Show_balloon(TrayBalloonIcon icon, wchar_t const *message);
 
     [[nodiscard]] bool Is_open() const;
 

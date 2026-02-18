@@ -14,6 +14,7 @@ class IOverlayEvents {
     virtual ~IOverlayEvents() = default;
     virtual void On_overlay_closed() = 0;
     virtual void On_selection_copied_to_clipboard() = 0;
+    virtual void On_selection_saved_to_file() = 0;
 };
 
 class OverlayWindow final {

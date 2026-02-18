@@ -16,7 +16,20 @@ constexpr int kStartCaptureCommandId = 1;
 constexpr int kExitCommandId = 2;
 constexpr int kHotkeyId = 1;
 constexpr UINT kModNoRepeat = 0x4000u;
-constexpr UINT kClipboardBalloonTimeoutMs = 2000;
+constexpr UINT kBalloonTimeoutMs = 2000;
+constexpr wchar_t kBalloonTitle[] = L"Greenflame";
+
+[[nodiscard]] DWORD To_notify_info_flags(greenflame::TrayBalloonIcon icon) {
+    switch (icon) {
+    case greenflame::TrayBalloonIcon::Info:
+        return NIIF_INFO;
+    case greenflame::TrayBalloonIcon::Warning:
+        return NIIF_WARNING;
+    case greenflame::TrayBalloonIcon::Error:
+        return NIIF_ERROR;
+    }
+    return NIIF_INFO;
+}
 
 } // namespace
 
@@ -87,8 +100,8 @@ void TrayWindow::Destroy() {
 
 bool TrayWindow::Is_open() const { return hwnd_ != nullptr && IsWindow(hwnd_) != 0; }
 
-void TrayWindow::Show_clipboard_copied_balloon() {
-    if (!Is_open()) {
+void TrayWindow::Show_balloon(TrayBalloonIcon icon, wchar_t const *message) {
+    if (!Is_open() || !message || message[0] == L'\0') {
         return;
     }
 
@@ -97,10 +110,10 @@ void TrayWindow::Show_clipboard_copied_balloon() {
     notify_data.hWnd = hwnd_;
     notify_data.uID = kTrayIconId;
     notify_data.uFlags = NIF_INFO;
-    notify_data.dwInfoFlags = NIIF_INFO;
-    notify_data.uTimeout = kClipboardBalloonTimeoutMs;
-    wcscpy_s(notify_data.szInfoTitle, L"Greenflame");
-    wcscpy_s(notify_data.szInfo, L"Selection copied to clipboard.");
+    notify_data.dwInfoFlags = To_notify_info_flags(icon);
+    notify_data.uTimeout = kBalloonTimeoutMs;
+    wcscpy_s(notify_data.szInfoTitle, kBalloonTitle);
+    wcsncpy_s(notify_data.szInfo, message, _TRUNCATE);
     (void)Shell_NotifyIconW(NIM_MODIFY, &notify_data);
 }
 

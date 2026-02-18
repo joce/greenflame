@@ -448,6 +448,9 @@ void OverlayWindow::Save_as_and_close() {
                 config_->Normalize();
             }
         }
+        if (events_) {
+            events_->On_selection_saved_to_file();
+        }
         Destroy();
     }
 }

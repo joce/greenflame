@@ -110,6 +110,16 @@ For release with Clang: `cmake --preset x64-release-clang` then `cmake --build -
 - **Include timing:** Clang builds use `-ftime-trace`; the compiler emits `.json` trace files in the build dir. Open them in Chrome’s `chrome://tracing` to inspect time spent in includes and in the compiler.
 - **Include What You Use (IWYU)** can use the same `compile_commands.json` for optional include-cleanup suggestions.
 
+### Formatting and lint policy before finishing a task
+
+When a working version is reached and behavior is acceptable:
+
+1. Run **clang-format** on changed C/C++ files.
+2. During iteration, run **clang-tidy** on changed translation units (`.cpp` files).
+3. Before considering the task complete, run **clang-tidy on all translation units** in `src/` and `tests/`.
+
+Rationale: a change in one file (especially headers, inline code, templates, macros, or shared declarations) can surface a tidy warning in another file that was not directly modified.
+
 ### Completeness and correctness
 
 - Code iteration can be done on the MSVC debug build only.

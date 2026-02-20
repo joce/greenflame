@@ -241,6 +241,7 @@ Breaking these rules is considered a correctness bug.
 
 - **Indent with 4 spaces (no tabs).**
 - **Prefer forward declarations over `#include` in header files.** Avoid including headers in other headers whenever possible; use forward declarations for types that are only used as pointers or references. Include the full header only in the `.cpp` that needs the definition.
+- **Prefer OOP for Win32/UI-side code when ownership or lifecycle boundaries are non-trivial.** Keep API surfaces small and cohesive; separate responsibilities into focused objects instead of accumulating procedural/global state.
 - Do not introduce third-party libraries without explicit justification
 - Do not bypass or “simplify” DPI logic
 - Do not move testable logic into the GUI executable

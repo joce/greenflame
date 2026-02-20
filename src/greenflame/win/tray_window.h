@@ -2,6 +2,8 @@
 
 #include "win_min_fwd.h"
 
+#include <memory>
+
 namespace greenflame {
 
 enum class TrayBalloonIcon {
@@ -33,6 +35,8 @@ class TrayWindow final {
     [[nodiscard]] bool Is_open() const;
 
   private:
+    class ToastPopup;
+
     static LRESULT CALLBACK Static_wnd_proc(HWND hwnd, UINT msg, WPARAM wparam,
                                             LPARAM lparam);
     LRESULT Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam);
@@ -42,6 +46,7 @@ class TrayWindow final {
     ITrayEvents *events_ = nullptr;
     HWND hwnd_ = nullptr;
     HINSTANCE hinstance_ = nullptr;
+    std::unique_ptr<ToastPopup> toast_popup_;
 };
 
 } // namespace greenflame

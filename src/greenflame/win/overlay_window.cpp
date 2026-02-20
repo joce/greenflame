@@ -13,6 +13,7 @@
 #include "win/gdi_capture.h"
 #include "win/overlay_paint.h"
 #include "win/save_image.h"
+#include "win/ui_palette.h"
 #include "win/window_query.h"
 
 #include <ShlObj.h>
@@ -96,11 +97,22 @@ struct OverlayWindow::OverlayResources {
             CreateFontW(kCenterFontHeight, 0, 0, 0, FW_BLACK, FALSE, FALSE, FALSE,
                         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                         DEFAULT_QUALITY, FF_DONTCARE, L"Segoe UI");
-        paint.crosshair_pen = CreatePen(PS_SOLID, 1, RGB(0x20, 0xB2, 0xAA));
-        paint.border_pen = CreatePen(PS_SOLID, 1, RGB(46, 139, 87));
-        paint.handle_brush = CreateSolidBrush(RGB(0, 0x80, 0x80));
-        paint.handle_pen = CreatePen(PS_SOLID, 1, RGB(0, 0x80, 0x80));
-        paint.sel_border_brush = CreateSolidBrush(RGB(0, 0x80, 0x80));
+        paint.crosshair_pen =
+            CreatePen(PS_SOLID, 1,
+                      RGB(winui::kOverlayCrosshair.r, winui::kOverlayCrosshair.g,
+                          winui::kOverlayCrosshair.b));
+        paint.border_pen =
+            CreatePen(PS_SOLID, 1,
+                      RGB(winui::kOverlayBorder.r, winui::kOverlayBorder.g,
+                          winui::kOverlayBorder.b));
+        paint.handle_brush = CreateSolidBrush(RGB(
+            winui::kOverlayHandle.r, winui::kOverlayHandle.g, winui::kOverlayHandle.b));
+        paint.handle_pen =
+            CreatePen(PS_SOLID, 1,
+                      RGB(winui::kOverlayHandle.r, winui::kOverlayHandle.g,
+                          winui::kOverlayHandle.b));
+        paint.sel_border_brush = CreateSolidBrush(RGB(
+            winui::kOverlayHandle.r, winui::kOverlayHandle.g, winui::kOverlayHandle.b));
         return true;
     }
 

@@ -33,10 +33,6 @@ constexpr wchar_t kToastTitleText[] = L"Greenflame";
     return MulDiv(value, static_cast<int>(dpi), static_cast<int>(kDefaultDpi));
 }
 
-[[nodiscard]] COLORREF To_color(greenflame::winui::RgbColor color) {
-    return RGB(color.r, color.g, color.b);
-}
-
 [[nodiscard]] COLORREF Toast_accent_color(greenflame::TrayBalloonIcon icon) {
     switch (icon) {
     case greenflame::TrayBalloonIcon::Info:
@@ -295,10 +291,10 @@ class TrayWindow::ToastPopup final {
                 int const icon_size = Scale_for_dpi(kToastIconDip, dpi);
                 int const icon_gap = Scale_for_dpi(kToastIconGapDip, dpi);
 
-                COLORREF const background_color = To_color(winui::kToastBackground);
-                COLORREF const border_color = To_color(winui::kToastBorder);
-                COLORREF const title_color = To_color(winui::kToastTitleText);
-                COLORREF const text_color = To_color(winui::kToastBodyText);
+                COLORREF const background_color = winui::kToastBackground;
+                COLORREF const border_color = winui::kToastBorder;
+                COLORREF const title_color = winui::kToastTitleText;
+                COLORREF const text_color = winui::kToastBodyText;
                 COLORREF const accent_color = Toast_accent_color(icon_);
 
                 HBRUSH const bg_brush = CreateSolidBrush(background_color);

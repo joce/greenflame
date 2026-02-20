@@ -5,8 +5,6 @@
 // CreateDIBSection, BitBlt(SRCCOPY | CAPTUREBLT). Caller must call
 // Result::Free() when done (or DeleteObject(result.bitmap)).
 
-#include "win_min_fwd.h"
-
 namespace greenflame {
 
 struct GdiCaptureResult {

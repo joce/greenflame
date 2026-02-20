@@ -1,21 +1,25 @@
 # greenflame
 
-<img src="images/greenflame_256.png" alt="Greenflame" width="128"/>
+<img src="images/greenflame_256.png" alt="Greenflame" width="128" align="left" />
 
 Yet another Windows screenshot tool, with very opinionated set of behaviors.  `¯\_(ツ)_/¯`
 
 The selection scheme of [Greenshot](https://greenshot.org/)
 <img src="https://avatars.githubusercontent.com/u/5614224?s=200&v=4" alt="Greenshot" style="width: 16px; height: 16px;">, the editing scheme of [Flameshot](https://flameshot.org/) <img src="https://flameshot.org/flameshot-icon.svg" alt="Flameshot" style="width: 16px; height: 16px;">, all in one tool.
 
+<br clear="left"/>
+
 ---
 
 ## Usage
 
-**Run** `greenflame.exe`. The executable sits in the tray. **Print Screen** or **right-click** the tray icon ➜  **Start capture** or **Exit**.
+**Run** `greenflame.exe`. The executable sits in the tray.
+
+**Print Screen** or **right-click** the tray icon ➜  **Start capture** or **Exit**.
 
 After **Start capture**, your screen is captured and you choose a region:
 
-- **Click and drag** to select a rectangle.
+- **Click and drag** to select a rectangle (hold **Alt** to disable snapping).
 - **Shift** + click ➜ select the whole monitor under the cursor.
 - **Ctrl** + click ➜ select the window under the cursor.
 - **Shift+Ctrl** + click ➜ select the whole screen.

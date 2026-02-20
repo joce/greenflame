@@ -12,22 +12,28 @@ constexpr UINT kTrayIconId = 1;
 constexpr int kStartCaptureCommandId = 1;
 constexpr int kExitCommandId = 2;
 constexpr int kHotkeyId = 1;
+constexpr int kHotkeyTestingErrorId = 2;
+constexpr int kHotkeyTestingWarningId = 3;
 constexpr UINT kModNoRepeat = 0x4000u;
 constexpr UINT_PTR kToastTimerId = 1;
 constexpr UINT kToastDurationMs = 5000;
 constexpr int kToastWidthDip = 340;
 constexpr int kToastMarginDip = 18;
 constexpr int kToastPaddingDip = 12;
-constexpr int kToastAccentWidthDip = 6;
+constexpr int kToastStatusRailWidthDip = 56;
+constexpr int kToastStatusIconMarginDip = 6;
 constexpr int kToastHeaderGapDip = 8;
 constexpr int kToastIconDip = 16;
+constexpr int kToastTitleAppIconDip = 14;
+constexpr int kToastTitleAppIconGapDip = 6;
 constexpr int kToastTitleFontDip = 13;
-constexpr int kToastIconGapDip = 8;
 constexpr int kToastMinHeightDip = 64;
 constexpr int kToastMaxHeightDip = 220;
 constexpr UINT kDefaultDpi = 96;
 constexpr int kToastFallbackTextHeightDip = 18;
 constexpr wchar_t kToastTitleText[] = L"Greenflame";
+constexpr wchar_t kTestingWarningBalloonMessage[] = L"Testing warning toast (Ctrl+W).";
+constexpr wchar_t kTestingErrorBalloonMessage[] = L"Testing error toast (Ctrl+E).";
 
 [[nodiscard]] int Scale_for_dpi(int value, UINT dpi) {
     return MulDiv(value, static_cast<int>(dpi), static_cast<int>(kDefaultDpi));
@@ -51,8 +57,7 @@ namespace greenflame {
 
 class TrayWindow::ToastPopup final {
   public:
-    explicit ToastPopup(HINSTANCE hinstance)
-        : hinstance_(hinstance), app_icon_(LoadIconW(hinstance, MAKEINTRESOURCEW(1))) {}
+    explicit ToastPopup(HINSTANCE hinstance) : hinstance_(hinstance) {}
 
     ~ToastPopup() {
         if (title_font_ != nullptr) {
@@ -95,22 +100,24 @@ class TrayWindow::ToastPopup final {
         int const width = Scale_for_dpi(kToastWidthDip, dpi);
         int const margin = Scale_for_dpi(kToastMarginDip, dpi);
         int const padding = Scale_for_dpi(kToastPaddingDip, dpi);
-        int const accent_width = Scale_for_dpi(kToastAccentWidthDip, dpi);
+        int const status_rail_width = Scale_for_dpi(kToastStatusRailWidthDip, dpi);
         int const header_gap = Scale_for_dpi(kToastHeaderGapDip, dpi);
-        int const icon_size = Scale_for_dpi(kToastIconDip, dpi);
-        int const icon_gap = Scale_for_dpi(kToastIconGapDip, dpi);
+        int const min_icon_size = Scale_for_dpi(kToastIconDip, dpi);
+        int const title_app_icon_size = Scale_for_dpi(kToastTitleAppIconDip, dpi);
+        int const title_app_icon_gap = Scale_for_dpi(kToastTitleAppIconGapDip, dpi);
+        int const title_icon_reserved = title_app_icon_size + title_app_icon_gap;
         int const min_height = Scale_for_dpi(kToastMinHeightDip, dpi);
         int const max_height = Scale_for_dpi(kToastMaxHeightDip, dpi);
 
-        int const content_left = accent_width + padding;
+        int const content_left = status_rail_width + padding;
         int const content_right = width - padding;
-        int const title_left = content_left + icon_size + icon_gap;
-        int title_right = content_right - icon_size - icon_gap;
+        int const title_left = content_left;
+        int title_right = content_right - title_icon_reserved;
         if (title_right <= title_left) {
             title_right = title_left + 1;
         }
 
-        int title_height = icon_size;
+        int title_height = std::max(min_icon_size, title_app_icon_size);
         int body_height = Scale_for_dpi(kToastFallbackTextHeightDip, dpi);
 
         HDC const hdc = GetDC(hwnd_);
@@ -286,10 +293,18 @@ class TrayWindow::ToastPopup final {
                 Ensure_title_font(dpi);
 
                 int const padding = Scale_for_dpi(kToastPaddingDip, dpi);
-                int const accent_width = Scale_for_dpi(kToastAccentWidthDip, dpi);
+                int const status_rail_width =
+                    Scale_for_dpi(kToastStatusRailWidthDip, dpi);
+                int const status_icon_margin =
+                    Scale_for_dpi(kToastStatusIconMarginDip, dpi);
                 int const header_gap = Scale_for_dpi(kToastHeaderGapDip, dpi);
-                int const icon_size = Scale_for_dpi(kToastIconDip, dpi);
-                int const icon_gap = Scale_for_dpi(kToastIconGapDip, dpi);
+                int const min_icon_size = Scale_for_dpi(kToastIconDip, dpi);
+                int const title_app_icon_size =
+                    Scale_for_dpi(kToastTitleAppIconDip, dpi);
+                int const title_app_icon_gap =
+                    Scale_for_dpi(kToastTitleAppIconGapDip, dpi);
+                int const title_icon_reserved =
+                    title_app_icon_size + title_app_icon_gap;
 
                 COLORREF const background_color = winui::kToastBackground;
                 COLORREF const border_color = winui::kToastBorder;
@@ -303,12 +318,12 @@ class TrayWindow::ToastPopup final {
                     DeleteObject(bg_brush);
                 }
 
-                RECT accent = client;
-                accent.right = accent.left + accent_width;
-                HBRUSH const accent_brush = CreateSolidBrush(accent_color);
-                if (accent_brush != nullptr) {
-                    FillRect(hdc, &accent, accent_brush);
-                    DeleteObject(accent_brush);
+                RECT status_rail = client;
+                status_rail.right = status_rail.left + status_rail_width;
+                HBRUSH const status_rail_brush = CreateSolidBrush(accent_color);
+                if (status_rail_brush != nullptr) {
+                    FillRect(hdc, &status_rail, status_rail_brush);
+                    DeleteObject(status_rail_brush);
                 }
 
                 HBRUSH const border_brush = CreateSolidBrush(border_color);
@@ -317,10 +332,10 @@ class TrayWindow::ToastPopup final {
                     DeleteObject(border_brush);
                 }
 
-                int const content_left = accent_width + padding;
+                int const content_left = status_rail_width + padding;
                 int const content_right = client.right - padding;
-                int const title_left = content_left + icon_size + icon_gap;
-                int title_right = content_right - icon_size - icon_gap;
+                int const title_left = content_left;
+                int title_right = content_right - title_icon_reserved;
                 if (title_right <= title_left) {
                     title_right = title_left + 1;
                 }
@@ -329,30 +344,32 @@ class TrayWindow::ToastPopup final {
                 title_rect.left = title_left;
                 title_rect.top = padding;
                 title_rect.right = title_right;
-                title_rect.bottom = title_rect.top + icon_size;
+                title_rect.bottom =
+                    title_rect.top + std::max(min_icon_size, title_app_icon_size);
 
                 HICON const severity_icon = static_cast<HICON>(
-                    LoadImageW(nullptr, Severity_icon_resource_id(), IMAGE_ICON,
-                               icon_size, icon_size, LR_SHARED));
-                HICON loaded_app_icon = static_cast<HICON>(
-                    LoadImageW(hinstance_, MAKEINTRESOURCEW(1), IMAGE_ICON, icon_size,
-                               icon_size, LR_DEFAULTCOLOR));
-                HICON const app_icon =
-                    loaded_app_icon != nullptr ? loaded_app_icon : app_icon_;
-                int const header_center_y = padding + (icon_size / 2);
-                int const app_icon_y = header_center_y - (icon_size / 2);
-                if (app_icon != nullptr) {
-                    DrawIconEx(hdc, content_left, app_icon_y, app_icon, icon_size,
-                               icon_size, 0, nullptr, DI_NORMAL);
-                }
+                    LoadImageW(nullptr, Severity_icon_resource_id(), IMAGE_ICON, 0, 0,
+                               LR_SHARED | LR_DEFAULTSIZE));
                 if (severity_icon != nullptr) {
-                    DrawIconEx(hdc, content_right - icon_size, app_icon_y,
-                               severity_icon, icon_size, icon_size, 0, nullptr,
+                    int const status_rail_width_px =
+                        static_cast<int>(status_rail.right - status_rail.left);
+                    int const client_height_px =
+                        static_cast<int>(client.bottom - client.top);
+                    int const available_width =
+                        std::max(1, status_rail_width_px - (2 * status_icon_margin));
+                    int const available_height =
+                        std::max(1, client_height_px - (2 * status_icon_margin));
+                    int const status_icon_size = std::max(
+                        min_icon_size, std::min(available_width, available_height));
+                    int const status_icon_x =
+                        static_cast<int>(status_rail.left) +
+                        ((status_rail_width_px - status_icon_size) / 2);
+                    int const status_icon_y =
+                        static_cast<int>(client.top) +
+                        ((client_height_px - status_icon_size) / 2);
+                    DrawIconEx(hdc, status_icon_x, status_icon_y, severity_icon,
+                               status_icon_size, status_icon_size, 0, nullptr,
                                DI_NORMAL);
-                }
-                if (loaded_app_icon != nullptr) {
-                    DestroyIcon(loaded_app_icon);
-                    loaded_app_icon = nullptr;
                 }
 
                 SetBkMode(hdc, TRANSPARENT);
@@ -363,9 +380,24 @@ class TrayWindow::ToastPopup final {
                           DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX |
                               DT_END_ELLIPSIS);
 
+                HICON loaded_app_icon = static_cast<HICON>(LoadImageW(
+                    hinstance_, MAKEINTRESOURCEW(1), IMAGE_ICON, title_app_icon_size,
+                    title_app_icon_size, LR_DEFAULTCOLOR));
+                if (loaded_app_icon != nullptr) {
+                    int const app_icon_x = content_right - title_app_icon_size;
+                    int const app_icon_y =
+                        title_rect.top +
+                        ((title_rect.bottom - title_rect.top - title_app_icon_size) /
+                         2);
+                    DrawIconEx(hdc, app_icon_x, app_icon_y, loaded_app_icon,
+                               title_app_icon_size, title_app_icon_size, 0, nullptr,
+                               DI_NORMAL);
+                    DestroyIcon(loaded_app_icon);
+                }
+
                 RECT body_rect = client;
                 body_rect.left = content_left;
-                body_rect.top = padding + icon_size + header_gap;
+                body_rect.top = title_rect.bottom + header_gap;
                 body_rect.right = content_right;
                 body_rect.bottom = client.bottom - padding;
                 SetTextColor(hdc, text_color);
@@ -384,7 +416,6 @@ class TrayWindow::ToastPopup final {
 
     HINSTANCE hinstance_ = nullptr;
     HWND hwnd_ = nullptr;
-    HICON app_icon_ = nullptr;
     HFONT title_font_ = nullptr;
     UINT title_font_dpi_ = 0;
     TrayBalloonIcon icon_ = TrayBalloonIcon::Info;
@@ -409,11 +440,12 @@ bool TrayWindow::Register_window_class(HINSTANCE hinstance) {
     return ToastPopup::Register_window_class(hinstance);
 }
 
-bool TrayWindow::Create(HINSTANCE hinstance) {
+bool TrayWindow::Create(HINSTANCE hinstance, bool enable_testing_hotkeys) {
     if (Is_open()) {
         return true;
     }
     hinstance_ = hinstance;
+    testing_hotkeys_enabled_ = enable_testing_hotkeys;
     HWND const hwnd = CreateWindowExW(0, kTrayWindowClass, L"", 0, 0, 0, 0, 0,
                                       HWND_MESSAGE, nullptr, hinstance, this);
     if (!hwnd) {
@@ -450,6 +482,13 @@ bool TrayWindow::Create(HINSTANCE hinstance) {
             continue;
         }
         break;
+    }
+
+    if (testing_hotkeys_enabled_) {
+        RegisterHotKey(hwnd, kHotkeyTestingErrorId,
+                       static_cast<UINT>(MOD_CONTROL | kModNoRepeat), L'E');
+        RegisterHotKey(hwnd, kHotkeyTestingWarningId,
+                       static_cast<UINT>(MOD_CONTROL | kModNoRepeat), L'W');
     }
     return true;
 }
@@ -519,6 +558,10 @@ LRESULT TrayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
     case WM_HOTKEY:
         if (wparam == kHotkeyId) {
             Notify_start_capture();
+        } else if (testing_hotkeys_enabled_ && wparam == kHotkeyTestingErrorId) {
+            Show_balloon(TrayBalloonIcon::Error, kTestingErrorBalloonMessage);
+        } else if (testing_hotkeys_enabled_ && wparam == kHotkeyTestingWarningId) {
+            Show_balloon(TrayBalloonIcon::Warning, kTestingWarningBalloonMessage);
         }
         return 0;
     case WM_DESTROY: {
@@ -526,6 +569,8 @@ LRESULT TrayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
             toast_popup_->Destroy();
         }
         UnregisterHotKey(hwnd_, kHotkeyId);
+        UnregisterHotKey(hwnd_, kHotkeyTestingErrorId);
+        UnregisterHotKey(hwnd_, kHotkeyTestingWarningId);
         NOTIFYICONDATAW notify_data{};
         notify_data.cbSize = sizeof(notify_data);
         notify_data.hWnd = hwnd_;

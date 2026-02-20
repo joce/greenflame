@@ -19,6 +19,31 @@ void Enable_per_monitor_dpi_awareness_v2() {
     }
 }
 
+#if defined(_DEBUG)
+constexpr wchar_t kTestingFlag[] = L"--testing-1-2";
+
+[[nodiscard]] bool Is_testing_mode_enabled() {
+    int argc = 0;
+    LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (argv == nullptr) {
+        return false;
+    }
+
+    bool testing_mode_enabled = false;
+    for (int i = 1; i < argc; ++i) {
+        if (_wcsicmp(argv[i], kTestingFlag) == 0) {
+            testing_mode_enabled = true;
+            break;
+        }
+    }
+
+    LocalFree(argv);
+    return testing_mode_enabled;
+}
+#else
+[[nodiscard]] bool Is_testing_mode_enabled() { return false; }
+#endif
+
 } // namespace
 
 namespace greenflame {
@@ -34,7 +59,8 @@ int GreenflameApp::Run() {
     }
 
     config_ = AppConfig::Load();
-    if (!tray_window_.Create(hinstance_)) {
+    bool const testing_mode_enabled = Is_testing_mode_enabled();
+    if (!tray_window_.Create(hinstance_, testing_mode_enabled)) {
         return 2;
     }
 

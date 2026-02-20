@@ -26,7 +26,7 @@ class TrayWindow final {
     TrayWindow &operator=(TrayWindow const &) = delete;
 
     [[nodiscard]] static bool Register_window_class(HINSTANCE hinstance);
-    [[nodiscard]] bool Create(HINSTANCE hinstance);
+    [[nodiscard]] bool Create(HINSTANCE hinstance, bool enable_testing_hotkeys = false);
     void Destroy();
     void Show_balloon(TrayBalloonIcon icon, wchar_t const *message);
 
@@ -44,6 +44,7 @@ class TrayWindow final {
     ITrayEvents *events_ = nullptr;
     HWND hwnd_ = nullptr;
     HINSTANCE hinstance_ = nullptr;
+    bool testing_hotkeys_enabled_ = false;
     std::unique_ptr<ToastPopup> toast_popup_;
 };
 

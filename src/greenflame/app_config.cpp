@@ -1,11 +1,6 @@
 #include "app_config.h"
 
-#include <ShlObj.h>
 #include <easyjson.h>
-
-#include <filesystem>
-#include <fstream>
-#include <string>
 
 namespace greenflame {
 

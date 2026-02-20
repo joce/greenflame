@@ -1,8 +1,5 @@
 #include "greenflame_core/monitor_rules.h"
 #include "greenflame_core/rect_px.h"
-#include <catch2/catch_test_macros.hpp>
-
-#include <vector>
 
 using namespace greenflame::core;
 

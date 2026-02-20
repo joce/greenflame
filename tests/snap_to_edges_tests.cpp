@@ -1,10 +1,5 @@
-#include <catch2/catch_test_macros.hpp>
-
 #include "greenflame_core/rect_px.h"
 #include "greenflame_core/snap_to_edges.h"
-
-#include <array>
-#include <vector>
 
 using namespace greenflame::core;
 

@@ -1,7 +1,5 @@
 #include "greenflame_app.h"
 
-#include <windows.h>
-
 namespace {
 
 constexpr wchar_t kClipboardCopiedBalloonMessage[] = L"Selection copied to clipboard.";

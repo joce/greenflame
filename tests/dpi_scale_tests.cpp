@@ -1,5 +1,4 @@
 #include "greenflame_core/monitor_rules.h"
-#include <catch2/catch_test_macros.hpp>
 
 using namespace greenflame::core;
 

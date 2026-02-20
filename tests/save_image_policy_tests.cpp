@@ -1,7 +1,5 @@
 #include "greenflame_core/save_image_policy.h"
 
-#include <catch2/catch_test_macros.hpp>
-
 using namespace greenflame::core;
 
 TEST_CASE("SanitizeFilenameSegment replaces invalid characters",

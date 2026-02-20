@@ -2,9 +2,6 @@
 
 #include "win/save_image.h"
 
-#include <wincodec.h>
-#include <windows.h>
-
 #pragma comment(lib, "Windowscodecs.lib")
 
 namespace greenflame {

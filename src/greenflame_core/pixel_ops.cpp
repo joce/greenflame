@@ -1,7 +1,5 @@
 #include "greenflame_core/pixel_ops.h"
 
-#include <algorithm>
-
 namespace greenflame::core {
 
 namespace {

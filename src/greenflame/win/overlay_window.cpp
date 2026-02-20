@@ -16,17 +16,6 @@
 #include "win/ui_palette.h"
 #include "win/window_query.h"
 
-#include <ShlObj.h>
-#include <commdlg.h>
-#include <windows.h>
-
-#include <cstddef>
-#include <cstring>
-#include <optional>
-#include <string>
-#include <vector>
-#include <wchar.h>
-
 namespace {
 
 constexpr wchar_t kOverlayWindowClass[] = L"GreenflameOverlay";

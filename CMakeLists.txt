@@ -44,6 +44,10 @@ target_compile_definitions(greenflame_core PRIVATE
     _UNICODE
 )
 
+target_precompile_headers(greenflame_core PRIVATE
+    "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/src/greenflame_core/pch.h>"
+)
+
 if (MSVC)
     target_compile_options(greenflame_core PRIVATE /W4 /permissive- /Zc:__cplusplus)
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -108,6 +112,10 @@ target_compile_definitions(greenflame PRIVATE
         WIN32_LEAN_AND_MEAN
         UNICODE
         _UNICODE
+)
+
+target_precompile_headers(greenflame PRIVATE
+    "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/src/greenflame/pch.h>"
 )
 
 if (MSVC)

@@ -1,8 +1,5 @@
 #include "win/window_query.h"
 
-#include <dwmapi.h>
-#include <windows.h>
-
 namespace greenflame {
 
 std::optional<HWND> Get_window_under_cursor(POINT screen_pt, HWND exclude_hwnd) {

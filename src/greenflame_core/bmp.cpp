@@ -1,8 +1,5 @@
 #include "greenflame_core/bmp.h"
 
-#include <cstddef>
-#include <cstring>
-
 namespace greenflame::core {
 
 namespace {

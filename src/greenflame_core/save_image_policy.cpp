@@ -1,8 +1,5 @@
 #include "greenflame_core/save_image_policy.h"
 
-#include <cwchar>
-#include <cwctype>
-
 namespace greenflame::core {
 
 namespace {

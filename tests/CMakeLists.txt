@@ -24,6 +24,9 @@ add_executable(greenflame_tests
     save_image_policy_tests.cpp
 )
 set_target_properties(greenflame_tests PROPERTIES WIN32_EXECUTABLE FALSE)  # console app (main), not GUI (WinMain)
+target_precompile_headers(greenflame_tests PRIVATE
+    "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/pch.h>"
+)
 target_link_libraries(greenflame_tests PRIVATE
     greenflame_core
     Catch2::Catch2WithMain

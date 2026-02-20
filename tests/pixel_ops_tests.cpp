@@ -1,6 +1,5 @@
 #include "greenflame_core/pixel_ops.h"
 #include "greenflame_core/rect_px.h"
-#include <catch2/catch_test_macros.hpp>
 
 using namespace greenflame::core;
 

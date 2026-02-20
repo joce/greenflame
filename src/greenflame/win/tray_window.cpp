@@ -3,14 +3,6 @@
 #include "win/tray_window.h"
 #include "win/ui_palette.h"
 
-// clang-format off
-#include <windows.h>
-#include <shellapi.h>
-// clang-format on
-
-#include <algorithm>
-#include <string>
-
 namespace {
 
 constexpr wchar_t kTrayWindowClass[] = L"GreenflameTray";

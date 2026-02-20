@@ -1,7 +1,6 @@
 #include "greenflame_core/snap_to_edges.h"
 
 #include <cstdlib>
-#include <optional>
 
 namespace greenflame::core {
 

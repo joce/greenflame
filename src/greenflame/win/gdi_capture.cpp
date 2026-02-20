@@ -7,11 +7,6 @@
 #include "greenflame_core/rect_px.h"
 #include "win/display_queries.h"
 
-#include <windows.h>
-
-#include <cstdint>
-#include <vector>
-
 namespace greenflame {
 
 namespace {

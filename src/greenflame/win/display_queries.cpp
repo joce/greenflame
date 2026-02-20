@@ -1,8 +1,5 @@
 #include "win/display_queries.h"
 
-#include <ShellScalingApi.h>
-#include <windows.h>
-
 #pragma comment(lib, "Shcore.lib")
 
 namespace greenflame {

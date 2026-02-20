@@ -1,7 +1,5 @@
 #include "rect_px.h"
 
-#include <algorithm>
-
 namespace greenflame::core {
 RectPx RectPx::Normalized() const noexcept {
     RectPx r = *this;

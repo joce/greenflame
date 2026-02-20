@@ -8,13 +8,6 @@
 #include "greenflame_core/pixel_ops.h"
 #include "greenflame_core/rect_px.h"
 
-#include <windows.h>
-
-#include <algorithm>
-#include <cstdint>
-#include <span>
-#include <wchar.h>
-
 namespace {
 
 constexpr unsigned char kCoordTooltipAlpha = 200;

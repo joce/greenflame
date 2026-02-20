@@ -1,9 +1,5 @@
 #include "greenflame_core/snap_edge_builder.h"
 
-#include <catch2/catch_test_macros.hpp>
-
-#include <vector>
-
 using namespace greenflame::core;
 
 TEST_CASE("Screen_rect_to_client_rect translates by client origin", "[snap_edges]") {

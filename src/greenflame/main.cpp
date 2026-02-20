@@ -1,7 +1,5 @@
 // Entry point: optional console-detach relaunch, then run GreenflameApp.
 
-#include <windows.h>
-
 #include "greenflame_app.h"
 
 int WINAPI wWinMain(HINSTANCE h_instance, HINSTANCE, PWSTR, int) {

@@ -144,3 +144,49 @@ TEST_CASE("Snap_rect_to_edges uses span of vector", "[snap_to_edges]") {
     RectPx out = Snap_rect_to_edges(rect, vertical, horizontal, kThreshold);
     REQUIRE(out.left == 100);
 }
+
+TEST_CASE("Snap_point_to_edges snaps each axis independently", "[snap_to_edges]") {
+    PointPx point = {103, 48};
+    std::array<int32_t, 2> vertical = {100, 140};
+    std::array<int32_t, 2> horizontal = {50, 120};
+
+    PointPx out = Snap_point_to_edges(point, vertical, horizontal, kThreshold);
+
+    REQUIRE(out.x == 100);
+    REQUIRE(out.y == 50);
+}
+
+TEST_CASE("Snap_point_to_edges picks the closest line per axis", "[snap_to_edges]") {
+    PointPx point = {108, 112};
+    std::array<int32_t, 3> vertical = {100, 105, 130};
+    std::array<int32_t, 3> horizontal = {100, 109, 130};
+
+    PointPx out = Snap_point_to_edges(point, vertical, horizontal, kThreshold);
+
+    REQUIRE(out.x == 105);
+    REQUIRE(out.y == 109);
+}
+
+TEST_CASE("Snap_point_to_edges does not snap outside threshold", "[snap_to_edges]") {
+    PointPx point = {120, 140};
+    std::array<int32_t, 1> vertical = {100};
+    std::array<int32_t, 1> horizontal = {120};
+
+    PointPx out = Snap_point_to_edges(point, vertical, horizontal, kThreshold);
+
+    REQUIRE(out.x == 120);
+    REQUIRE(out.y == 140);
+}
+
+TEST_CASE("Snap_point_to_edges threshold zero or negative does not snap",
+          "[snap_to_edges]") {
+    PointPx point = {103, 103};
+    std::array<int32_t, 1> vertical = {100};
+    std::array<int32_t, 1> horizontal = {100};
+
+    PointPx out_zero = Snap_point_to_edges(point, vertical, horizontal, 0);
+    PointPx out_negative = Snap_point_to_edges(point, vertical, horizontal, -1);
+
+    REQUIRE(out_zero == point);
+    REQUIRE(out_negative == point);
+}

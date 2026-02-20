@@ -17,4 +17,11 @@ namespace greenflame::core {
                                         std::span<const int32_t> horizontal_edges_px,
                                         int32_t threshold_px) noexcept;
 
+// Snap point coordinates independently to nearest vertical/horizontal lines
+// within threshold.
+[[nodiscard]] PointPx Snap_point_to_edges(PointPx point,
+                                          std::span<const int32_t> vertical_edges_px,
+                                          std::span<const int32_t> horizontal_edges_px,
+                                          int32_t threshold_px) noexcept;
+
 } // namespace greenflame::core

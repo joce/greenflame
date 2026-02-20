@@ -24,6 +24,10 @@ constexpr int32_t kSnapThresholdPx = 10;
 constexpr int kDimensionFontHeight = 14;
 constexpr int kCenterFontHeight = 36;
 
+[[nodiscard]] bool Is_snap_enabled() noexcept {
+    return (GetKeyState(VK_MENU) & 0x8000) == 0;
+}
+
 [[nodiscard]] POINT To_point(greenflame::core::PointPx p) {
     POINT out{};
     out.x = p.x;
@@ -212,6 +216,7 @@ bool OverlayWindow::Create_and_show(HINSTANCE hinstance) {
     }
 
     state_->cached_monitors = Get_monitors_with_bounds();
+    Build_snap_edges_from_windows();
     ShowWindow(hwnd, SW_SHOW);
     return true;
 }
@@ -312,6 +317,9 @@ void OverlayWindow::Build_snap_edges_from_windows() {
     int const origin_y = overlay_rect.top;
     state_->window_rects.clear();
     Get_visible_top_level_window_rects(hwnd_, state_->window_rects);
+    for (core::MonitorWithBounds const &monitor : state_->cached_monitors) {
+        state_->window_rects.push_back(monitor.bounds);
+    }
     core::SnapEdges const edges = core::Build_snap_edges_from_screen_rects(
         state_->window_rects, origin_x, origin_y);
     state_->vertical_edges = edges.vertical;
@@ -559,9 +567,7 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
         return 0;
     }
     if (wparam == VK_MENU) {
-        if (state_->dragging || state_->handle_dragging) {
-            InvalidateRect(hwnd_, nullptr, TRUE);
-        }
+        InvalidateRect(hwnd_, nullptr, TRUE);
         return 0;
     }
     return DefWindowProcW(hwnd_, WM_KEYDOWN, wparam, lparam);
@@ -569,9 +575,7 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
 
 LRESULT OverlayWindow::On_key_up(WPARAM wparam, LPARAM lparam) {
     if (wparam == VK_MENU) {
-        if (state_->dragging || state_->handle_dragging) {
-            InvalidateRect(hwnd_, nullptr, TRUE);
-        }
+        InvalidateRect(hwnd_, nullptr, TRUE);
         return 0;
     }
     if (wparam != VK_SHIFT && wparam != VK_CONTROL) {
@@ -637,14 +641,19 @@ LRESULT OverlayWindow::On_l_button_down() {
         return 0;
     }
 
-    state_->start_px = cursor;
+    Build_snap_edges_from_windows();
+    core::PointPx snapped_start = cursor;
+    if (Is_snap_enabled()) {
+        snapped_start = core::Snap_point_to_edges(
+            cursor, state_->vertical_edges, state_->horizontal_edges, kSnapThresholdPx);
+    }
+    state_->start_px = snapped_start;
     state_->dragging = true;
     state_->final_selection = {};
     state_->selection_source = core::SaveSelectionSource::Region;
     state_->selection_window = std::nullopt;
     state_->selection_monitor_index = std::nullopt;
     state_->live_rect = core::RectPx::From_points(state_->start_px, state_->start_px);
-    Build_snap_edges_from_windows();
     InvalidateRect(hwnd_, nullptr, TRUE);
     return 0;
 }
@@ -654,7 +663,7 @@ LRESULT OverlayWindow::On_mouse_move() {
         core::PointPx const cursor = Get_client_cursor_pos_px(hwnd_);
         core::RectPx candidate = core::Resize_rect_from_handle(
             state_->resize_anchor_rect, *state_->resize_handle, cursor);
-        if ((GetKeyState(VK_MENU) & 0x8000) == 0) {
+        if (Is_snap_enabled()) {
             candidate =
                 core::Snap_rect_to_edges(candidate, state_->vertical_edges,
                                          state_->horizontal_edges, kSnapThresholdPx);
@@ -665,8 +674,14 @@ LRESULT OverlayWindow::On_mouse_move() {
             core::Allowed_selection_rect(candidate, anchor, state_->cached_monitors);
     } else if (state_->dragging) {
         core::PointPx const cursor = Get_client_cursor_pos_px(hwnd_);
-        state_->live_rect =
+        core::RectPx candidate =
             core::RectPx::From_points(state_->start_px, cursor).Normalized();
+        if (Is_snap_enabled()) {
+            candidate =
+                core::Snap_rect_to_edges(candidate, state_->vertical_edges,
+                                         state_->horizontal_edges, kSnapThresholdPx);
+        }
+        state_->live_rect = candidate;
     } else {
         bool const shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
         bool const ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
@@ -684,7 +699,7 @@ LRESULT OverlayWindow::On_mouse_move() {
 LRESULT OverlayWindow::On_l_button_up() {
     if (state_->handle_dragging && state_->resize_handle.has_value()) {
         core::RectPx to_commit = state_->live_rect;
-        if ((GetKeyState(VK_MENU) & 0x8000) == 0) {
+        if (Is_snap_enabled()) {
             to_commit =
                 core::Snap_rect_to_edges(to_commit, state_->vertical_edges,
                                          state_->horizontal_edges, kSnapThresholdPx);
@@ -704,7 +719,7 @@ LRESULT OverlayWindow::On_l_button_up() {
         core::PointPx const cursor = Get_client_cursor_pos_px(hwnd_);
         core::RectPx raw =
             core::RectPx::From_points(state_->start_px, cursor).Normalized();
-        if ((GetKeyState(VK_MENU) & 0x8000) == 0) {
+        if (Is_snap_enabled()) {
             raw = core::Snap_rect_to_edges(raw, state_->vertical_edges,
                                            state_->horizontal_edges, kSnapThresholdPx);
         }
@@ -732,7 +747,16 @@ LRESULT OverlayWindow::On_paint() {
         input.modifier_preview = state_->modifier_preview;
         input.live_rect = state_->live_rect;
         input.final_selection = state_->final_selection;
-        input.cursor_client_px = Get_client_cursor_pos_px(hwnd_);
+        core::PointPx cursor = Get_client_cursor_pos_px(hwnd_);
+        bool const crosshair_mode = state_->final_selection.Is_empty() &&
+                                    !state_->dragging && !state_->handle_dragging &&
+                                    !state_->modifier_preview;
+        if (crosshair_mode && Is_snap_enabled()) {
+            cursor =
+                core::Snap_point_to_edges(cursor, state_->vertical_edges,
+                                          state_->horizontal_edges, kSnapThresholdPx);
+        }
+        input.cursor_client_px = cursor;
         input.paint_buffer = std::span<uint8_t>(resources_->paint_buffer);
         input.resources = &resources_->paint;
         Paint_overlay(hdc, hwnd_, rect, input);

@@ -18,7 +18,7 @@ constexpr COLORREF kCoordTooltipBorderText = RGB(46, 139, 87); // SeaGreen
 constexpr int kHandleHalfSize = 4; // 8x8 handle centered on contour
 constexpr int kMagnifierSize = 256;
 constexpr int kMagnifierZoom = 8; // source size = kMagnifierSize / kMagnifierZoom
-constexpr int kMagnifierSource = kMagnifierSize / kMagnifierZoom; // 64
+constexpr int kMagnifierSource = kMagnifierSize / kMagnifierZoom; // 32
 constexpr int kMagnifierPadding = 8;
 // Magnifier crosshair and contour: 66% opaque.
 constexpr unsigned char kMagnifierCrosshairAlpha = 168; // 255 * 66 / 100
@@ -26,6 +26,9 @@ constexpr unsigned char kMagnifierCrosshairAlpha = 168; // 255 * 66 / 100
 constexpr int kMagnifierCrosshairThickness = 8;
 constexpr int kMagnifierCrosshairGap = 20;   // center to inner arm end
 constexpr int kMagnifierCrosshairMargin = 8; // circle edge to outer arm end
+constexpr int kMagnifierCheckerTile = 16;
+constexpr COLORREF kMagnifierCheckerLight = RGB(224, 224, 224);
+constexpr COLORREF kMagnifierCheckerDark = RGB(168, 168, 168);
 constexpr int kColorChannelMax = 255;
 constexpr float kColorChannelMaxF = static_cast<float>(kColorChannelMax);
 
@@ -93,6 +96,31 @@ void Blend_magnifier_crosshair_onto_pixels(std::span<uint8_t> pixels, int width,
                 blend_g > kColorChannelMax ? kColorChannelMax : blend_g);
             row[off + 2] = static_cast<uint8_t>(
                 blend_r > kColorChannelMax ? kColorChannelMax : blend_r);
+        }
+    }
+}
+
+void Fill_magnifier_checkerboard(HDC dc, int left, int top) noexcept {
+    HBRUSH const dc_brush = static_cast<HBRUSH>(GetStockObject(DC_BRUSH));
+    if (!dc_brush) {
+        RECT fallback = {left, top, left + kMagnifierSize, top + kMagnifierSize};
+        FillRect(dc, &fallback, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+        return;
+    }
+
+    for (int y = 0; y < kMagnifierSize; y += kMagnifierCheckerTile) {
+        int const cell_top = top + y;
+        int const cell_bottom =
+            std::min(top + y + kMagnifierCheckerTile, top + kMagnifierSize);
+        for (int x = 0; x < kMagnifierSize; x += kMagnifierCheckerTile) {
+            int const cell_left = left + x;
+            int const cell_right =
+                std::min(left + x + kMagnifierCheckerTile, left + kMagnifierSize);
+            bool const dark =
+                (((x / kMagnifierCheckerTile) + (y / kMagnifierCheckerTile)) & 1) != 0;
+            SetDCBrushColor(dc, dark ? kMagnifierCheckerDark : kMagnifierCheckerLight);
+            RECT cell = {cell_left, cell_top, cell_right, cell_bottom};
+            FillRect(dc, &cell, dc_brush);
         }
     }
 }
@@ -361,70 +389,84 @@ void Draw_crosshair_and_coord_tooltip(HDC buf_dc, HBITMAP buf_bmp, HWND hwnd, in
         // Round magnifier (drawn before coord tooltip so coords stay on top).
         int const src_x = cx - kMagnifierSource / 2;
         int const src_y = cy - kMagnifierSource / 2;
-        bool const source_in_bounds = src_x >= 0 && src_y >= 0 &&
-                                      src_x + kMagnifierSource <= w &&
-                                      src_y + kMagnifierSource <= h;
+        int const src_right = src_x + kMagnifierSource;
+        int const src_bottom = src_y + kMagnifierSource;
+        int const sample_left = std::max(src_x, mon_left);
+        int const sample_top = std::max(src_y, mon_top);
+        int const sample_right = std::min(src_right, mon_right);
+        int const sample_bottom = std::min(src_bottom, mon_bottom);
+        bool const source_has_coverage =
+            sample_left < sample_right && sample_top < sample_bottom;
+
         int mag_left = 0, mag_top = 0;
-        if (source_in_bounds) {
-            int const pad = kMagnifierPadding;
-            struct {
-                int dx, dy;
-            } constexpr quadrants[] = {
-                {+pad, +pad},                                   // bottom-right
-                {-pad - kMagnifierSize, +pad},                  // bottom-left
-                {+pad, -pad - kMagnifierSize},                  // top-right
-                {-pad - kMagnifierSize, -pad - kMagnifierSize}, // top-left
-            };
-            bool placed = false;
-            for (auto const &q : quadrants) {
-                int const ml = cx + q.dx;
-                int const mt = cy + q.dy;
-                if (ml >= mon_left && mt >= mon_top &&
-                    ml + kMagnifierSize <= mon_right &&
-                    mt + kMagnifierSize <= mon_bottom) {
-                    mag_left = ml;
-                    mag_top = mt;
-                    placed = true;
-                    break;
-                }
+        int const pad = kMagnifierPadding;
+        struct {
+            int dx, dy;
+        } constexpr quadrants[] = {
+            {+pad, +pad},                                   // bottom-right
+            {-pad - kMagnifierSize, +pad},                  // bottom-left
+            {+pad, -pad - kMagnifierSize},                  // top-right
+            {-pad - kMagnifierSize, -pad - kMagnifierSize}, // top-left
+        };
+        bool placed = false;
+        for (auto const &q : quadrants) {
+            int const ml = cx + q.dx;
+            int const mt = cy + q.dy;
+            if (ml >= mon_left && mt >= mon_top && ml + kMagnifierSize <= mon_right &&
+                mt + kMagnifierSize <= mon_bottom) {
+                mag_left = ml;
+                mag_top = mt;
+                placed = true;
+                break;
             }
-            if (!placed) {
-                mag_left = std::clamp(cx + pad, mon_left, mon_right - kMagnifierSize);
-                mag_top = std::clamp(cy + pad, mon_top, mon_bottom - kMagnifierSize);
-            }
-            // Draw magnifier from capture so dotted crosshair is not magnified
-            // (Greenshot does the same).
-            HRGN rgn = CreateEllipticRgn(mag_left, mag_top, mag_left + kMagnifierSize,
-                                         mag_top + kMagnifierSize);
-            if (rgn) {
-                SelectClipRgn(buf_dc, rgn);
+        }
+        if (!placed) {
+            int const max_left = std::max(mon_left, mon_right - kMagnifierSize);
+            int const max_top = std::max(mon_top, mon_bottom - kMagnifierSize);
+            mag_left = std::clamp(cx + pad, mon_left, max_left);
+            mag_top = std::clamp(cy + pad, mon_top, max_top);
+        }
+
+        // Draw magnifier from capture so dotted crosshair is not magnified
+        // (Greenshot does the same). Out-of-monitor sample area is checkered.
+        HRGN rgn = CreateEllipticRgn(mag_left, mag_top, mag_left + kMagnifierSize,
+                                     mag_top + kMagnifierSize);
+        if (rgn) {
+            SelectClipRgn(buf_dc, rgn);
+            Fill_magnifier_checkerboard(buf_dc, mag_left, mag_top);
+
+            if (source_has_coverage) {
+                int const dst_left = mag_left + (sample_left - src_x) * kMagnifierZoom;
+                int const dst_top = mag_top + (sample_top - src_y) * kMagnifierZoom;
+                int const dst_w = (sample_right - sample_left) * kMagnifierZoom;
+                int const dst_h = (sample_bottom - sample_top) * kMagnifierZoom;
                 SetStretchBltMode(buf_dc, COLORONCOLOR);
                 if (capture && capture->Is_valid()) {
                     HDC capture_dc = CreateCompatibleDC(buf_dc);
                     if (capture_dc) {
                         HGDIOBJ old_cap = SelectObject(capture_dc, capture->bitmap);
-                        StretchBlt(buf_dc, mag_left, mag_top, kMagnifierSize,
-                                   kMagnifierSize, capture_dc, src_x, src_y,
-                                   kMagnifierSource, kMagnifierSource, SRCCOPY);
+                        StretchBlt(buf_dc, dst_left, dst_top, dst_w, dst_h, capture_dc,
+                                   sample_left, sample_top, sample_right - sample_left,
+                                   sample_bottom - sample_top, SRCCOPY);
                         SelectObject(capture_dc, old_cap);
                         DeleteDC(capture_dc);
                     }
                 } else {
-                    StretchBlt(buf_dc, mag_left, mag_top, kMagnifierSize,
-                               kMagnifierSize, buf_dc, src_x, src_y, kMagnifierSource,
-                               kMagnifierSource, SRCCOPY);
+                    StretchBlt(buf_dc, dst_left, dst_top, dst_w, dst_h, buf_dc,
+                               sample_left, sample_top, sample_right - sample_left,
+                               sample_bottom - sample_top, SRCCOPY);
                 }
-                SelectClipRgn(buf_dc, nullptr);
-                DeleteObject(rgn);
             }
-            HPEN mag_border_pen = res ? res->border_pen : nullptr;
-            if (mag_border_pen) {
-                HGDIOBJ old_pen = SelectObject(buf_dc, mag_border_pen);
-                SelectObject(buf_dc, GetStockObject(NULL_BRUSH));
-                Ellipse(buf_dc, mag_left, mag_top, mag_left + kMagnifierSize,
-                        mag_top + kMagnifierSize);
-                SelectObject(buf_dc, old_pen);
-            }
+            SelectClipRgn(buf_dc, nullptr);
+            DeleteObject(rgn);
+        }
+        HPEN mag_border_pen = res ? res->border_pen : nullptr;
+        if (mag_border_pen) {
+            HGDIOBJ old_pen = SelectObject(buf_dc, mag_border_pen);
+            SelectObject(buf_dc, GetStockObject(NULL_BRUSH));
+            Ellipse(buf_dc, mag_left, mag_top, mag_left + kMagnifierSize,
+                    mag_top + kMagnifierSize);
+            SelectObject(buf_dc, old_pen);
         }
 
         // Compute coord tooltip position (no pixel buffer needed).
@@ -458,18 +500,15 @@ void Draw_crosshair_and_coord_tooltip(HDC buf_dc, HBITMAP buf_bmp, HWND hwnd, in
         }
 
         // Single DIB round-trip for magnifier crosshair + tooltip background.
-        bool const need_pixels = source_in_bounds || tooltip_ready;
         int const row_bytes = greenflame::Row_bytes32(w);
         size_t const pix_size = static_cast<size_t>(row_bytes) * static_cast<size_t>(h);
-        if (need_pixels && pixels.size() >= pix_size) {
+        if (pixels.size() >= pix_size) {
             BITMAPINFOHEADER bmi;
             greenflame::Fill_bmi32_top_down(bmi, w, h);
             if (GetDIBits(buf_dc, buf_bmp, 0, static_cast<UINT>(h), pixels.data(),
                           reinterpret_cast<BITMAPINFO *>(&bmi), DIB_RGB_COLORS) != 0) {
-                if (source_in_bounds) {
-                    Blend_magnifier_crosshair_onto_pixels(pixels, w, h, row_bytes,
-                                                          mag_left, mag_top);
-                }
+                Blend_magnifier_crosshair_onto_pixels(pixels, w, h, row_bytes, mag_left,
+                                                      mag_top);
                 if (tooltip_ready) {
                     greenflame::core::Blend_rect_onto_pixels(
                         pixels, w, h, row_bytes, box_rect, kCoordTooltipBgR,

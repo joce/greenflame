@@ -14,6 +14,9 @@ class ITrayEvents {
   public:
     virtual ~ITrayEvents() = default;
     virtual void On_start_capture_requested() = 0;
+    virtual void On_copy_window_to_clipboard_requested() = 0;
+    virtual void On_copy_monitor_to_clipboard_requested() = 0;
+    virtual void On_copy_desktop_to_clipboard_requested() = 0;
     virtual void On_exit_requested() = 0;
 };
 
@@ -40,6 +43,9 @@ class TrayWindow final {
     LRESULT Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam);
     void Show_context_menu();
     void Notify_start_capture();
+    void Notify_copy_window_to_clipboard();
+    void Notify_copy_monitor_to_clipboard();
+    void Notify_copy_desktop_to_clipboard();
 
     ITrayEvents *events_ = nullptr;
     HWND hwnd_ = nullptr;

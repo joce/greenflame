@@ -468,50 +468,9 @@ void OverlayWindow::Copy_to_clipboard_and_close() {
         Destroy();
         return;
     }
-
-    int const row_bytes = Row_bytes32(cropped.width);
-    size_t const image_size =
-        static_cast<size_t>(row_bytes) * static_cast<size_t>(cropped.height);
-    BITMAPINFOHEADER info{};
-    Fill_bmi32_top_down(info, cropped.width, cropped.height);
-    info.biHeight = cropped.height;
-
-    HGLOBAL memory = nullptr;
-    HDC const dc = GetDC(nullptr);
-    if (dc) {
-        size_t const dib_size = sizeof(BITMAPINFOHEADER) + image_size;
-        memory = GlobalAlloc(GMEM_MOVEABLE, dib_size);
-        if (memory) {
-            void *const raw = GlobalLock(memory);
-            bool ok = false;
-            if (raw) {
-                memcpy(raw, &info, sizeof(BITMAPINFOHEADER));
-                uint8_t *bits = static_cast<uint8_t *>(raw) + sizeof(BITMAPINFOHEADER);
-                ok = GetDIBits(dc, cropped.bitmap, 0, cropped.height, bits,
-                               reinterpret_cast<BITMAPINFO *>(&info),
-                               DIB_RGB_COLORS) != 0;
-                GlobalUnlock(memory);
-            }
-            if (!ok) {
-                GlobalFree(memory);
-                memory = nullptr;
-            }
-        }
-        ReleaseDC(nullptr, dc);
-    }
+    bool const copied_to_clipboard = Copy_capture_to_clipboard(cropped, hwnd_);
     cropped.Free();
 
-    bool copied_to_clipboard = false;
-    if (memory && OpenClipboard(hwnd_)) {
-        if (EmptyClipboard() != 0 && SetClipboardData(CF_DIB, memory) != nullptr) {
-            copied_to_clipboard = true;
-            memory = nullptr; // Clipboard owns memory after SetClipboardData succeeds.
-        }
-        CloseClipboard();
-    }
-    if (memory) {
-        GlobalFree(memory);
-    }
     if (copied_to_clipboard && events_) {
         events_->On_selection_copied_to_clipboard();
     }

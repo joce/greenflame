@@ -10,10 +10,22 @@ constexpr wchar_t kToastWindowClass[] = L"GreenflameToast";
 constexpr UINT kTrayCallbackMessage = WM_APP + 1;
 constexpr UINT kTrayIconId = 1;
 constexpr int kStartCaptureCommandId = 1;
-constexpr int kExitCommandId = 2;
-constexpr int kHotkeyId = 1;
-constexpr int kHotkeyTestingErrorId = 2;
-constexpr int kHotkeyTestingWarningId = 3;
+constexpr int kCopyWindowCommandId = 2;
+constexpr int kCopyMonitorCommandId = 3;
+constexpr int kCopyDesktopCommandId = 4;
+constexpr int kExitCommandId = 5;
+constexpr wchar_t kCaptureRegionMenuText[] = L"Capture region\tPrt Scrn";
+constexpr wchar_t kCaptureMonitorMenuText[] =
+    L"Capture current monitor\tShift + Prt Scrn";
+constexpr wchar_t kCaptureWindowMenuText[] = L"Capture window\tCtrl + Prt Scrn";
+constexpr wchar_t kCaptureFullScreenMenuText[] =
+    L"Capture full screen\tCtrl + Shift + Prt Scrn";
+constexpr int kHotkeyStartCaptureId = 1;
+constexpr int kHotkeyCopyWindowId = 2;
+constexpr int kHotkeyCopyMonitorId = 3;
+constexpr int kHotkeyCopyDesktopId = 4;
+constexpr int kHotkeyTestingErrorId = 90;
+constexpr int kHotkeyTestingWarningId = 91;
 constexpr UINT kModNoRepeat = 0x4000u;
 constexpr UINT_PTR kToastTimerId = 1;
 constexpr UINT kToastDurationMs = 5000;
@@ -469,7 +481,7 @@ bool TrayWindow::Create(HINSTANCE hinstance, bool enable_testing_hotkeys) {
     toast_popup_ = std::make_unique<ToastPopup>(hinstance_);
 
     for (;;) {
-        if (RegisterHotKey(hwnd, kHotkeyId, kModNoRepeat, VK_SNAPSHOT)) {
+        if (RegisterHotKey(hwnd, kHotkeyStartCaptureId, kModNoRepeat, VK_SNAPSHOT)) {
             break;
         }
         int const user_choice =
@@ -482,6 +494,25 @@ bool TrayWindow::Create(HINSTANCE hinstance, bool enable_testing_hotkeys) {
             continue;
         }
         break;
+    }
+
+    bool const copy_window_registered =
+        RegisterHotKey(hwnd, kHotkeyCopyWindowId,
+                       static_cast<UINT>(MOD_CONTROL | kModNoRepeat), VK_SNAPSHOT) != 0;
+    bool const copy_monitor_registered =
+        RegisterHotKey(hwnd, kHotkeyCopyMonitorId,
+                       static_cast<UINT>(MOD_SHIFT | kModNoRepeat), VK_SNAPSHOT) != 0;
+    bool const copy_desktop_registered =
+        RegisterHotKey(hwnd, kHotkeyCopyDesktopId,
+                       static_cast<UINT>(MOD_CONTROL | MOD_SHIFT | kModNoRepeat),
+                       VK_SNAPSHOT) != 0;
+    if (!copy_window_registered || !copy_monitor_registered ||
+        !copy_desktop_registered) {
+        MessageBoxW(hwnd,
+                    L"One or more modified Print Screen hotkeys could not be "
+                    L"registered.\n"
+                    L"You can still use these commands from the tray menu.",
+                    L"Greenflame", MB_OK | MB_ICONWARNING);
     }
 
     if (testing_hotkeys_enabled_) {
@@ -548,6 +579,12 @@ LRESULT TrayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
         int const command = LOWORD(wparam);
         if (command == kStartCaptureCommandId) {
             Notify_start_capture();
+        } else if (command == kCopyWindowCommandId) {
+            Notify_copy_window_to_clipboard();
+        } else if (command == kCopyMonitorCommandId) {
+            Notify_copy_monitor_to_clipboard();
+        } else if (command == kCopyDesktopCommandId) {
+            Notify_copy_desktop_to_clipboard();
         } else if (command == kExitCommandId) {
             if (events_) {
                 events_->On_exit_requested();
@@ -556,8 +593,14 @@ LRESULT TrayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
         return 0;
     }
     case WM_HOTKEY:
-        if (wparam == kHotkeyId) {
+        if (wparam == kHotkeyStartCaptureId) {
             Notify_start_capture();
+        } else if (wparam == kHotkeyCopyWindowId) {
+            Notify_copy_window_to_clipboard();
+        } else if (wparam == kHotkeyCopyMonitorId) {
+            Notify_copy_monitor_to_clipboard();
+        } else if (wparam == kHotkeyCopyDesktopId) {
+            Notify_copy_desktop_to_clipboard();
         } else if (testing_hotkeys_enabled_ && wparam == kHotkeyTestingErrorId) {
             Show_balloon(TrayBalloonIcon::Error, kTestingErrorBalloonMessage);
         } else if (testing_hotkeys_enabled_ && wparam == kHotkeyTestingWarningId) {
@@ -568,7 +611,10 @@ LRESULT TrayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
         if (toast_popup_) {
             toast_popup_->Destroy();
         }
-        UnregisterHotKey(hwnd_, kHotkeyId);
+        UnregisterHotKey(hwnd_, kHotkeyStartCaptureId);
+        UnregisterHotKey(hwnd_, kHotkeyCopyWindowId);
+        UnregisterHotKey(hwnd_, kHotkeyCopyMonitorId);
+        UnregisterHotKey(hwnd_, kHotkeyCopyDesktopId);
         UnregisterHotKey(hwnd_, kHotkeyTestingErrorId);
         UnregisterHotKey(hwnd_, kHotkeyTestingWarningId);
         NOTIFYICONDATAW notify_data{};
@@ -583,7 +629,9 @@ LRESULT TrayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
         return DefWindowProcW(hwnd_, msg, wparam, lparam);
     default:
         if (msg == kTrayCallbackMessage) {
-            if (LOWORD(lparam) == WM_RBUTTONUP) {
+            if (LOWORD(lparam) == WM_LBUTTONUP) {
+                Notify_start_capture();
+            } else if (LOWORD(lparam) == WM_RBUTTONUP) {
                 Show_context_menu();
             }
             return 0;
@@ -597,7 +645,11 @@ void TrayWindow::Show_context_menu() {
     if (!menu) {
         return;
     }
-    AppendMenuW(menu, MF_STRING, kStartCaptureCommandId, L"Start capture");
+    AppendMenuW(menu, MF_STRING, kStartCaptureCommandId, kCaptureRegionMenuText);
+    AppendMenuW(menu, MF_STRING, kCopyMonitorCommandId, kCaptureMonitorMenuText);
+    AppendMenuW(menu, MF_STRING, kCopyWindowCommandId, kCaptureWindowMenuText);
+    AppendMenuW(menu, MF_STRING, kCopyDesktopCommandId, kCaptureFullScreenMenuText);
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kExitCommandId, L"Exit");
     POINT cursor{};
     GetCursorPos(&cursor);
@@ -610,6 +662,24 @@ void TrayWindow::Show_context_menu() {
 void TrayWindow::Notify_start_capture() {
     if (events_) {
         events_->On_start_capture_requested();
+    }
+}
+
+void TrayWindow::Notify_copy_window_to_clipboard() {
+    if (events_) {
+        events_->On_copy_window_to_clipboard_requested();
+    }
+}
+
+void TrayWindow::Notify_copy_monitor_to_clipboard() {
+    if (events_) {
+        events_->On_copy_monitor_to_clipboard_requested();
+    }
+}
+
+void TrayWindow::Notify_copy_desktop_to_clipboard() {
+    if (events_) {
+        events_->On_copy_desktop_to_clipboard_requested();
     }
 }
 

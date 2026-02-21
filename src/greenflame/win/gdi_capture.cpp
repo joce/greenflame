@@ -167,4 +167,57 @@ bool Crop_capture(GdiCaptureResult const &source, int left, int top, int width,
     return ok;
 }
 
+bool Copy_capture_to_clipboard(GdiCaptureResult const &capture, HWND owner_window) {
+    if (!capture.Is_valid()) {
+        return false;
+    }
+
+    int const row_bytes = Row_bytes32(capture.width);
+    size_t const image_size =
+        static_cast<size_t>(row_bytes) * static_cast<size_t>(capture.height);
+    BITMAPINFOHEADER info{};
+    Fill_bmi32_top_down(info, capture.width, capture.height);
+    info.biHeight = capture.height;
+
+    HGLOBAL memory = nullptr;
+    HDC const dc = GetDC(nullptr);
+    if (dc != nullptr) {
+        size_t const dib_size = sizeof(BITMAPINFOHEADER) + image_size;
+        memory = GlobalAlloc(GMEM_MOVEABLE, dib_size);
+        if (memory != nullptr) {
+            void *const raw = GlobalLock(memory);
+            bool ok = false;
+            if (raw != nullptr) {
+                memcpy(raw, &info, sizeof(BITMAPINFOHEADER));
+                uint8_t *bits = static_cast<uint8_t *>(raw) + sizeof(BITMAPINFOHEADER);
+                ok = GetDIBits(dc, capture.bitmap, 0, capture.height, bits,
+                               reinterpret_cast<BITMAPINFO *>(&info),
+                               DIB_RGB_COLORS) != 0;
+                GlobalUnlock(memory);
+            }
+            if (!ok) {
+                GlobalFree(memory);
+                memory = nullptr;
+            }
+        }
+        ReleaseDC(nullptr, dc);
+    }
+
+    bool copied_to_clipboard = false;
+    HWND const clipboard_owner =
+        (owner_window != nullptr && IsWindow(owner_window) != 0) ? owner_window
+                                                                 : nullptr;
+    if (memory != nullptr && OpenClipboard(clipboard_owner) != 0) {
+        if (EmptyClipboard() != 0 && SetClipboardData(CF_DIB, memory) != nullptr) {
+            copied_to_clipboard = true;
+            memory = nullptr; // Clipboard owns memory after SetClipboardData succeeds.
+        }
+        CloseClipboard();
+    }
+    if (memory != nullptr) {
+        GlobalFree(memory);
+    }
+    return copied_to_clipboard;
+}
+
 } // namespace greenflame

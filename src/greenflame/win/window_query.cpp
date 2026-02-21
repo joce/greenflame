@@ -67,7 +67,12 @@ namespace {
 } // namespace
 
 std::optional<HWND> Get_window_under_cursor(POINT screen_pt, HWND exclude_hwnd) {
-    HWND hwnd = GetWindow(exclude_hwnd, GW_HWNDNEXT);
+    HWND hwnd = nullptr;
+    if (exclude_hwnd != nullptr) {
+        hwnd = GetWindow(exclude_hwnd, GW_HWNDNEXT);
+    } else {
+        hwnd = GetTopWindow(nullptr);
+    }
     while (hwnd != nullptr) {
         if (!IsWindowVisible(hwnd)) {
             hwnd = GetWindow(hwnd, GW_HWNDNEXT);
@@ -84,6 +89,24 @@ std::optional<HWND> Get_window_under_cursor(POINT screen_pt, HWND exclude_hwnd) 
         hwnd = GetWindow(hwnd, GW_HWNDNEXT);
     }
     return std::nullopt;
+}
+
+std::optional<greenflame::core::RectPx> Get_foreground_window_rect(HWND exclude_hwnd) {
+    HWND const window = GetForegroundWindow();
+    if (window == nullptr || window == exclude_hwnd) {
+        return std::nullopt;
+    }
+    if (!IsWindowVisible(window) || GetParent(window) != nullptr) {
+        return std::nullopt;
+    }
+
+    RECT rect{};
+    if (!Try_get_window_bounds(window, rect)) {
+        return std::nullopt;
+    }
+    return greenflame::core::RectPx::From_ltrb(
+        static_cast<int32_t>(rect.left), static_cast<int32_t>(rect.top),
+        static_cast<int32_t>(rect.right), static_cast<int32_t>(rect.bottom));
 }
 
 std::optional<greenflame::core::RectPx>

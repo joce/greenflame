@@ -15,6 +15,9 @@ class GreenflameApp final : public ITrayEvents, public IOverlayEvents {
 
   private:
     void On_start_capture_requested() override;
+    void On_copy_window_to_clipboard_requested() override;
+    void On_copy_monitor_to_clipboard_requested() override;
+    void On_copy_desktop_to_clipboard_requested() override;
     void On_exit_requested() override;
     void On_overlay_closed() override;
     void On_selection_copied_to_clipboard() override;

@@ -32,6 +32,10 @@ bool Save_capture_to_bmp(GdiCaptureResult const &capture, wchar_t const *path);
 bool Crop_capture(GdiCaptureResult const &source, int left, int top, int width,
                   int height, GdiCaptureResult &out);
 
+// Copies a 32bpp capture to clipboard using CF_DIB. Returns true on success.
+// If owner_window is null, the current task owns the clipboard while open.
+bool Copy_capture_to_clipboard(GdiCaptureResult const &capture, HWND owner_window);
+
 // --- Helpers for 32bpp top-down DIB (used by capture and overlay paint) ---
 void Fill_bmi32_top_down(BITMAPINFOHEADER &bmi, int width, int height);
 int Row_bytes32(int width);

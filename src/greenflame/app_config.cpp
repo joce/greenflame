@@ -67,12 +67,20 @@ AppConfig AppConfig::Load() {
         }
         if (root.has_key("save")) {
             easyjson::JSON const &save = root["save"];
-            if (save.has_key("last_save_dir")) {
-                easyjson::JSON const &value = save["last_save_dir"];
-                if (value.JSON_type() == easyjson::JSON::Class::String) {
-                    config.last_save_dir = To_wide(value.to_string());
+            auto read_string = [&](char const *key, std::wstring &target) {
+                if (save.has_key(key)) {
+                    easyjson::JSON const &value = save[key];
+                    if (value.JSON_type() == easyjson::JSON::Class::String) {
+                        target = To_wide(value.to_string());
+                    }
                 }
-            }
+            };
+            read_string("last_save_dir", config.last_save_dir);
+            read_string("filename_pattern_region", config.filename_pattern_region);
+            read_string("filename_pattern_desktop", config.filename_pattern_desktop);
+            read_string("filename_pattern_monitor", config.filename_pattern_monitor);
+            read_string("filename_pattern_window", config.filename_pattern_window);
+            read_string("default_save_format", config.default_save_format);
         }
     } catch (...) {
         // Parse error or file read error: return default config.
@@ -91,6 +99,16 @@ bool AppConfig::Save() const {
         easyjson::JSON root = easyjson::object();
         root["ui"]["show_balloons"] = show_balloons;
         root["save"]["last_save_dir"] = To_utf8(last_save_dir);
+        auto write_pattern = [&](char const *key, std::wstring const &value) {
+            if (!value.empty()) {
+                root["save"][key] = To_utf8(value);
+            }
+        };
+        write_pattern("filename_pattern_region", filename_pattern_region);
+        write_pattern("filename_pattern_desktop", filename_pattern_desktop);
+        write_pattern("filename_pattern_monitor", filename_pattern_monitor);
+        write_pattern("filename_pattern_window", filename_pattern_window);
+        write_pattern("default_save_format", default_save_format);
 
         std::ofstream file(path);
         if (!file) {
@@ -107,6 +125,13 @@ void AppConfig::Normalize() {
     if (last_save_dir.size() >= MAX_PATH) {
         last_save_dir.resize(MAX_PATH - 1);
     }
+    auto clamp_pattern = [](std::wstring &s) {
+        if (s.size() > 256) s.resize(256);
+    };
+    clamp_pattern(filename_pattern_region);
+    clamp_pattern(filename_pattern_desktop);
+    clamp_pattern(filename_pattern_monitor);
+    clamp_pattern(filename_pattern_window);
 }
 
 } // namespace greenflame

@@ -283,6 +283,34 @@ LRESULT OverlayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
     }
 }
 
+std::wstring OverlayWindow::Resolve_save_directory() const {
+    if (config_ && !config_->last_save_dir.empty()) {
+        return config_->last_save_dir;
+    }
+    wchar_t pictures_dir[MAX_PATH] = {};
+    SHGetFolderPathW(nullptr, CSIDL_MYPICTURES, nullptr, 0, pictures_dir);
+    return pictures_dir;
+}
+
+std::vector<std::wstring> OverlayWindow::List_directory_filenames(std::wstring_view dir) {
+    std::vector<std::wstring> result;
+    std::wstring search_path(dir);
+    if (!search_path.empty() && search_path.back() != L'\\') {
+        search_path += L'\\';
+    }
+    search_path += L'*';
+    WIN32_FIND_DATAW fd{};
+    HANDLE const h = FindFirstFileW(search_path.c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return result;
+    do {
+        if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0) {
+            result.emplace_back(fd.cFileName);
+        }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return result;
+}
+
 void OverlayWindow::Build_default_save_name(wchar_t *out, size_t out_chars) const {
     if (!out || out_chars == 0) {
         return;
@@ -297,16 +325,47 @@ void OverlayWindow::Build_default_save_name(wchar_t *out, size_t out_chars) cons
             window_title = buffer;
         }
     }
-    core::SaveTimestamp timestamp{};
-    timestamp.day = st.wDay;
-    timestamp.month = st.wMonth;
-    timestamp.year_two_digits = st.wYear % 100;
-    timestamp.hour = st.wHour;
-    timestamp.minute = st.wMinute;
-    timestamp.second = st.wSecond;
-    std::wstring const name = core::Build_default_save_name(
-        state_->selection_source, state_->selection_monitor_index, window_title,
-        timestamp);
+    core::FilenamePatternContext ctx{};
+    ctx.timestamp.day = st.wDay;
+    ctx.timestamp.month = st.wMonth;
+    ctx.timestamp.year = st.wYear;
+    ctx.timestamp.hour = st.wHour;
+    ctx.timestamp.minute = st.wMinute;
+    ctx.timestamp.second = st.wSecond;
+    ctx.monitor_index_zero_based = state_->selection_monitor_index;
+    ctx.window_title = window_title;
+
+    std::wstring_view pattern;
+    if (config_) {
+        switch (state_->selection_source) {
+        case core::SaveSelectionSource::Region:
+            pattern = config_->filename_pattern_region;
+            break;
+        case core::SaveSelectionSource::Desktop:
+            pattern = config_->filename_pattern_desktop;
+            break;
+        case core::SaveSelectionSource::Monitor:
+            pattern = config_->filename_pattern_monitor;
+            break;
+        case core::SaveSelectionSource::Window:
+            pattern = config_->filename_pattern_window;
+            break;
+        }
+    }
+
+    // Resolve ${num} by directory-scanning if the pattern uses it.
+    std::wstring_view const effective_pattern =
+        pattern.empty() ? core::Default_filename_pattern(state_->selection_source)
+                        : pattern;
+    if (core::Pattern_uses_num(effective_pattern)) {
+        std::wstring const save_dir = Resolve_save_directory();
+        std::vector<std::wstring> const files = List_directory_filenames(save_dir);
+        ctx.incrementing_number =
+            core::Find_next_num_for_pattern(effective_pattern, ctx, files);
+    }
+
+    std::wstring const name =
+        core::Build_default_save_name(state_->selection_source, ctx, pattern);
     wcsncpy_s(out, out_chars, name.c_str(), _TRUNCATE);
 }
 
@@ -373,6 +432,69 @@ void OverlayWindow::Update_modifier_preview(bool shift, bool ctrl) {
     }
 }
 
+void OverlayWindow::Save_directly_and_close() {
+    if (!resources_->capture.Is_valid()) {
+        return;
+    }
+    core::RectPx const &selection = state_->final_selection;
+    if (selection.Is_empty()) {
+        return;
+    }
+
+    GdiCaptureResult cropped;
+    if (!Crop_capture(resources_->capture, selection.left, selection.top,
+                      selection.Width(), selection.Height(), cropped)) {
+        Destroy();
+        return;
+    }
+
+    std::wstring const save_dir = Resolve_save_directory();
+
+    wchar_t default_name[256] = {};
+    Build_default_save_name(default_name, 256);
+
+    // Determine extension from config.
+    std::wstring_view ext = L".png";
+    core::ImageSaveFormat format = core::ImageSaveFormat::Png;
+    if (config_) {
+        if (config_->default_save_format == L"jpg") {
+            ext = L".jpg";
+            format = core::ImageSaveFormat::Jpeg;
+        } else if (config_->default_save_format == L"bmp") {
+            ext = L".bmp";
+            format = core::ImageSaveFormat::Bmp;
+        }
+    }
+
+    std::wstring full_path = save_dir;
+    if (!full_path.empty() && full_path.back() != L'\\') {
+        full_path += L'\\';
+    }
+    full_path += default_name;
+    full_path += ext;
+
+    bool saved = false;
+    if (format == core::ImageSaveFormat::Jpeg) {
+        saved = Save_capture_to_jpeg(cropped, full_path.c_str());
+    } else if (format == core::ImageSaveFormat::Bmp) {
+        saved = Save_capture_to_bmp(cropped, full_path.c_str());
+    } else {
+        saved = Save_capture_to_png(cropped, full_path.c_str());
+    }
+
+    cropped.Free();
+    if (saved) {
+        if (config_) {
+            config_->last_save_dir = save_dir;
+            config_->Normalize();
+        }
+        if (events_) {
+            events_->On_selection_saved_to_file();
+        }
+        Destroy();
+    }
+}
+
 void OverlayWindow::Save_as_and_close() {
     if (!resources_->capture.Is_valid()) {
         return;
@@ -404,14 +526,7 @@ void OverlayWindow::Save_as_and_close() {
     ofn.lpstrDefExt = L"png";
     ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_EXPLORER;
 
-    std::wstring initial_dir;
-    if (config_ && !config_->last_save_dir.empty()) {
-        initial_dir = config_->last_save_dir;
-    } else {
-        wchar_t pictures_dir[MAX_PATH] = {};
-        SHGetFolderPathW(nullptr, CSIDL_MYPICTURES, nullptr, 0, pictures_dir);
-        initial_dir = pictures_dir;
-    }
+    std::wstring const initial_dir = Resolve_save_directory();
     if (!initial_dir.empty()) {
         ofn.lpstrInitialDir = initial_dir.c_str();
     }
@@ -497,16 +612,14 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
         }
         return 0;
     }
-    if (wparam == VK_RETURN) {
-        if (!state_->final_selection.Is_empty()) {
-            Save_as_and_close();
-        }
-        return 0;
-    }
     if ((GetKeyState(VK_CONTROL) & 0x8000) != 0 &&
         !state_->final_selection.Is_empty()) {
         if (wparam == L'S') {
-            Save_as_and_close();
+            if ((GetKeyState(VK_SHIFT) & 0x8000) != 0) {
+                Save_as_and_close();
+            } else {
+                Save_directly_and_close();
+            }
             return 0;
         }
         if (wparam == L'C') {

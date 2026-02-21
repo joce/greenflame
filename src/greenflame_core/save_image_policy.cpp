@@ -10,6 +10,15 @@ constexpr size_t kMaxWindowTitleChars = 50;
     return static_cast<unsigned>(ch) < 0x20u || std::wcschr(kInvalid, ch) != nullptr;
 }
 
+[[nodiscard]] bool Equals_no_case(std::wstring_view a,
+                                  std::wstring_view b) noexcept {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); ++i) {
+        if (std::towlower(a[i]) != std::towlower(b[i])) return false;
+    }
+    return true;
+}
+
 [[nodiscard]] bool Ends_with_no_case(std::wstring_view s,
                                      std::wstring_view suffix) noexcept {
     if (s.size() < suffix.size()) return false;
@@ -20,6 +29,62 @@ constexpr size_t kMaxWindowTitleChars = 50;
         if (a != b) return false;
     }
     return true;
+}
+
+[[nodiscard]] bool Is_known_variable(std::wstring_view name) noexcept {
+    return name == L"YYYY" || name == L"YY" || name == L"MM" || name == L"DD" ||
+           name == L"hh" || name == L"mm" || name == L"ss" || name == L"title" ||
+           name == L"monitor" || name == L"num";
+}
+
+[[nodiscard]] std::wstring Resolve_variable(std::wstring_view name,
+                                            FilenamePatternContext const &ctx) {
+    wchar_t buf[16] = {};
+    auto const &ts = ctx.timestamp;
+    if (name == L"YYYY") {
+        swprintf_s(buf, L"%04u", ts.year);
+        return buf;
+    }
+    if (name == L"YY") {
+        swprintf_s(buf, L"%02u", ts.year % 100);
+        return buf;
+    }
+    if (name == L"MM") {
+        swprintf_s(buf, L"%02u", ts.month);
+        return buf;
+    }
+    if (name == L"DD") {
+        swprintf_s(buf, L"%02u", ts.day);
+        return buf;
+    }
+    if (name == L"hh") {
+        swprintf_s(buf, L"%02u", ts.hour);
+        return buf;
+    }
+    if (name == L"mm") {
+        swprintf_s(buf, L"%02u", ts.minute);
+        return buf;
+    }
+    if (name == L"ss") {
+        swprintf_s(buf, L"%02u", ts.second);
+        return buf;
+    }
+    if (name == L"title") {
+        if (ctx.window_title.empty()) return L"window";
+        std::wstring sanitized =
+            Sanitize_filename_segment(ctx.window_title, kMaxWindowTitleChars);
+        return sanitized.empty() ? std::wstring(L"window") : sanitized;
+    }
+    if (name == L"monitor") {
+        if (!ctx.monitor_index_zero_based.has_value()) return {};
+        swprintf_s(buf, L"%zu", *ctx.monitor_index_zero_based + 1);
+        return buf;
+    }
+    if (name == L"num") {
+        swprintf_s(buf, L"%06u", ctx.incrementing_number);
+        return buf;
+    }
+    return {};
 }
 
 } // namespace
@@ -36,36 +101,85 @@ std::wstring Sanitize_filename_segment(std::wstring_view input, size_t max_chars
     return out;
 }
 
-std::wstring
-Build_default_save_name(SaveSelectionSource selection_source,
-                        std::optional<size_t> selection_monitor_index_zero_based,
-                        std::wstring_view window_title, SaveTimestamp timestamp) {
-    wchar_t time_part[32] = {};
-    swprintf_s(time_part, L"%02u%02u%02u-%02u%02u%02u", timestamp.day, timestamp.month,
-               timestamp.year_two_digits, timestamp.hour, timestamp.minute,
-               timestamp.second);
-
-    switch (selection_source) {
-    case SaveSelectionSource::Region:
-    case SaveSelectionSource::Desktop:
-        return std::wstring(L"Greenflame-") + time_part;
-    case SaveSelectionSource::Monitor: {
-        size_t const monitor_id = selection_monitor_index_zero_based.value_or(0) + 1;
-        wchar_t buf[256] = {};
-        swprintf_s(buf, L"Greenflame-monitor%zu-%ls", monitor_id, time_part);
-        return buf;
-    }
-    case SaveSelectionSource::Window: {
-        std::wstring window_name = L"window";
-        if (!window_title.empty()) {
-            std::wstring sanitized =
-                Sanitize_filename_segment(window_title, kMaxWindowTitleChars);
-            if (!sanitized.empty()) window_name = std::move(sanitized);
+std::wstring Expand_filename_pattern(std::wstring_view pattern,
+                                     FilenamePatternContext const &ctx) {
+    std::wstring result;
+    result.reserve(pattern.size() + 32);
+    size_t i = 0;
+    while (i < pattern.size()) {
+        if (i + 1 < pattern.size() && pattern[i] == L'$' && pattern[i + 1] == L'{') {
+            size_t const close = pattern.find(L'}', i + 2);
+            if (close == std::wstring_view::npos) {
+                result.append(pattern.substr(i));
+                break;
+            }
+            std::wstring_view var_name = pattern.substr(i + 2, close - (i + 2));
+            if (Is_known_variable(var_name)) {
+                result.append(Resolve_variable(var_name, ctx));
+            } else {
+                result.append(pattern.substr(i, close - i + 1));
+            }
+            i = close + 1;
+        } else {
+            result.push_back(pattern[i]);
+            ++i;
         }
-        return std::wstring(L"Greenflame-") + window_name + L"-" + time_part;
     }
+    return result;
+}
+
+bool Pattern_uses_num(std::wstring_view pattern) noexcept {
+    return pattern.find(L"${num}") != std::wstring_view::npos;
+}
+
+unsigned Find_next_num_for_pattern(std::wstring_view pattern,
+                                   FilenamePatternContext const &ctx,
+                                   std::vector<std::wstring> const &existing_filenames) {
+    if (!Pattern_uses_num(pattern)) return 1;
+
+    static constexpr std::wstring_view kExtensions[] = {L".png", L".jpg", L".jpeg",
+                                                        L".bmp"};
+    FilenamePatternContext trial_ctx = ctx;
+    for (unsigned num = 1;; ++num) {
+        trial_ctx.incrementing_number = num;
+        std::wstring const candidate = Expand_filename_pattern(pattern, trial_ctx);
+        bool found = false;
+        for (std::wstring const &existing : existing_filenames) {
+            for (std::wstring_view ext : kExtensions) {
+                std::wstring with_ext = candidate;
+                with_ext += ext;
+                if (Equals_no_case(existing, with_ext)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (found) break;
+        }
+        if (!found) return num;
     }
-    return std::wstring(L"Greenflame-") + time_part;
+}
+
+std::wstring_view Default_filename_pattern(SaveSelectionSource source) {
+    switch (source) {
+    case SaveSelectionSource::Region:
+        return kDefaultPatternRegion;
+    case SaveSelectionSource::Desktop:
+        return kDefaultPatternDesktop;
+    case SaveSelectionSource::Monitor:
+        return kDefaultPatternMonitor;
+    case SaveSelectionSource::Window:
+        return kDefaultPatternWindow;
+    }
+    return kDefaultPatternRegion;
+}
+
+std::wstring Build_default_save_name(SaveSelectionSource selection_source,
+                                     FilenamePatternContext const &context,
+                                     std::wstring_view pattern_override) {
+    std::wstring_view const pattern = pattern_override.empty()
+                                          ? Default_filename_pattern(selection_source)
+                                          : pattern_override;
+    return Expand_filename_pattern(pattern, context);
 }
 
 std::wstring Ensure_image_save_extension(std::wstring_view path,

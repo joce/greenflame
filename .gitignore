@@ -1,5 +1,7 @@
 /build/
 /out/
+.claude/
+.cursor/
 .vscode/
 .vs/
 enc_temp_folder/

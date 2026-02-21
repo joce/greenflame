@@ -1,8 +1,5 @@
 #pragma once
 
-// #include <cstddef>
-#include <memory>
-
 namespace greenflame {
 
 class AppConfig;
@@ -40,6 +37,10 @@ class OverlayWindow final {
     void Build_default_save_name(wchar_t *out, size_t out_chars) const;
     void Build_snap_edges_from_windows();
     void Update_modifier_preview(bool shift, bool ctrl);
+    [[nodiscard]] std::wstring Resolve_save_directory() const;
+    [[nodiscard]] static std::vector<std::wstring>
+    List_directory_filenames(std::wstring_view dir);
+    void Save_directly_and_close();
     void Save_as_and_close();
     void Copy_to_clipboard_and_close();
 

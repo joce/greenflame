@@ -53,83 +53,23 @@ Inspired by:
 
 ---
 
-## How to build (MANDATORY)
+## Build & Test Execution (MANDATORY)
 
-### Prerequisites
+Build and test commands have been moved to docs:
 
-The following MUST be available:
+- [docs/build.md](docs/build.md) for configure/build/analysis/lint expectations
+- [docs/testing.md](docs/testing.md) for test build/run commands and Catch2 usage
 
-- Visual Studio 2026 (18.2.1 or later) with *Desktop development with C++*
-- Windows 11 SDK
-- CMake ≥ 3.26
-- Ninja (recommended)
+These docs are authoritative for execution steps and command lines.
 
-### Configure (from repo root)
+Before considering a task complete:
 
-```bat
-cmake --preset x64-debug
-```
-
-### Build
-
-```bat
-cmake --build --preset x64-debug
-```
-
-### Output
-
-The executable is produced at:
-
-```bat
-build\x64-debug\greenflame.exe
-```
-
-### Release build
-
-```bat
-cmake --preset x64-release
-cmake --build --preset x64-release
-```
-
-### Clang build
-
-With the Visual Studio "C++ Clang compiler for Windows" (or "Clang-cl") component installed:
-
-```bat
-cmake --preset x64-debug-clang
-cmake --build --preset x64-debug-clang
-```
-
-Output: `build\x64-debug-clang\greenflame.exe`. Run tests: `ctest --test-dir build\x64-debug-clang`.
-
-For release with Clang: `cmake --preset x64-release-clang` then `cmake --build --preset x64-release-clang`.
-
-### Static analysis and include analysis (non-mandatory)
-
-- **clang-tidy:** `compile_commands.json` is generated in the build dir (from `CMAKE_EXPORT_COMPILE_COMMANDS ON`). Use the Clang preset build dir so include paths and defines match. Example: `clang-tidy -p build\x64-debug-clang src\greenflame\win\gdi_capture.cpp` (and similarly for other sources under `src\greenflame\` and `src\greenflame_core\`).
-- **Include timing:** Clang builds use `-ftime-trace`; the compiler emits `.json` trace files in the build dir. Open them in Chrome’s `chrome://tracing` to inspect time spent in includes and in the compiler.
-- **Include What You Use (IWYU)** can use the same `compile_commands.json` for optional include-cleanup suggestions.
-
-### Formatting and lint policy before finishing a task
-
-When a working version is reached and behavior is acceptable:
-
-1. Run **clang-format** on changed C/C++ files.
-2. During iteration, run **clang-tidy** on changed translation units (`.cpp` files).
-3. Before considering the task complete, run **clang-tidy on all translation units** in `src/` and `tests/`.
-
-Rationale: a change in one file (especially headers, inline code, templates, macros, or shared declarations) can surface a tidy warning in another file that was not directly modified.
-
-### Completeness and correctness
-
-- Code iteration can be done on the MSVC debug build only.
-- However, all builds (debug and release) must be run on all compilers (MSVC and Clang) and must pass before any task is considered complete. This is a hard requirement.
+- all required builds in [docs/build.md](docs/build.md) must pass
+- all required test runs in [docs/testing.md](docs/testing.md) must pass
 
 ---
 
-## Unit Tests (MANDATORY FOR CORE LOGIC)
-
-### Philosophy
+## Unit Test Policy (MANDATORY FOR CORE LOGIC)
 
 - **All testable logic lives in `greenflame_core`**
 - The GUI executable (`greenflame`) must remain thin
@@ -139,79 +79,11 @@ Rationale: a change in one file (especially headers, inline code, templates, mac
   - DPI and coordinate conversions
   - cross-monitor selection rules
   - annotation model logic
-
-### Build tests
-
-Tests are enabled via CMake’s standard `BUILD_TESTING` option (ON by default).
-
-```bat
-cmake --preset x64-debug
-cmake --build --preset x64-debug
-```
-
-### Run tests
-
-```bat
-ctest --test-dir build\x64-debug
-```
-
-If using a multi-config generator (Visual Studio):
-
-```bat
-ctest --test-dir build\x64-debug -C Debug
-```
-
-Test must be run and must pass before any task is considered complete. This is a hard requirement.
-
----
-
-## Catch2 Testing (authoritative)
-
-### How Catch2 is integrated
-
-- Test framework: **Catch2 v3**
-- Integration method: **CMake FetchContent** in `tests/CMakeLists.txt` (tag v3.5.4). First configure (or when the FetchContent cache is missing) **requires network**; request network permission for that configure step in sandboxed/CI environments.
-- No global install and no vcpkg requirement
-- The test binary is: `greenflame_tests`
-
-Agents must NOT add ad-hoc test runners or alternate test frameworks.
-
-### Where to add tests
-
+- Use Catch2 v3 integration defined in `tests/CMakeLists.txt`
+- Do not add ad-hoc test runners or alternate test frameworks
 - Add new test files under `tests/`
 - Register them in `tests/CMakeLists.txt` as sources of `greenflame_tests`
 - Tests must only link against `greenflame_core` (never `greenflame`)
-
-### Writing a test
-
-Use Catch2 v3 macros.
-
-Example structure:
-
-```cpp
-# include <catch2/catch_test_macros.hpp>
-
-TEST_CASE("something important")
-{
-    REQUIRE(1 + 1 == 2);
-}
-```
-
-### Running tests directly
-
-You can run the test executable (useful for filters):
-
-```bat
-build\x64-debug\greenflame_tests.exe
-```
-
-Run a subset via Catch2 filters:
-
-```bat
-build\x64-debug\greenflame_tests.exe "RectPx*"
-```
-
-Prefer `ctest` for standard runs; use direct execution for local filtering.
 
 ---
 

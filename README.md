@@ -90,9 +90,11 @@ The `default_save_format` setting controls which format **Ctrl-S** uses. Accepte
 
 ---
 
-## Build
+## Build and test
 
-See [AGENTS.md](AGENTS.md) for toolchain and build steps.
+- Build instructions: [docs/build.md](docs/build.md)
+- Test instructions: [docs/testing.md](docs/testing.md)
+- Agent-specific repository rules: [AGENTS.md](AGENTS.md)
 
 ---
 

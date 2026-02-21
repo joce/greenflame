@@ -4,8 +4,8 @@
 
 Yet another Windows screenshot tool, with very opinionated set of behaviors.  `¯\_(ツ)_/¯`
 
-The selection scheme of [Greenshot](https://greenshot.org/)
-<img src="https://avatars.githubusercontent.com/u/5614224?s=200&v=4" alt="Greenshot" style="width: 16px; height: 16px;">, the editing scheme of [Flameshot](https://flameshot.org/) <img src="https://flameshot.org/flameshot-icon.svg" alt="Flameshot" style="width: 16px; height: 16px;">, all in one tool.
+A selection scheme inspired by [Greenshot](https://greenshot.org/)
+<img src="https://avatars.githubusercontent.com/u/5614224?s=200&v=4" alt="Greenshot" style="width: 16px; height: 16px;">, an editing scheme inspired by [Flameshot](https://flameshot.org/) <img src="https://flameshot.org/flameshot-icon.svg" alt="Flameshot" style="width: 16px; height: 16px;">, all in one tool.
 
 <br clear="left"/>
 
@@ -15,16 +15,18 @@ The selection scheme of [Greenshot](https://greenshot.org/)
 
 **Run** `greenflame.exe`. The executable sits in the tray.
 
-**Print Screen** or **right-click** the tray icon ➜  **Start capture** or **Exit**.
+Press the **Print Screen** key, or **left-click** the tray icon to start an interactive capture. Alternatively, **right-click** the tray icon and choose a capture mode from the context menu.
 
-After **Start capture**, your screen is captured and you choose a region:
+In interactive mode, the screen is captured and a region is selected:
 
 - **Click and drag** to select a rectangle (hold **Alt** to disable snapping).
-- **Shift** + click ➜ select the whole monitor under the cursor.
 - **Ctrl** + click ➜ select the window under the cursor.
-- **Shift+Ctrl** + click ➜ select the whole screen.
+- **Shift** + click ➜ select the whole monitor under the cursor.
+- **Shift+Ctrl** + click ➜ select the whole desktop.
 
-**Drag the handles** on the selection to resize. Hold **Alt** to disable snapping.
+Once a region is selected:
+
+**Drag the handles** on the selection to resize (hold **Alt** to disable snapping).
 
 - **Ctrl-S** ➜ save directly (no dialog) to the last-used folder as the configured format (default PNG), then close.
 - **Ctrl-Shift-S** ➜ open **Save As** dialog, then save and close.
@@ -32,6 +34,23 @@ After **Start capture**, your screen is captured and you choose a region:
 - **Escape** ➜ cancel or go back.
 
 **Save As** supports **PNG**, **JPEG**, and **BMP**.
+
+---
+
+## Hotkeys
+
+All hotkeys use the **Print Screen** key with modifier combinations. They are also available from the tray icon's right-click context menu.
+
+| Hotkey | Action |
+|--------|--------|
+| **Prt Scrn** | Start interactive capture (select a region) |
+| **Ctrl + Prt Scrn** | Copy the current window to the clipboard |
+| **Shift + Prt Scrn** | Copy the current monitor to the clipboard |
+| **Ctrl + Shift + Prt Scrn** | Copy the full desktop to the clipboard |
+| **Alt + Prt Scrn** | Recapture the last captured region (same screen coordinates) |
+| **Ctrl + Alt + Prt Scrn** | Recapture the last captured window (wherever it is now) |
+
+The last two hotkeys require a previous capture in the current session. If no previous capture exists, or if the previously captured window has been closed or minimized, a warning toast is shown.
 
 ---
 
@@ -63,7 +82,7 @@ Saved files are named using configurable patterns with Greenshot-style `${VARIAB
 | Monitor | `${YYYY}-${MM}-${DD}_${hh}${mm}${ss}-monitor${monitor}` | `2026-02-21_143025-monitor2` |
 | Window | `${YYYY}-${MM}-${DD}_${hh}${mm}${ss}-${title}` | `2026-02-21_143025-My_App` |
 
-To customize, add the corresponding key to your config file:
+To customize, add the corresponding key to the config file:
 
 ```json
 {
@@ -74,7 +93,7 @@ To customize, add the corresponding key to your config file:
 }
 ```
 
-Only patterns you explicitly set are saved; omitted keys use the built-in defaults.
+Only patterns explicitly set in the config file are saved; omitted keys use the built-in defaults.
 
 ### Direct save format
 

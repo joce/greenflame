@@ -1,5 +1,7 @@
 #pragma once
 
+#include "greenflame_core/rect_px.h"
+
 namespace greenflame {
 
 class AppConfig;
@@ -8,8 +10,10 @@ class IOverlayEvents {
   public:
     virtual ~IOverlayEvents() = default;
     virtual void On_overlay_closed() = 0;
-    virtual void On_selection_copied_to_clipboard() = 0;
-    virtual void On_selection_saved_to_file() = 0;
+    virtual void On_selection_copied_to_clipboard(core::RectPx screen_rect,
+                                                  std::optional<HWND> window) = 0;
+    virtual void On_selection_saved_to_file(core::RectPx screen_rect,
+                                            std::optional<HWND> window) = 0;
 };
 
 class OverlayWindow final {
@@ -40,6 +44,7 @@ class OverlayWindow final {
     [[nodiscard]] std::wstring Resolve_save_directory() const;
     [[nodiscard]] static std::vector<std::wstring>
     List_directory_filenames(std::wstring_view dir);
+    [[nodiscard]] core::RectPx Selection_screen_rect() const;
     void Save_directly_and_close();
     void Save_as_and_close();
     void Copy_to_clipboard_and_close();

@@ -14,17 +14,25 @@ constexpr int kStartCaptureCommandId = 1;
 constexpr int kCopyWindowCommandId = 2;
 constexpr int kCopyMonitorCommandId = 3;
 constexpr int kCopyDesktopCommandId = 4;
-constexpr int kExitCommandId = 5;
+constexpr int kCopyLastRegionCommandId = 5;
+constexpr int kCopyLastWindowCommandId = 6;
+constexpr int kExitCommandId = 7;
 constexpr wchar_t kCaptureRegionMenuText[] = L"Capture region\tPrt Scrn";
 constexpr wchar_t kCaptureMonitorMenuText[] =
     L"Capture current monitor\tShift + Prt Scrn";
 constexpr wchar_t kCaptureWindowMenuText[] = L"Capture current window\tCtrl + Prt Scrn";
 constexpr wchar_t kCaptureFullScreenMenuText[] =
     L"Capture full screen\tCtrl + Shift + Prt Scrn";
+constexpr wchar_t kCaptureLastRegionMenuText[] =
+    L"Capture last region\tAlt + Prt Scrn";
+constexpr wchar_t kCaptureLastWindowMenuText[] =
+    L"Capture last window\tCtrl + Alt + Prt Scrn";
 constexpr int kHotkeyStartCaptureId = 1;
 constexpr int kHotkeyCopyWindowId = 2;
 constexpr int kHotkeyCopyMonitorId = 3;
 constexpr int kHotkeyCopyDesktopId = 4;
+constexpr int kHotkeyCopyLastRegionId = 5;
+constexpr int kHotkeyCopyLastWindowId = 6;
 constexpr int kHotkeyTestingErrorId = 90;
 constexpr int kHotkeyTestingWarningId = 91;
 constexpr UINT kModNoRepeat = 0x4000u;
@@ -529,8 +537,16 @@ bool TrayWindow::Create(HINSTANCE hinstance, bool enable_testing_hotkeys) {
         RegisterHotKey(hwnd, kHotkeyCopyDesktopId,
                        static_cast<UINT>(MOD_CONTROL | MOD_SHIFT | kModNoRepeat),
                        VK_SNAPSHOT) != 0;
+    bool const copy_last_region_registered =
+        RegisterHotKey(hwnd, kHotkeyCopyLastRegionId,
+                       static_cast<UINT>(MOD_ALT | kModNoRepeat), VK_SNAPSHOT) != 0;
+    bool const copy_last_window_registered =
+        RegisterHotKey(hwnd, kHotkeyCopyLastWindowId,
+                       static_cast<UINT>(MOD_CONTROL | MOD_ALT | kModNoRepeat),
+                       VK_SNAPSHOT) != 0;
     if (!copy_window_registered || !copy_monitor_registered ||
-        !copy_desktop_registered) {
+        !copy_desktop_registered || !copy_last_region_registered ||
+        !copy_last_window_registered) {
         MessageBoxW(hwnd,
                     L"One or more modified Print Screen hotkeys could not be "
                     L"registered.\n"
@@ -612,6 +628,10 @@ LRESULT TrayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
             Notify_copy_monitor_to_clipboard();
         } else if (command == kCopyDesktopCommandId) {
             Notify_copy_desktop_to_clipboard();
+        } else if (command == kCopyLastRegionCommandId) {
+            Notify_copy_last_region_to_clipboard();
+        } else if (command == kCopyLastWindowCommandId) {
+            Notify_copy_last_window_to_clipboard();
         } else if (command == kExitCommandId) {
             if (events_) {
                 events_->On_exit_requested();
@@ -628,6 +648,10 @@ LRESULT TrayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
             Notify_copy_monitor_to_clipboard();
         } else if (wparam == kHotkeyCopyDesktopId) {
             Notify_copy_desktop_to_clipboard();
+        } else if (wparam == kHotkeyCopyLastRegionId) {
+            Notify_copy_last_region_to_clipboard();
+        } else if (wparam == kHotkeyCopyLastWindowId) {
+            Notify_copy_last_window_to_clipboard();
         } else if (testing_hotkeys_enabled_ && wparam == kHotkeyTestingErrorId) {
             Show_balloon(TrayBalloonIcon::Error, kTestingErrorBalloonMessage);
         } else if (testing_hotkeys_enabled_ && wparam == kHotkeyTestingWarningId) {
@@ -646,6 +670,8 @@ LRESULT TrayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
         UnregisterHotKey(hwnd_, kHotkeyCopyWindowId);
         UnregisterHotKey(hwnd_, kHotkeyCopyMonitorId);
         UnregisterHotKey(hwnd_, kHotkeyCopyDesktopId);
+        UnregisterHotKey(hwnd_, kHotkeyCopyLastRegionId);
+        UnregisterHotKey(hwnd_, kHotkeyCopyLastWindowId);
         UnregisterHotKey(hwnd_, kHotkeyTestingErrorId);
         UnregisterHotKey(hwnd_, kHotkeyTestingWarningId);
         NOTIFYICONDATAW notify_data{};
@@ -692,6 +718,9 @@ void TrayWindow::Show_context_menu() {
     AppendMenuW(menu, MF_STRING, kCopyWindowCommandId, kCaptureWindowMenuText);
     AppendMenuW(menu, MF_STRING, kCopyDesktopCommandId, kCaptureFullScreenMenuText);
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, kCopyLastRegionCommandId, kCaptureLastRegionMenuText);
+    AppendMenuW(menu, MF_STRING, kCopyLastWindowCommandId, kCaptureLastWindowMenuText);
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kExitCommandId, L"Exit");
     POINT cursor{};
     GetCursorPos(&cursor);
@@ -722,6 +751,18 @@ void TrayWindow::Notify_copy_monitor_to_clipboard() {
 void TrayWindow::Notify_copy_desktop_to_clipboard() {
     if (events_) {
         events_->On_copy_desktop_to_clipboard_requested();
+    }
+}
+
+void TrayWindow::Notify_copy_last_region_to_clipboard() {
+    if (events_) {
+        events_->On_copy_last_region_to_clipboard_requested();
+    }
+}
+
+void TrayWindow::Notify_copy_last_window_to_clipboard() {
+    if (events_) {
+        events_->On_copy_last_window_to_clipboard_requested();
     }
 }
 

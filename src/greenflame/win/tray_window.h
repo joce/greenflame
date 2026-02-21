@@ -1,7 +1,5 @@
 #pragma once
 
-#include <memory>
-
 namespace greenflame {
 
 enum class TrayBalloonIcon {
@@ -17,6 +15,8 @@ class ITrayEvents {
     virtual void On_copy_window_to_clipboard_requested(HWND target_window) = 0;
     virtual void On_copy_monitor_to_clipboard_requested() = 0;
     virtual void On_copy_desktop_to_clipboard_requested() = 0;
+    virtual void On_copy_last_region_to_clipboard_requested() = 0;
+    virtual void On_copy_last_window_to_clipboard_requested() = 0;
     virtual void On_exit_requested() = 0;
 };
 
@@ -46,6 +46,8 @@ class TrayWindow final {
     void Notify_copy_window_to_clipboard();
     void Notify_copy_monitor_to_clipboard();
     void Notify_copy_desktop_to_clipboard();
+    void Notify_copy_last_region_to_clipboard();
+    void Notify_copy_last_window_to_clipboard();
 
     ITrayEvents *events_ = nullptr;
     HWND hwnd_ = nullptr;

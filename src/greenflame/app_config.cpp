@@ -97,18 +97,26 @@ bool AppConfig::Save() const {
     try {
         std::filesystem::create_directories(path.parent_path());
         easyjson::JSON root = easyjson::object();
-        root["ui"]["show_balloons"] = show_balloons;
-        root["save"]["last_save_dir"] = To_utf8(last_save_dir);
-        auto write_pattern = [&](char const *key, std::wstring const &value) {
+
+        // UI section: only write non-default values.
+        if (!show_balloons) { // default: true
+            root["ui"]["show_balloons"] = show_balloons;
+        }
+
+        // Save section: only write non-default values.
+        if (!last_save_dir.empty()) {
+            root["save"]["last_save_dir"] = To_utf8(last_save_dir);
+        }
+        auto write_if_set = [&](char const *key, std::wstring const &value) {
             if (!value.empty()) {
                 root["save"][key] = To_utf8(value);
             }
         };
-        write_pattern("filename_pattern_region", filename_pattern_region);
-        write_pattern("filename_pattern_desktop", filename_pattern_desktop);
-        write_pattern("filename_pattern_monitor", filename_pattern_monitor);
-        write_pattern("filename_pattern_window", filename_pattern_window);
-        write_pattern("default_save_format", default_save_format);
+        write_if_set("filename_pattern_region", filename_pattern_region);
+        write_if_set("filename_pattern_desktop", filename_pattern_desktop);
+        write_if_set("filename_pattern_monitor", filename_pattern_monitor);
+        write_if_set("filename_pattern_window", filename_pattern_window);
+        write_if_set("default_save_format", default_save_format);
 
         std::ofstream file(path);
         if (!file) {

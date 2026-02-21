@@ -292,7 +292,8 @@ std::wstring OverlayWindow::Resolve_save_directory() const {
     return pictures_dir;
 }
 
-std::vector<std::wstring> OverlayWindow::List_directory_filenames(std::wstring_view dir) {
+std::vector<std::wstring>
+OverlayWindow::List_directory_filenames(std::wstring_view dir) {
     std::vector<std::wstring> result;
     std::wstring search_path(dir);
     if (!search_path.empty() && search_path.back() != L'\\') {
@@ -432,6 +433,16 @@ void OverlayWindow::Update_modifier_preview(bool shift, bool ctrl) {
     }
 }
 
+core::RectPx OverlayWindow::Selection_screen_rect() const {
+    RECT overlay_rect{};
+    GetWindowRect(hwnd_, &overlay_rect);
+    core::RectPx const &sel = state_->final_selection;
+    return core::RectPx::From_ltrb(sel.left + static_cast<int32_t>(overlay_rect.left),
+                                   sel.top + static_cast<int32_t>(overlay_rect.top),
+                                   sel.right + static_cast<int32_t>(overlay_rect.left),
+                                   sel.bottom + static_cast<int32_t>(overlay_rect.top));
+}
+
 void OverlayWindow::Save_directly_and_close() {
     if (!resources_->capture.Is_valid()) {
         return;
@@ -489,7 +500,8 @@ void OverlayWindow::Save_directly_and_close() {
             config_->Normalize();
         }
         if (events_) {
-            events_->On_selection_saved_to_file();
+            events_->On_selection_saved_to_file(Selection_screen_rect(),
+                                                state_->selection_window);
         }
         Destroy();
     }
@@ -562,7 +574,8 @@ void OverlayWindow::Save_as_and_close() {
             }
         }
         if (events_) {
-            events_->On_selection_saved_to_file();
+            events_->On_selection_saved_to_file(Selection_screen_rect(),
+                                                state_->selection_window);
         }
         Destroy();
     }
@@ -587,7 +600,8 @@ void OverlayWindow::Copy_to_clipboard_and_close() {
     cropped.Free();
 
     if (copied_to_clipboard && events_) {
-        events_->On_selection_copied_to_clipboard();
+        events_->On_selection_copied_to_clipboard(Selection_screen_rect(),
+                                                  state_->selection_window);
     }
     Destroy();
 }

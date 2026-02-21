@@ -10,6 +10,12 @@ namespace {
 
 constexpr wchar_t kClipboardCopiedBalloonMessage[] = L"Selection copied to clipboard.";
 constexpr wchar_t kSelectionSavedBalloonMessage[] = L"Selection saved.";
+constexpr wchar_t kNoLastRegionMessage[] = L"No previously captured region.";
+constexpr wchar_t kNoLastWindowMessage[] = L"No previously captured window.";
+constexpr wchar_t kLastWindowClosedMessage[] =
+    L"Previously captured window is no longer available.";
+constexpr wchar_t kLastWindowMinimizedMessage[] =
+    L"Previously captured window is minimized.";
 
 void Enable_per_monitor_dpi_awareness_v2() {
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
@@ -87,51 +93,83 @@ constexpr wchar_t kTestingFlag[] = L"--testing-1-2";
     return copied;
 }
 
-[[nodiscard]] bool Copy_current_window_to_clipboard(HWND target_window) {
+struct WindowCaptureResult {
+    HWND hwnd;
+    greenflame::core::RectPx screen_rect;
+};
+
+[[nodiscard]] std::optional<WindowCaptureResult>
+Find_and_capture_current_window(HWND target_window) {
     if (target_window != nullptr) {
         std::optional<greenflame::core::RectPx> const target_rect =
             greenflame::Get_window_rect(target_window);
         if (target_rect.has_value()) {
-            return Copy_screen_rect_to_clipboard(*target_rect);
+            if (Copy_screen_rect_to_clipboard(*target_rect)) {
+                return WindowCaptureResult{target_window, *target_rect};
+            }
+            return std::nullopt;
         }
     }
 
-    std::optional<greenflame::core::RectPx> const window_rect =
-        greenflame::Get_foreground_window_rect(nullptr);
-    if (window_rect.has_value()) {
-        return Copy_screen_rect_to_clipboard(*window_rect);
+    HWND fg = GetForegroundWindow();
+    if (fg != nullptr) {
+        std::optional<greenflame::core::RectPx> const fg_rect =
+            greenflame::Get_window_rect(fg);
+        if (fg_rect.has_value()) {
+            if (Copy_screen_rect_to_clipboard(*fg_rect)) {
+                return WindowCaptureResult{fg, *fg_rect};
+            }
+            return std::nullopt;
+        }
     }
 
     POINT cursor{};
     if (!GetCursorPos(&cursor)) {
-        return false;
+        return std::nullopt;
+    }
+    std::optional<HWND> const under_cursor =
+        greenflame::Get_window_under_cursor(cursor, nullptr);
+    if (!under_cursor.has_value()) {
+        return std::nullopt;
     }
     std::optional<greenflame::core::RectPx> const fallback_rect =
-        greenflame::Get_window_rect_under_cursor(cursor, nullptr);
+        greenflame::Get_window_rect(*under_cursor);
     if (!fallback_rect.has_value()) {
-        return false;
+        return std::nullopt;
     }
-    return Copy_screen_rect_to_clipboard(*fallback_rect);
+    if (Copy_screen_rect_to_clipboard(*fallback_rect)) {
+        return WindowCaptureResult{*under_cursor, *fallback_rect};
+    }
+    return std::nullopt;
 }
 
-[[nodiscard]] bool Copy_current_monitor_to_clipboard() {
+[[nodiscard]] std::optional<greenflame::core::RectPx>
+Copy_current_monitor_to_clipboard() {
     std::vector<greenflame::core::MonitorWithBounds> const monitors =
         greenflame::Get_monitors_with_bounds();
     if (monitors.empty()) {
-        return false;
+        return std::nullopt;
     }
 
     greenflame::core::PointPx const cursor = greenflame::Get_cursor_pos_px();
     std::optional<size_t> const index =
         greenflame::core::Index_of_monitor_containing(cursor, monitors);
     if (!index.has_value()) {
-        return false;
+        return std::nullopt;
     }
-    return Copy_screen_rect_to_clipboard(monitors[*index].bounds);
+    greenflame::core::RectPx const rect = monitors[*index].bounds;
+    if (Copy_screen_rect_to_clipboard(rect)) {
+        return rect;
+    }
+    return std::nullopt;
 }
 
-[[nodiscard]] bool Copy_desktop_to_clipboard() {
-    return Copy_screen_rect_to_clipboard(greenflame::Get_virtual_desktop_bounds_px());
+[[nodiscard]] std::optional<greenflame::core::RectPx> Copy_desktop_to_clipboard() {
+    greenflame::core::RectPx const rect = greenflame::Get_virtual_desktop_bounds_px();
+    if (Copy_screen_rect_to_clipboard(rect)) {
+        return rect;
+    }
+    return std::nullopt;
 }
 
 } // namespace
@@ -172,8 +210,14 @@ void GreenflameApp::On_copy_window_to_clipboard_requested(HWND target_window) {
     if (overlay_window_.Is_open()) {
         return;
     }
-    if (Copy_current_window_to_clipboard(target_window)) {
-        On_selection_copied_to_clipboard();
+    std::optional<WindowCaptureResult> const result =
+        Find_and_capture_current_window(target_window);
+    if (result.has_value()) {
+        Store_last_capture(result->screen_rect, result->hwnd);
+        if (config_.show_balloons) {
+            tray_window_.Show_balloon(TrayBalloonIcon::Info,
+                                      kClipboardCopiedBalloonMessage);
+        }
     }
 }
 
@@ -181,8 +225,13 @@ void GreenflameApp::On_copy_monitor_to_clipboard_requested() {
     if (overlay_window_.Is_open()) {
         return;
     }
-    if (Copy_current_monitor_to_clipboard()) {
-        On_selection_copied_to_clipboard();
+    std::optional<core::RectPx> const rect = Copy_current_monitor_to_clipboard();
+    if (rect.has_value()) {
+        Store_last_capture(*rect, std::nullopt);
+        if (config_.show_balloons) {
+            tray_window_.Show_balloon(TrayBalloonIcon::Info,
+                                      kClipboardCopiedBalloonMessage);
+        }
     }
 }
 
@@ -190,8 +239,65 @@ void GreenflameApp::On_copy_desktop_to_clipboard_requested() {
     if (overlay_window_.Is_open()) {
         return;
     }
-    if (Copy_desktop_to_clipboard()) {
-        On_selection_copied_to_clipboard();
+    std::optional<core::RectPx> const rect = Copy_desktop_to_clipboard();
+    if (rect.has_value()) {
+        Store_last_capture(*rect, std::nullopt);
+        if (config_.show_balloons) {
+            tray_window_.Show_balloon(TrayBalloonIcon::Info,
+                                      kClipboardCopiedBalloonMessage);
+        }
+    }
+}
+
+void GreenflameApp::On_copy_last_region_to_clipboard_requested() {
+    if (overlay_window_.Is_open()) {
+        return;
+    }
+    if (!last_capture_screen_rect_.has_value()) {
+        tray_window_.Show_balloon(TrayBalloonIcon::Warning, kNoLastRegionMessage);
+        return;
+    }
+    if (Copy_screen_rect_to_clipboard(*last_capture_screen_rect_)) {
+        if (config_.show_balloons) {
+            tray_window_.Show_balloon(TrayBalloonIcon::Info,
+                                      kClipboardCopiedBalloonMessage);
+        }
+    } else {
+        tray_window_.Show_balloon(TrayBalloonIcon::Warning, kNoLastRegionMessage);
+    }
+}
+
+void GreenflameApp::On_copy_last_window_to_clipboard_requested() {
+    if (overlay_window_.Is_open()) {
+        return;
+    }
+    if (!last_capture_window_.has_value()) {
+        tray_window_.Show_balloon(TrayBalloonIcon::Warning, kNoLastWindowMessage);
+        return;
+    }
+    HWND const hwnd = *last_capture_window_;
+    if (!IsWindow(hwnd)) {
+        tray_window_.Show_balloon(TrayBalloonIcon::Warning, kLastWindowClosedMessage);
+        last_capture_window_ = std::nullopt;
+        return;
+    }
+    if (IsIconic(hwnd) != 0) {
+        tray_window_.Show_balloon(TrayBalloonIcon::Warning,
+                                  kLastWindowMinimizedMessage);
+        return;
+    }
+    std::optional<core::RectPx> const rect = Get_window_rect(hwnd);
+    if (!rect.has_value()) {
+        tray_window_.Show_balloon(TrayBalloonIcon::Warning, kLastWindowClosedMessage);
+        last_capture_window_ = std::nullopt;
+        return;
+    }
+    if (Copy_screen_rect_to_clipboard(*rect)) {
+        Store_last_capture(*rect, hwnd);
+        if (config_.show_balloons) {
+            tray_window_.Show_balloon(TrayBalloonIcon::Info,
+                                      kClipboardCopiedBalloonMessage);
+        }
     }
 }
 
@@ -204,16 +310,28 @@ void GreenflameApp::On_overlay_closed() {
     // Overlay lifecycle is managed by OverlayWindow; no app action needed.
 }
 
-void GreenflameApp::On_selection_copied_to_clipboard() {
+void GreenflameApp::On_selection_copied_to_clipboard(core::RectPx screen_rect,
+                                                     std::optional<HWND> window) {
+    Store_last_capture(screen_rect, window);
     if (config_.show_balloons) {
         tray_window_.Show_balloon(TrayBalloonIcon::Info,
                                   kClipboardCopiedBalloonMessage);
     }
 }
 
-void GreenflameApp::On_selection_saved_to_file() {
+void GreenflameApp::On_selection_saved_to_file(core::RectPx screen_rect,
+                                               std::optional<HWND> window) {
+    Store_last_capture(screen_rect, window);
     if (config_.show_balloons) {
         tray_window_.Show_balloon(TrayBalloonIcon::Info, kSelectionSavedBalloonMessage);
+    }
+}
+
+void GreenflameApp::Store_last_capture(core::RectPx screen_rect,
+                                       std::optional<HWND> window) {
+    last_capture_screen_rect_ = screen_rect;
+    if (window.has_value()) {
+        last_capture_window_ = *window;
     }
 }
 

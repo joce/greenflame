@@ -9,6 +9,7 @@ namespace greenflame {
 
 [[nodiscard]] std::optional<HWND> Get_window_under_cursor(POINT screen_pt,
                                                           HWND exclude_hwnd);
+[[nodiscard]] std::optional<greenflame::core::RectPx> Get_window_rect(HWND hwnd);
 [[nodiscard]] std::optional<greenflame::core::RectPx>
 Get_foreground_window_rect(HWND exclude_hwnd);
 [[nodiscard]] std::optional<greenflame::core::RectPx>

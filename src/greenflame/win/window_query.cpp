@@ -91,6 +91,22 @@ std::optional<HWND> Get_window_under_cursor(POINT screen_pt, HWND exclude_hwnd) 
     return std::nullopt;
 }
 
+std::optional<greenflame::core::RectPx> Get_window_rect(HWND hwnd) {
+    if (hwnd == nullptr) {
+        return std::nullopt;
+    }
+    if (!IsWindowVisible(hwnd) || GetParent(hwnd) != nullptr) {
+        return std::nullopt;
+    }
+    RECT rect{};
+    if (!Try_get_window_bounds(hwnd, rect)) {
+        return std::nullopt;
+    }
+    return greenflame::core::RectPx::From_ltrb(
+        static_cast<int32_t>(rect.left), static_cast<int32_t>(rect.top),
+        static_cast<int32_t>(rect.right), static_cast<int32_t>(rect.bottom));
+}
+
 std::optional<greenflame::core::RectPx> Get_foreground_window_rect(HWND exclude_hwnd) {
     HWND const window = GetForegroundWindow();
     if (window == nullptr || window == exclude_hwnd) {

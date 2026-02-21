@@ -14,7 +14,7 @@ class ITrayEvents {
   public:
     virtual ~ITrayEvents() = default;
     virtual void On_start_capture_requested() = 0;
-    virtual void On_copy_window_to_clipboard_requested() = 0;
+    virtual void On_copy_window_to_clipboard_requested(HWND target_window) = 0;
     virtual void On_copy_monitor_to_clipboard_requested() = 0;
     virtual void On_copy_desktop_to_clipboard_requested() = 0;
     virtual void On_exit_requested() = 0;

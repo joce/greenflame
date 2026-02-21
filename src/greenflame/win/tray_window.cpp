@@ -8,6 +8,7 @@ namespace {
 constexpr wchar_t kTrayWindowClass[] = L"GreenflameTray";
 constexpr wchar_t kToastWindowClass[] = L"GreenflameToast";
 constexpr UINT kTrayCallbackMessage = WM_APP + 1;
+constexpr UINT kDeferredCopyWindowMessage = WM_APP + 2;
 constexpr UINT kTrayIconId = 1;
 constexpr int kStartCaptureCommandId = 1;
 constexpr int kCopyWindowCommandId = 2;
@@ -17,7 +18,7 @@ constexpr int kExitCommandId = 5;
 constexpr wchar_t kCaptureRegionMenuText[] = L"Capture region\tPrt Scrn";
 constexpr wchar_t kCaptureMonitorMenuText[] =
     L"Capture current monitor\tShift + Prt Scrn";
-constexpr wchar_t kCaptureWindowMenuText[] = L"Capture window\tCtrl + Prt Scrn";
+constexpr wchar_t kCaptureWindowMenuText[] = L"Capture current window\tCtrl + Prt Scrn";
 constexpr wchar_t kCaptureFullScreenMenuText[] =
     L"Capture full screen\tCtrl + Shift + Prt Scrn";
 constexpr int kHotkeyStartCaptureId = 1;
@@ -46,6 +47,28 @@ constexpr int kToastFallbackTextHeightDip = 18;
 constexpr wchar_t kToastTitleText[] = L"Greenflame";
 constexpr wchar_t kTestingWarningBalloonMessage[] = L"Testing warning toast (Ctrl+W).";
 constexpr wchar_t kTestingErrorBalloonMessage[] = L"Testing error toast (Ctrl+E).";
+
+HWND s_last_foreground_hwnd = nullptr;
+HWINEVENTHOOK s_foreground_hook = nullptr;
+
+void CALLBACK Foreground_changed_hook(HWINEVENTHOOK, DWORD, HWND hwnd, LONG id_object,
+                                      LONG id_child, DWORD, DWORD) {
+    if (id_object != OBJID_WINDOW || id_child != 0) {
+        return;
+    }
+    if (hwnd == nullptr || !IsWindowVisible(hwnd) || GetParent(hwnd) != nullptr) {
+        return;
+    }
+    wchar_t cls[256] = {};
+    GetClassNameW(hwnd, cls, 256);
+    if (wcscmp(cls, L"NotifyIconOverflowWindow") == 0 ||
+        wcscmp(cls, L"Shell_TrayWnd") == 0 ||
+        wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0 ||
+        wcscmp(cls, kTrayWindowClass) == 0) {
+        return;
+    }
+    s_last_foreground_hwnd = hwnd;
+}
 
 [[nodiscard]] int Scale_for_dpi(int value, UINT dpi) {
     return MulDiv(value, static_cast<int>(dpi), static_cast<int>(kDefaultDpi));
@@ -521,6 +544,10 @@ bool TrayWindow::Create(HINSTANCE hinstance, bool enable_testing_hotkeys) {
         RegisterHotKey(hwnd, kHotkeyTestingWarningId,
                        static_cast<UINT>(MOD_CONTROL | kModNoRepeat), L'W');
     }
+
+    s_foreground_hook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
+                                        nullptr, Foreground_changed_hook, 0, 0,
+                                        WINEVENT_OUTOFCONTEXT);
     return true;
 }
 
@@ -580,7 +607,7 @@ LRESULT TrayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
         if (command == kStartCaptureCommandId) {
             Notify_start_capture();
         } else if (command == kCopyWindowCommandId) {
-            Notify_copy_window_to_clipboard();
+            PostMessage(hwnd_, kDeferredCopyWindowMessage, 0, 0);
         } else if (command == kCopyMonitorCommandId) {
             Notify_copy_monitor_to_clipboard();
         } else if (command == kCopyDesktopCommandId) {
@@ -608,6 +635,10 @@ LRESULT TrayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
         }
         return 0;
     case WM_DESTROY: {
+        if (s_foreground_hook) {
+            UnhookWinEvent(s_foreground_hook);
+            s_foreground_hook = nullptr;
+        }
         if (toast_popup_) {
             toast_popup_->Destroy();
         }
@@ -634,6 +665,17 @@ LRESULT TrayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
             } else if (LOWORD(lparam) == WM_RBUTTONUP) {
                 Show_context_menu();
             }
+            return 0;
+        }
+        if (msg == kDeferredCopyWindowMessage) {
+            HWND overflow = FindWindowW(L"NotifyIconOverflowWindow", nullptr);
+            int retries = static_cast<int>(wparam);
+            if (overflow != nullptr && IsWindowVisible(overflow) && retries < 50) {
+                PostMessage(hwnd_, kDeferredCopyWindowMessage,
+                            static_cast<WPARAM>(retries + 1), 0);
+                return 0;
+            }
+            Notify_copy_window_to_clipboard();
             return 0;
         }
         return DefWindowProcW(hwnd_, msg, wparam, lparam);
@@ -667,7 +709,7 @@ void TrayWindow::Notify_start_capture() {
 
 void TrayWindow::Notify_copy_window_to_clipboard() {
     if (events_) {
-        events_->On_copy_window_to_clipboard_requested();
+        events_->On_copy_window_to_clipboard_requested(s_last_foreground_hwnd);
     }
 }
 

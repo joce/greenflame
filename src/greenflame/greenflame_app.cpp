@@ -87,7 +87,15 @@ constexpr wchar_t kTestingFlag[] = L"--testing-1-2";
     return copied;
 }
 
-[[nodiscard]] bool Copy_current_window_to_clipboard() {
+[[nodiscard]] bool Copy_current_window_to_clipboard(HWND target_window) {
+    if (target_window != nullptr) {
+        std::optional<greenflame::core::RectPx> const target_rect =
+            greenflame::Get_window_rect(target_window);
+        if (target_rect.has_value()) {
+            return Copy_screen_rect_to_clipboard(*target_rect);
+        }
+    }
+
     std::optional<greenflame::core::RectPx> const window_rect =
         greenflame::Get_foreground_window_rect(nullptr);
     if (window_rect.has_value()) {
@@ -160,11 +168,11 @@ void GreenflameApp::On_start_capture_requested() {
     (void)overlay_window_.Create_and_show(hinstance_);
 }
 
-void GreenflameApp::On_copy_window_to_clipboard_requested() {
+void GreenflameApp::On_copy_window_to_clipboard_requested(HWND target_window) {
     if (overlay_window_.Is_open()) {
         return;
     }
-    if (Copy_current_window_to_clipboard()) {
+    if (Copy_current_window_to_clipboard(target_window)) {
         On_selection_copied_to_clipboard();
     }
 }

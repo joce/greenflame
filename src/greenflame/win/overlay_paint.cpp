@@ -13,7 +13,7 @@ namespace {
 constexpr unsigned char kCoordTooltipAlpha = 200;
 constexpr unsigned char kCoordTooltipBgR = 217, kCoordTooltipBgG = 240,
                         kCoordTooltipBgB = 227;
-constexpr COLORREF kCoordTooltipBorderText = RGB(46, 139, 87); // SeaGreen
+constexpr COLORREF kCoordTooltipBorderText = RGB(15, 60, 35); // dark SeaGreen
 
 constexpr int kHandleHalfSize = 4; // 8x8 handle centered on contour
 constexpr int kMagnifierSize = 256;
@@ -191,7 +191,7 @@ void Draw_dimension_labels(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
                            greenflame::PaintResources const *res) {
     constexpr int k_dim_margin = 4;
     constexpr int k_dim_gap = 4;
-    constexpr int k_center_margin_v = 2;
+    constexpr int k_center_margin_v = 5;
     int const row_bytes = greenflame::Row_bytes32(w);
     size_t const pix_size = static_cast<size_t>(row_bytes) * static_cast<size_t>(h);
     if (pixels.size() < pix_size) return;
@@ -288,23 +288,25 @@ void Draw_dimension_labels(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
                                                     center_box_left + center_box_w,
                                                     center_box_top + center_box_h);
 
+            constexpr unsigned char kSideBoxAlpha = 150;
+            constexpr unsigned char kCenterBoxAlpha = kCoordTooltipAlpha / 2;
             greenflame::core::Blend_rect_onto_pixels(
                 pixels, w, h, row_bytes, width_box_rect, kCoordTooltipBgR,
-                kCoordTooltipBgG, kCoordTooltipBgB, kCoordTooltipAlpha);
+                kCoordTooltipBgG, kCoordTooltipBgB, kSideBoxAlpha);
             greenflame::core::Blend_rect_onto_pixels(
                 pixels, w, h, row_bytes, height_box_rect, kCoordTooltipBgR,
-                kCoordTooltipBgG, kCoordTooltipBgB, kCoordTooltipAlpha);
+                kCoordTooltipBgG, kCoordTooltipBgB, kSideBoxAlpha);
             if (center_fits) {
                 greenflame::core::Blend_rect_onto_pixels(
                     pixels, w, h, row_bytes, center_box_rect, kCoordTooltipBgR,
-                    kCoordTooltipBgG, kCoordTooltipBgB, kCoordTooltipAlpha);
+                    kCoordTooltipBgG, kCoordTooltipBgB, kCenterBoxAlpha);
             }
             SetDIBits(buf_dc, buf_bmp, 0, static_cast<UINT>(h), pixels.data(),
                       reinterpret_cast<BITMAPINFO *>(&bmi_dim), DIB_RGB_COLORS);
 
-            HPEN dim_border_pen = res ? res->border_pen : nullptr;
-            if (dim_border_pen) {
-                HGDIOBJ old_dim_pen = SelectObject(buf_dc, dim_border_pen);
+            HPEN dark_pen = CreatePen(PS_SOLID, 1, kCoordTooltipBorderText);
+            if (dark_pen) {
+                HGDIOBJ old_dim_pen = SelectObject(buf_dc, dark_pen);
                 SelectObject(buf_dc, GetStockObject(NULL_BRUSH));
                 Rectangle(buf_dc, width_box_left, width_box_top,
                           width_box_left + width_box_w, width_box_top + width_box_h);
@@ -317,6 +319,7 @@ void Draw_dimension_labels(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
                               center_box_top + center_box_h);
                 }
                 SelectObject(buf_dc, old_dim_pen);
+                DeleteObject(dark_pen);
             }
             SetBkMode(buf_dc, TRANSPARENT);
             SetTextColor(buf_dc, kCoordTooltipBorderText);

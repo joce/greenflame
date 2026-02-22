@@ -23,13 +23,13 @@ struct SaveTimestamp {
 
 // Filename pattern constants (Greenshot-style ${VARIABLE} syntax).
 inline constexpr wchar_t kDefaultPatternRegion[] =
-    L"${YYYY}-${MM}-${DD}_${hh}${mm}${ss}";
+    L"screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}";
 inline constexpr wchar_t kDefaultPatternDesktop[] =
-    L"${YYYY}-${MM}-${DD}_${hh}${mm}${ss}";
+    L"screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}";
 inline constexpr wchar_t kDefaultPatternMonitor[] =
-    L"${YYYY}-${MM}-${DD}_${hh}${mm}${ss}-monitor${monitor}";
+    L"screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}-monitor${monitor}";
 inline constexpr wchar_t kDefaultPatternWindow[] =
-    L"${YYYY}-${MM}-${DD}_${hh}${mm}${ss}-${title}";
+    L"screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}-${title}";
 
 struct FilenamePatternContext {
     SaveTimestamp timestamp = {};

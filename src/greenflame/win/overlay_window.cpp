@@ -295,7 +295,10 @@ std::wstring OverlayWindow::Resolve_save_directory() const {
     }
     wchar_t pictures_dir[MAX_PATH] = {};
     SHGetFolderPathW(nullptr, CSIDL_MYPICTURES, nullptr, 0, pictures_dir);
-    return pictures_dir;
+    std::wstring dir = pictures_dir;
+    dir += L"\\greenflame";
+    CreateDirectoryW(dir.c_str(), nullptr);
+    return dir;
 }
 
 std::vector<std::wstring>

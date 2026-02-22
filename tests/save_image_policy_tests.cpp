@@ -174,7 +174,7 @@ TEST_CASE("Build_default_save_name for region", "[save_image_policy]") {
     FilenamePatternContext ctx{};
     ctx.timestamp = {1, 2, 2003, 4, 5, 6};
     std::wstring const out = Build_default_save_name(SaveSelectionSource::Region, ctx);
-    REQUIRE(out == L"2003-02-01_040506");
+    REQUIRE(out == L"screenshot-2003-02-01_040506");
 }
 
 TEST_CASE("Build_default_save_name for monitor", "[save_image_policy]") {
@@ -182,7 +182,7 @@ TEST_CASE("Build_default_save_name for monitor", "[save_image_policy]") {
     ctx.timestamp = {9, 8, 2007, 6, 5, 4};
     ctx.monitor_index_zero_based = 2;
     std::wstring const out = Build_default_save_name(SaveSelectionSource::Monitor, ctx);
-    REQUIRE(out == L"2007-08-09_060504-monitor3");
+    REQUIRE(out == L"screenshot-2007-08-09_060504-monitor3");
 }
 
 TEST_CASE("Build_default_save_name for window sanitizes title", "[save_image_policy]") {
@@ -190,7 +190,7 @@ TEST_CASE("Build_default_save_name for window sanitizes title", "[save_image_pol
     ctx.timestamp = {11, 12, 2025, 10, 9, 8};
     ctx.window_title = L"My:Window<Name>";
     std::wstring const out = Build_default_save_name(SaveSelectionSource::Window, ctx);
-    REQUIRE(out == L"2025-12-11_100908-My_Window_Name_");
+    REQUIRE(out == L"screenshot-2025-12-11_100908-My_Window_Name_");
 }
 
 TEST_CASE("Build_default_save_name for empty window title uses fallback",
@@ -198,7 +198,7 @@ TEST_CASE("Build_default_save_name for empty window title uses fallback",
     FilenamePatternContext ctx{};
     ctx.timestamp = {11, 12, 2025, 10, 9, 8};
     std::wstring const out = Build_default_save_name(SaveSelectionSource::Window, ctx);
-    REQUIRE(out == L"2025-12-11_100908-window");
+    REQUIRE(out == L"screenshot-2025-12-11_100908-window");
 }
 
 TEST_CASE("Build_default_save_name with custom pattern override",

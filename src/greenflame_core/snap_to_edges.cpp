@@ -105,4 +105,65 @@ PointPx Snap_point_to_edges(PointPx point, std::span<const int32_t> vertical_edg
     return out;
 }
 
+RectPx Snap_moved_rect_to_edges(RectPx rect, std::span<const int32_t> vertical_edges_px,
+                                std::span<const int32_t> horizontal_edges_px,
+                                int32_t threshold_px) noexcept {
+    if (rect.Is_empty()) return rect;
+    if (threshold_px <= 0) return rect;
+
+    // Horizontal axis: pick whichever of left/right is closest to a snap line.
+    {
+        std::optional<int32_t> snap_left =
+            Find_best_line(rect.left, vertical_edges_px, threshold_px);
+        std::optional<int32_t> snap_right =
+            Find_best_line(rect.right, vertical_edges_px, threshold_px);
+
+        int32_t dx = 0;
+        int32_t best_dist = threshold_px + 1;
+        if (snap_left.has_value()) {
+            int32_t d = std::abs(*snap_left - rect.left);
+            if (d < best_dist) {
+                best_dist = d;
+                dx = *snap_left - rect.left;
+            }
+        }
+        if (snap_right.has_value()) {
+            int32_t d = std::abs(*snap_right - rect.right);
+            if (d < best_dist) {
+                dx = *snap_right - rect.right;
+            }
+        }
+        rect.left += dx;
+        rect.right += dx;
+    }
+
+    // Vertical axis: pick whichever of top/bottom is closest to a snap line.
+    {
+        std::optional<int32_t> snap_top =
+            Find_best_line(rect.top, horizontal_edges_px, threshold_px);
+        std::optional<int32_t> snap_bottom =
+            Find_best_line(rect.bottom, horizontal_edges_px, threshold_px);
+
+        int32_t dy = 0;
+        int32_t best_dist = threshold_px + 1;
+        if (snap_top.has_value()) {
+            int32_t d = std::abs(*snap_top - rect.top);
+            if (d < best_dist) {
+                best_dist = d;
+                dy = *snap_top - rect.top;
+            }
+        }
+        if (snap_bottom.has_value()) {
+            int32_t d = std::abs(*snap_bottom - rect.bottom);
+            if (d < best_dist) {
+                dy = *snap_bottom - rect.bottom;
+            }
+        }
+        rect.top += dy;
+        rect.bottom += dy;
+    }
+
+    return rect;
+}
+
 } // namespace greenflame::core

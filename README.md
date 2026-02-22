@@ -27,6 +27,7 @@ In interactive mode, the screen is captured and a region is selected:
 Once a region is selected:
 
 **Drag the handles** on the selection to resize (hold **Alt** to disable snapping).
+Hold **Tab** and drag inside the selection to **move** it (hold **Alt** to disable snapping).
 
 - **Ctrl-S** ➜ save directly (no dialog) to the last-used folder as the configured format (default PNG), then close.
 - **Ctrl-Shift-S** ➜ open **Save As** dialog, then save and close.

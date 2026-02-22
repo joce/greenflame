@@ -24,4 +24,13 @@ namespace greenflame::core {
                                           std::span<const int32_t> horizontal_edges_px,
                                           int32_t threshold_px) noexcept;
 
+// Snap a moved rect to edges, preserving its dimensions. For each axis the
+// closest edge (left vs right, top vs bottom) within threshold wins and the
+// entire rect shifts by that delta.  Used when dragging a selection to a new
+// position.
+[[nodiscard]] RectPx
+Snap_moved_rect_to_edges(RectPx rect, std::span<const int32_t> vertical_edges_px,
+                         std::span<const int32_t> horizontal_edges_px,
+                         int32_t threshold_px) noexcept;
+
 } // namespace greenflame::core

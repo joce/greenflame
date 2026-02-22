@@ -28,6 +28,7 @@ struct PaintOverlayInput {
     GdiCaptureResult const *capture = nullptr;
     bool dragging = false;
     bool handle_dragging = false;
+    bool move_dragging = false;
     bool modifier_preview = false; // Shift/Ctrl: live_rect = window or monitor
     core::RectPx live_rect = {};
     core::RectPx final_selection = {};

@@ -135,9 +135,12 @@ struct OverlayWindow::OverlayResources {
 struct OverlayWindow::OverlayState {
     bool dragging = false;
     bool handle_dragging = false;
+    bool move_dragging = false;
     bool modifier_preview = false;
     std::optional<greenflame::core::SelectionHandle> resize_handle = std::nullopt;
     greenflame::core::RectPx resize_anchor_rect = {};
+    greenflame::core::PointPx move_grab_offset = {};
+    greenflame::core::RectPx move_anchor_rect = {};
     greenflame::core::PointPx start_px = {};
     greenflame::core::RectPx live_rect = {};
     greenflame::core::RectPx final_selection = {};
@@ -154,9 +157,12 @@ struct OverlayWindow::OverlayState {
     void Reset_for_session() {
         dragging = false;
         handle_dragging = false;
+        move_dragging = false;
         modifier_preview = false;
         resize_handle = std::nullopt;
         resize_anchor_rect = {};
+        move_grab_offset = {};
+        move_anchor_rect = {};
         start_px = {};
         live_rect = {};
         final_selection = {};
@@ -608,7 +614,12 @@ void OverlayWindow::Copy_to_clipboard_and_close() {
 
 LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
     if (wparam == VK_ESCAPE) {
-        if (state_->handle_dragging) {
+        if (state_->move_dragging) {
+            state_->final_selection = state_->move_anchor_rect;
+            state_->move_dragging = false;
+            state_->live_rect = {};
+            InvalidateRect(hwnd_, nullptr, TRUE);
+        } else if (state_->handle_dragging) {
             state_->handle_dragging = false;
             state_->resize_handle = std::nullopt;
             state_->live_rect = {};
@@ -712,7 +723,18 @@ LRESULT OverlayWindow::On_l_button_down() {
 
     core::PointPx const cursor = Get_client_cursor_pos_px(hwnd_);
     if (!state_->final_selection.Is_empty() && !state_->dragging &&
-        !state_->handle_dragging) {
+        !state_->handle_dragging && !state_->move_dragging) {
+        bool const tab_held = (GetKeyState(VK_TAB) & 0x8000) != 0;
+        if (tab_held && state_->final_selection.Contains(cursor)) {
+            state_->move_dragging = true;
+            state_->move_grab_offset = {cursor.x - state_->final_selection.left,
+                                        cursor.y - state_->final_selection.top};
+            state_->move_anchor_rect = state_->final_selection;
+            state_->live_rect = state_->final_selection;
+            Build_snap_edges_from_windows();
+            InvalidateRect(hwnd_, nullptr, TRUE);
+            return 0;
+        }
         std::optional<core::SelectionHandle> hit = core::Hit_test_selection_handle(
             state_->final_selection, cursor, kHandleGrabRadiusPx);
         if (hit.has_value()) {
@@ -745,7 +767,20 @@ LRESULT OverlayWindow::On_l_button_down() {
 }
 
 LRESULT OverlayWindow::On_mouse_move() {
-    if (state_->handle_dragging && state_->resize_handle.has_value()) {
+    if (state_->move_dragging) {
+        core::PointPx const cursor = Get_client_cursor_pos_px(hwnd_);
+        int32_t const new_left = cursor.x - state_->move_grab_offset.x;
+        int32_t const new_top = cursor.y - state_->move_grab_offset.y;
+        core::RectPx candidate = core::RectPx::From_ltrb(
+            new_left, new_top, new_left + state_->move_anchor_rect.Width(),
+            new_top + state_->move_anchor_rect.Height());
+        if (Is_snap_enabled()) {
+            candidate = core::Snap_moved_rect_to_edges(
+                candidate, state_->vertical_edges, state_->horizontal_edges,
+                kSnapThresholdPx);
+        }
+        state_->live_rect = candidate;
+    } else if (state_->handle_dragging && state_->resize_handle.has_value()) {
         core::PointPx const cursor = Get_client_cursor_pos_px(hwnd_);
         core::RectPx candidate = core::Resize_rect_from_handle(
             state_->resize_anchor_rect, *state_->resize_handle, cursor);
@@ -783,6 +818,23 @@ LRESULT OverlayWindow::On_mouse_move() {
 }
 
 LRESULT OverlayWindow::On_l_button_up() {
+    if (state_->move_dragging) {
+        core::RectPx to_commit = state_->live_rect;
+        if (Is_snap_enabled()) {
+            to_commit = core::Snap_moved_rect_to_edges(
+                to_commit, state_->vertical_edges, state_->horizontal_edges,
+                kSnapThresholdPx);
+        }
+        core::PointPx const center = {to_commit.left + to_commit.Width() / 2,
+                                      to_commit.top + to_commit.Height() / 2};
+        state_->final_selection =
+            core::Allowed_selection_rect(to_commit, center, state_->cached_monitors);
+        state_->move_dragging = false;
+        state_->live_rect = {};
+        InvalidateRect(hwnd_, nullptr, TRUE);
+        return 0;
+    }
+
     if (state_->handle_dragging && state_->resize_handle.has_value()) {
         core::RectPx to_commit = state_->live_rect;
         if (Is_snap_enabled()) {
@@ -830,6 +882,7 @@ LRESULT OverlayWindow::On_paint() {
         input.capture = &resources_->capture;
         input.dragging = state_->dragging;
         input.handle_dragging = state_->handle_dragging;
+        input.move_dragging = state_->move_dragging;
         input.modifier_preview = state_->modifier_preview;
         input.live_rect = state_->live_rect;
         input.final_selection = state_->final_selection;
@@ -869,6 +922,10 @@ LRESULT OverlayWindow::On_set_cursor(WPARAM wparam, LPARAM lparam) {
     if (LOWORD(lparam) != HTCLIENT) {
         return DefWindowProcW(hwnd_, WM_SETCURSOR, wparam, lparam);
     }
+    if (state_->move_dragging) {
+        SetCursor(LoadCursorW(nullptr, IDC_SIZEALL));
+        return TRUE;
+    }
     if (state_->handle_dragging && state_->resize_handle.has_value()) {
         SetCursor(Cursor_for_handle(*state_->resize_handle));
         return TRUE;
@@ -879,6 +936,11 @@ LRESULT OverlayWindow::On_set_cursor(WPARAM wparam, LPARAM lparam) {
     }
     if (!state_->final_selection.Is_empty() && !state_->dragging) {
         core::PointPx const cursor = Get_client_cursor_pos_px(hwnd_);
+        bool const tab_held = (GetKeyState(VK_TAB) & 0x8000) != 0;
+        if (tab_held && state_->final_selection.Contains(cursor)) {
+            SetCursor(LoadCursorW(nullptr, IDC_SIZEALL));
+            return TRUE;
+        }
         std::optional<core::SelectionHandle> hit = core::Hit_test_selection_handle(
             state_->final_selection, cursor, kHandleGrabRadiusPx);
         if (hit.has_value()) {

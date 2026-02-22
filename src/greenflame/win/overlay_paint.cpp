@@ -570,18 +570,22 @@ void Paint_overlay(HDC hdc, HWND hwnd, const RECT &rc, const PaintOverlayInput &
     Draw_capture_to_buffer(buf_dc, hdc, w, h, in.capture);
 
     greenflame::core::RectPx sel =
-        (in.modifier_preview || in.handle_dragging || in.dragging) ? in.live_rect
-                                                                   : in.final_selection;
+        (in.modifier_preview || in.handle_dragging || in.dragging || in.move_dragging)
+            ? in.live_rect
+            : in.final_selection;
     Draw_selection_dim_and_border(buf_dc, buf_bmp, w, h, sel, in.paint_buffer,
                                   in.resources);
 
-    if ((in.dragging || in.handle_dragging || in.modifier_preview) && !sel.Is_empty()) {
+    if ((in.dragging || in.handle_dragging || in.move_dragging ||
+         in.modifier_preview) &&
+        !sel.Is_empty()) {
         Draw_dimension_labels(buf_dc, buf_bmp, w, h, sel, in.paint_buffer,
                               in.resources);
     }
 
     bool const show_crosshair = in.final_selection.Is_empty() && !in.dragging &&
-                                !in.handle_dragging && !in.modifier_preview;
+                                !in.handle_dragging && !in.move_dragging &&
+                                !in.modifier_preview;
     int const cx = in.cursor_client_px.x;
     int const cy = in.cursor_client_px.y;
     if (show_crosshair) {
@@ -589,7 +593,7 @@ void Paint_overlay(HDC hdc, HWND hwnd, const RECT &rc, const PaintOverlayInput &
                                          in.paint_buffer, in.resources, in.capture);
         // Resize handles only when committed or resizing; never in Object_selection
         // (modifier_preview).
-    } else if (in.handle_dragging && !in.live_rect.Is_empty()) {
+    } else if ((in.handle_dragging || in.move_dragging) && !in.live_rect.Is_empty()) {
         Draw_contour_handles(buf_dc, in.live_rect, in.resources);
     } else if (!in.final_selection.Is_empty() && !in.modifier_preview) {
         Draw_contour_handles(buf_dc, in.final_selection, in.resources);

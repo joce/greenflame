@@ -12,7 +12,15 @@
     "useGitignore": true,
     "dictionaryDefinitions": [],
     "dictionaries": ["cpp"],
-    "words": ["greenflame", "Greenshot", "Flameshot", "Segoe", "negotiables"],
+    "words": [
+        "easyjson",
+        "greenflame",
+        "gdiplus",
+        "Greenshot",
+        "Flameshot",
+        "Segoe",
+        "negotiables"
+    ],
     "ignoreWords": [
         "CAPTUREBLT",
         "CREATESTRUCTW",
@@ -21,6 +29,10 @@
         "GWLP",
         "HIWORD",
         "LOWORD",
+        "LPWSTR",
+        "MAKEINTRESOURCEW",
+        "MB_ICONWARNING",
+        "NOTIFYICONDATAW",
         "OPENFILENAMEW",
         "PAINTSTRUCT",
         "SIZENS",
@@ -35,6 +47,7 @@
         "lparam",
         "ltrb",
         "wcsrchr",
+        "winui",
         "wparam"
     ],
     "import": [],

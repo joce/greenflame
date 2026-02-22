@@ -12,54 +12,44 @@ constexpr wchar_t kToastWindowClass[] = L"GreenflameToast";
 constexpr UINT kTrayCallbackMessage = WM_APP + 1;
 constexpr UINT kDeferredCopyWindowMessage = WM_APP + 2;
 constexpr UINT kTrayIconId = 1;
-constexpr int kStartCaptureCommandId = 1;
-constexpr int kCopyWindowCommandId = 2;
-constexpr int kCopyMonitorCommandId = 3;
-constexpr int kCopyDesktopCommandId = 4;
-constexpr int kCopyLastRegionCommandId = 5;
-constexpr int kCopyLastWindowCommandId = 6;
-constexpr int kExitCommandId = 7;
+constexpr UINT kModNoRepeat = 0x4000u;
+constexpr UINT kDefaultDpi = 96;
+
+enum CommandId : int {
+    StartCapture = 1,
+    CopyWindow = 2,
+    CopyMonitor = 3,
+    CopyDesktop = 4,
+    CopyLastRegion = 5,
+    CopyLastWindow = 6,
+    Exit = 7,
+};
+
+enum HotkeyId : int {
+    HotkeyStartCapture = 1,
+    HotkeyCopyWindow = 2,
+    HotkeyCopyMonitor = 3,
+    HotkeyCopyDesktop = 4,
+    HotkeyCopyLastRegion = 5,
+    HotkeyCopyLastWindow = 6,
+    HotkeyTestingError = 90,
+    HotkeyTestingWarning = 91,
+};
+
 constexpr wchar_t kCaptureRegionMenuText[] = L"Capture region\tPrt Scrn";
 constexpr wchar_t kCaptureMonitorMenuText[] =
     L"Capture current monitor\tShift + Prt Scrn";
 constexpr wchar_t kCaptureWindowMenuText[] = L"Capture current window\tCtrl + Prt Scrn";
 constexpr wchar_t kCaptureFullScreenMenuText[] =
     L"Capture full screen\tCtrl + Shift + Prt Scrn";
-constexpr wchar_t kCaptureLastRegionMenuText[] =
-    L"Capture last region\tAlt + Prt Scrn";
+constexpr wchar_t kCaptureLastRegionMenuText[] = L"Capture last region\tAlt + Prt Scrn";
 constexpr wchar_t kCaptureLastWindowMenuText[] =
     L"Capture last window\tCtrl + Alt + Prt Scrn";
-constexpr int kHotkeyStartCaptureId = 1;
-constexpr int kHotkeyCopyWindowId = 2;
-constexpr int kHotkeyCopyMonitorId = 3;
-constexpr int kHotkeyCopyDesktopId = 4;
-constexpr int kHotkeyCopyLastRegionId = 5;
-constexpr int kHotkeyCopyLastWindowId = 6;
-constexpr int kHotkeyTestingErrorId = 90;
-constexpr int kHotkeyTestingWarningId = 91;
-constexpr UINT kModNoRepeat = 0x4000u;
-constexpr UINT_PTR kToastTimerId = 1;
-constexpr UINT kToastDurationMs = 5000;
-constexpr int kToastWidthDip = 340;
-constexpr int kToastMarginDip = 18;
-constexpr int kToastPaddingDip = 14;
-constexpr int kToastAccentBarWidthDip = 4;
-constexpr int kToastHeaderGapDip = 6;
-constexpr int kToastIconDip = 20;
-constexpr int kToastIconGapDip = 10;
-constexpr int kToastTitleAppIconDip = 14;
-constexpr int kToastTitleAppIconGapDip = 6;
-constexpr int kToastTitleFontDip = 12;
-constexpr int kToastBodyFontDip = 13;
-constexpr int kToastMinHeightDip = 56;
-constexpr int kToastMaxHeightDip = 280;
-constexpr UINT kDefaultDpi = 96;
-constexpr int kToastFallbackTextHeightDip = 18;
-constexpr int kToastThumbnailMaxHeightDip = 80;
-constexpr int kToastThumbnailGapDip = 8;
-constexpr wchar_t kToastTitleText[] = L"Greenflame";
+
+#ifdef DEBUG
 constexpr wchar_t kTestingWarningBalloonMessage[] = L"Testing warning toast (Ctrl+W).";
 constexpr wchar_t kTestingErrorBalloonMessage[] = L"Testing error toast (Ctrl+E).";
+#endif
 
 HWND s_last_foreground_hwnd = nullptr;
 HWINEVENTHOOK s_foreground_hook = nullptr;
@@ -283,20 +273,20 @@ class TrayWindow::ToastPopup final {
         Ensure_title_font(dpi);
         Ensure_body_font(dpi);
 
-        int const width = Scale_for_dpi(kToastWidthDip, dpi);
-        int const margin = Scale_for_dpi(kToastMarginDip, dpi);
-        int const padding = Scale_for_dpi(kToastPaddingDip, dpi);
-        int const accent_bar_width = Scale_for_dpi(kToastAccentBarWidthDip, dpi);
-        int const header_gap = Scale_for_dpi(kToastHeaderGapDip, dpi);
-        int const icon_size = Scale_for_dpi(kToastIconDip, dpi);
-        int const icon_gap = Scale_for_dpi(kToastIconGapDip, dpi);
-        int const title_app_icon_size = Scale_for_dpi(kToastTitleAppIconDip, dpi);
-        int const title_app_icon_gap = Scale_for_dpi(kToastTitleAppIconGapDip, dpi);
+        int const width = Scale_for_dpi(kWidthDip, dpi);
+        int const margin = Scale_for_dpi(kMarginDip, dpi);
+        int const padding = Scale_for_dpi(kPaddingDip, dpi);
+        int const accent_bar_width = Scale_for_dpi(kAccentBarWidthDip, dpi);
+        int const header_gap = Scale_for_dpi(kHeaderGapDip, dpi);
+        int const icon_size = Scale_for_dpi(kIconDip, dpi);
+        int const icon_gap = Scale_for_dpi(kIconGapDip, dpi);
+        int const title_app_icon_size = Scale_for_dpi(kTitleAppIconDip, dpi);
+        int const title_app_icon_gap = Scale_for_dpi(kTitleAppIconGapDip, dpi);
         int const title_icon_reserved = title_app_icon_size + title_app_icon_gap;
-        int const min_height = Scale_for_dpi(kToastMinHeightDip, dpi);
-        int const max_height = Scale_for_dpi(kToastMaxHeightDip, dpi);
-        int const thumbnail_max_height = Scale_for_dpi(kToastThumbnailMaxHeightDip, dpi);
-        int const thumbnail_gap = Scale_for_dpi(kToastThumbnailGapDip, dpi);
+        int const min_height = Scale_for_dpi(kMinHeightDip, dpi);
+        int const max_height = Scale_for_dpi(kMaxHeightDip, dpi);
+        int const thumbnail_max_height = Scale_for_dpi(kThumbnailMaxHeightDip, dpi);
+        int const thumbnail_gap = Scale_for_dpi(kThumbnailGapDip, dpi);
 
         int const content_left = accent_bar_width + padding;
         int const content_right = width - padding;
@@ -310,7 +300,7 @@ class TrayWindow::ToastPopup final {
         int const text_width = std::max(1, content_right - text_left);
 
         int title_height = title_app_icon_size;
-        int body_height = Scale_for_dpi(kToastFallbackTextHeightDip, dpi);
+        int body_height = Scale_for_dpi(kFallbackTextHeightDip, dpi);
 
         HDC const hdc = GetDC(hwnd_);
         if (hdc != nullptr) {
@@ -319,7 +309,7 @@ class TrayWindow::ToastPopup final {
 
             RECT title_measure{};
             title_measure.right = title_right - title_left;
-            DrawTextW(hdc, kToastTitleText, -1, &title_measure,
+            DrawTextW(hdc, kTitleText, -1, &title_measure,
                       DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS |
                           DT_CALCRECT);
             int const measured_title = title_measure.bottom - title_measure.top;
@@ -327,7 +317,8 @@ class TrayWindow::ToastPopup final {
                 title_height = measured_title;
             }
 
-            SelectObject(hdc, body_font_ ? body_font_ : GetStockObject(DEFAULT_GUI_FONT));
+            SelectObject(hdc,
+                         body_font_ ? body_font_ : GetStockObject(DEFAULT_GUI_FONT));
             RECT body_measure{};
             body_measure.right = text_width;
             DrawTextW(hdc, message_.c_str(), -1, &body_measure,
@@ -377,19 +368,39 @@ class TrayWindow::ToastPopup final {
         SetWindowPos(hwnd_, HWND_TOPMOST, x, y, width, height,
                      SWP_SHOWWINDOW | SWP_NOACTIVATE);
         InvalidateRect(hwnd_, nullptr, TRUE);
-        KillTimer(hwnd_, kToastTimerId);
-        SetTimer(hwnd_, kToastTimerId, kToastDurationMs, nullptr);
+        KillTimer(hwnd_, kTimerId);
+        SetTimer(hwnd_, kTimerId, kDurationMs, nullptr);
     }
 
     void Destroy() {
         if (!Is_open()) {
             return;
         }
-        KillTimer(hwnd_, kToastTimerId);
+        KillTimer(hwnd_, kTimerId);
         DestroyWindow(hwnd_);
     }
 
   private:
+    static constexpr UINT_PTR kTimerId = 1;
+    static constexpr UINT kDurationMs = 5000;
+    static constexpr int kWidthDip = 340;
+    static constexpr int kMarginDip = 18;
+    static constexpr int kPaddingDip = 14;
+    static constexpr int kAccentBarWidthDip = 4;
+    static constexpr int kHeaderGapDip = 6;
+    static constexpr int kIconDip = 20;
+    static constexpr int kIconGapDip = 10;
+    static constexpr int kTitleAppIconDip = 14;
+    static constexpr int kTitleAppIconGapDip = 6;
+    static constexpr int kTitleFontDip = 12;
+    static constexpr int kBodyFontDip = 13;
+    static constexpr int kMinHeightDip = 56;
+    static constexpr int kMaxHeightDip = 280;
+    static constexpr int kFallbackTextHeightDip = 18;
+    static constexpr int kThumbnailMaxHeightDip = 80;
+    static constexpr int kThumbnailGapDip = 8;
+    static constexpr wchar_t kTitleText[] = L"Greenflame";
+
     [[nodiscard]] bool Is_open() const {
         return hwnd_ != nullptr && IsWindow(hwnd_) != 0;
     }
@@ -402,7 +413,7 @@ class TrayWindow::ToastPopup final {
             DeleteObject(title_font_);
             title_font_ = nullptr;
         }
-        int const h = -Scale_for_dpi(kToastTitleFontDip, dpi);
+        int const h = -Scale_for_dpi(kTitleFontDip, dpi);
         title_font_ =
             CreateFontW(h, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
                         OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
@@ -418,7 +429,7 @@ class TrayWindow::ToastPopup final {
             DeleteObject(body_font_);
             body_font_ = nullptr;
         }
-        int const h = -Scale_for_dpi(kToastBodyFontDip, dpi);
+        int const h = -Scale_for_dpi(kBodyFontDip, dpi);
         body_font_ =
             CreateFontW(h, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
                         OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
@@ -477,12 +488,12 @@ class TrayWindow::ToastPopup final {
         case WM_MBUTTONDOWN:
         case WM_NCLBUTTONDOWN:
         case WM_NCRBUTTONDOWN:
-            KillTimer(hwnd_, kToastTimerId);
+            KillTimer(hwnd_, kTimerId);
             Hide();
             return 0;
         case WM_TIMER:
-            if (wparam == kToastTimerId) {
-                KillTimer(hwnd_, kToastTimerId);
+            if (wparam == kTimerId) {
+                KillTimer(hwnd_, kTimerId);
                 Hide();
             }
             return 0;
@@ -502,22 +513,18 @@ class TrayWindow::ToastPopup final {
                 Ensure_title_font(dpi);
                 Ensure_body_font(dpi);
 
-                int const padding = Scale_for_dpi(kToastPaddingDip, dpi);
-                int const accent_bar_width =
-                    Scale_for_dpi(kToastAccentBarWidthDip, dpi);
-                int const header_gap = Scale_for_dpi(kToastHeaderGapDip, dpi);
-                int const icon_size = Scale_for_dpi(kToastIconDip, dpi);
-                int const icon_gap = Scale_for_dpi(kToastIconGapDip, dpi);
-                int const title_app_icon_size =
-                    Scale_for_dpi(kToastTitleAppIconDip, dpi);
-                int const title_app_icon_gap =
-                    Scale_for_dpi(kToastTitleAppIconGapDip, dpi);
+                int const padding = Scale_for_dpi(kPaddingDip, dpi);
+                int const accent_bar_width = Scale_for_dpi(kAccentBarWidthDip, dpi);
+                int const header_gap = Scale_for_dpi(kHeaderGapDip, dpi);
+                int const icon_size = Scale_for_dpi(kIconDip, dpi);
+                int const icon_gap = Scale_for_dpi(kIconGapDip, dpi);
+                int const title_app_icon_size = Scale_for_dpi(kTitleAppIconDip, dpi);
+                int const title_app_icon_gap = Scale_for_dpi(kTitleAppIconGapDip, dpi);
                 int const title_icon_reserved =
                     title_app_icon_size + title_app_icon_gap;
                 int const thumbnail_max_height =
-                    Scale_for_dpi(kToastThumbnailMaxHeightDip, dpi);
-                int const thumbnail_gap =
-                    Scale_for_dpi(kToastThumbnailGapDip, dpi);
+                    Scale_for_dpi(kThumbnailMaxHeightDip, dpi);
+                int const thumbnail_gap = Scale_for_dpi(kThumbnailGapDip, dpi);
 
                 COLORREF const background_color = winui::kToastBackground;
                 COLORREF const border_color = winui::kToastBorder;
@@ -565,7 +572,7 @@ class TrayWindow::ToastPopup final {
                 SetTextColor(hdc, title_color);
                 HGDIOBJ const old_font = SelectObject(
                     hdc, title_font_ ? title_font_ : GetStockObject(DEFAULT_GUI_FONT));
-                DrawTextW(hdc, kToastTitleText, -1, &title_rect,
+                DrawTextW(hdc, kTitleText, -1, &title_rect,
                           DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX |
                               DT_END_ELLIPSIS);
 
@@ -617,10 +624,8 @@ class TrayWindow::ToastPopup final {
                     if (scale > 1.0f) {
                         scale = 1.0f;
                     }
-                    int const thumb_w =
-                        static_cast<int>(thumbnail_width_ * scale);
-                    int const thumb_h =
-                        static_cast<int>(thumbnail_height_ * scale);
+                    int const thumb_w = static_cast<int>(thumbnail_width_ * scale);
+                    int const thumb_h = static_cast<int>(thumbnail_height_ * scale);
                     int const thumb_top =
                         std::max(body_text_bottom, body_top + icon_size) +
                         thumbnail_gap;
@@ -631,8 +636,7 @@ class TrayWindow::ToastPopup final {
                     thumb_border_rect.top = thumb_top - 1;
                     thumb_border_rect.right = thumb_left + thumb_w + 1;
                     thumb_border_rect.bottom = thumb_top + thumb_h + 1;
-                    HBRUSH const thumb_border_brush =
-                        CreateSolidBrush(border_color);
+                    HBRUSH const thumb_border_brush = CreateSolidBrush(border_color);
                     if (thumb_border_brush != nullptr) {
                         FrameRect(hdc, &thumb_border_rect, thumb_border_brush);
                         DeleteObject(thumb_border_brush);
@@ -640,13 +644,12 @@ class TrayWindow::ToastPopup final {
 
                     HDC const thumb_dc = CreateCompatibleDC(hdc);
                     if (thumb_dc != nullptr) {
-                        HGDIOBJ const old_bmp =
-                            SelectObject(thumb_dc, thumbnail_);
+                        HGDIOBJ const old_bmp = SelectObject(thumb_dc, thumbnail_);
                         SetStretchBltMode(hdc, HALFTONE);
                         SetBrushOrgEx(hdc, 0, 0, nullptr);
                         StretchBlt(hdc, thumb_left, thumb_top, thumb_w, thumb_h,
-                                   thumb_dc, 0, 0, thumbnail_width_,
-                                   thumbnail_height_, SRCCOPY);
+                                   thumb_dc, 0, 0, thumbnail_width_, thumbnail_height_,
+                                   SRCCOPY);
                         SelectObject(thumb_dc, old_bmp);
                         DeleteDC(thumb_dc);
                     }
@@ -722,7 +725,7 @@ bool TrayWindow::Create(HINSTANCE hinstance, bool enable_testing_hotkeys) {
     toast_popup_ = std::make_unique<ToastPopup>(hinstance_);
 
     for (;;) {
-        if (RegisterHotKey(hwnd, kHotkeyStartCaptureId, kModNoRepeat, VK_SNAPSHOT)) {
+        if (RegisterHotKey(hwnd, HotkeyStartCapture, kModNoRepeat, VK_SNAPSHOT)) {
             break;
         }
         int const user_choice =
@@ -738,20 +741,20 @@ bool TrayWindow::Create(HINSTANCE hinstance, bool enable_testing_hotkeys) {
     }
 
     bool const copy_window_registered =
-        RegisterHotKey(hwnd, kHotkeyCopyWindowId,
+        RegisterHotKey(hwnd, HotkeyCopyWindow,
                        static_cast<UINT>(MOD_CONTROL | kModNoRepeat), VK_SNAPSHOT) != 0;
     bool const copy_monitor_registered =
-        RegisterHotKey(hwnd, kHotkeyCopyMonitorId,
+        RegisterHotKey(hwnd, HotkeyCopyMonitor,
                        static_cast<UINT>(MOD_SHIFT | kModNoRepeat), VK_SNAPSHOT) != 0;
     bool const copy_desktop_registered =
-        RegisterHotKey(hwnd, kHotkeyCopyDesktopId,
+        RegisterHotKey(hwnd, HotkeyCopyDesktop,
                        static_cast<UINT>(MOD_CONTROL | MOD_SHIFT | kModNoRepeat),
                        VK_SNAPSHOT) != 0;
     bool const copy_last_region_registered =
-        RegisterHotKey(hwnd, kHotkeyCopyLastRegionId,
+        RegisterHotKey(hwnd, HotkeyCopyLastRegion,
                        static_cast<UINT>(MOD_ALT | kModNoRepeat), VK_SNAPSHOT) != 0;
     bool const copy_last_window_registered =
-        RegisterHotKey(hwnd, kHotkeyCopyLastWindowId,
+        RegisterHotKey(hwnd, HotkeyCopyLastWindow,
                        static_cast<UINT>(MOD_CONTROL | MOD_ALT | kModNoRepeat),
                        VK_SNAPSHOT) != 0;
     if (!copy_window_registered || !copy_monitor_registered ||
@@ -765,15 +768,15 @@ bool TrayWindow::Create(HINSTANCE hinstance, bool enable_testing_hotkeys) {
     }
 
     if (testing_hotkeys_enabled_) {
-        RegisterHotKey(hwnd, kHotkeyTestingErrorId,
+        RegisterHotKey(hwnd, HotkeyTestingError,
                        static_cast<UINT>(MOD_CONTROL | kModNoRepeat), L'E');
-        RegisterHotKey(hwnd, kHotkeyTestingWarningId,
+        RegisterHotKey(hwnd, HotkeyTestingWarning,
                        static_cast<UINT>(MOD_CONTROL | kModNoRepeat), L'W');
     }
 
-    s_foreground_hook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
-                                        nullptr, Foreground_changed_hook, 0, 0,
-                                        WINEVENT_OUTOFCONTEXT);
+    s_foreground_hook =
+        SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
+                        Foreground_changed_hook, 0, 0, WINEVENT_OUTOFCONTEXT);
     return true;
 }
 
@@ -834,19 +837,19 @@ LRESULT TrayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
     switch (msg) {
     case WM_COMMAND: {
         int const command = LOWORD(wparam);
-        if (command == kStartCaptureCommandId) {
+        if (command == StartCapture) {
             Notify_start_capture();
-        } else if (command == kCopyWindowCommandId) {
+        } else if (command == CopyWindow) {
             PostMessage(hwnd_, kDeferredCopyWindowMessage, 0, 0);
-        } else if (command == kCopyMonitorCommandId) {
+        } else if (command == CopyMonitor) {
             Notify_copy_monitor_to_clipboard();
-        } else if (command == kCopyDesktopCommandId) {
+        } else if (command == CopyDesktop) {
             Notify_copy_desktop_to_clipboard();
-        } else if (command == kCopyLastRegionCommandId) {
+        } else if (command == CopyLastRegion) {
             Notify_copy_last_region_to_clipboard();
-        } else if (command == kCopyLastWindowCommandId) {
+        } else if (command == CopyLastWindow) {
             Notify_copy_last_window_to_clipboard();
-        } else if (command == kExitCommandId) {
+        } else if (command == Exit) {
             if (events_) {
                 events_->On_exit_requested();
             }
@@ -854,23 +857,26 @@ LRESULT TrayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
         return 0;
     }
     case WM_HOTKEY:
-        if (wparam == kHotkeyStartCaptureId) {
+        if (wparam == HotkeyStartCapture) {
             Notify_start_capture();
-        } else if (wparam == kHotkeyCopyWindowId) {
+        } else if (wparam == HotkeyCopyWindow) {
             Notify_copy_window_to_clipboard();
-        } else if (wparam == kHotkeyCopyMonitorId) {
+        } else if (wparam == HotkeyCopyMonitor) {
             Notify_copy_monitor_to_clipboard();
-        } else if (wparam == kHotkeyCopyDesktopId) {
+        } else if (wparam == HotkeyCopyDesktop) {
             Notify_copy_desktop_to_clipboard();
-        } else if (wparam == kHotkeyCopyLastRegionId) {
+        } else if (wparam == HotkeyCopyLastRegion) {
             Notify_copy_last_region_to_clipboard();
-        } else if (wparam == kHotkeyCopyLastWindowId) {
+        } else if (wparam == HotkeyCopyLastWindow) {
             Notify_copy_last_window_to_clipboard();
-        } else if (testing_hotkeys_enabled_ && wparam == kHotkeyTestingErrorId) {
+        }
+#ifdef DEBUG
+        else if (testing_hotkeys_enabled_ && wparam == HotkeyTestingError) {
             Show_balloon(TrayBalloonIcon::Error, kTestingErrorBalloonMessage);
-        } else if (testing_hotkeys_enabled_ && wparam == kHotkeyTestingWarningId) {
+        } else if (testing_hotkeys_enabled_ && wparam == HotkeyTestingWarning) {
             Show_balloon(TrayBalloonIcon::Warning, kTestingWarningBalloonMessage);
         }
+#endif
         return 0;
     case WM_DESTROY: {
         if (s_foreground_hook) {
@@ -880,14 +886,14 @@ LRESULT TrayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
         if (toast_popup_) {
             toast_popup_->Destroy();
         }
-        UnregisterHotKey(hwnd_, kHotkeyStartCaptureId);
-        UnregisterHotKey(hwnd_, kHotkeyCopyWindowId);
-        UnregisterHotKey(hwnd_, kHotkeyCopyMonitorId);
-        UnregisterHotKey(hwnd_, kHotkeyCopyDesktopId);
-        UnregisterHotKey(hwnd_, kHotkeyCopyLastRegionId);
-        UnregisterHotKey(hwnd_, kHotkeyCopyLastWindowId);
-        UnregisterHotKey(hwnd_, kHotkeyTestingErrorId);
-        UnregisterHotKey(hwnd_, kHotkeyTestingWarningId);
+        UnregisterHotKey(hwnd_, HotkeyStartCapture);
+        UnregisterHotKey(hwnd_, HotkeyCopyWindow);
+        UnregisterHotKey(hwnd_, HotkeyCopyMonitor);
+        UnregisterHotKey(hwnd_, HotkeyCopyDesktop);
+        UnregisterHotKey(hwnd_, HotkeyCopyLastRegion);
+        UnregisterHotKey(hwnd_, HotkeyCopyLastWindow);
+        UnregisterHotKey(hwnd_, HotkeyTestingError);
+        UnregisterHotKey(hwnd_, HotkeyTestingWarning);
         NOTIFYICONDATAW notify_data{};
         notify_data.cbSize = sizeof(notify_data);
         notify_data.hWnd = hwnd_;
@@ -927,15 +933,15 @@ void TrayWindow::Show_context_menu() {
     if (!menu) {
         return;
     }
-    AppendMenuW(menu, MF_STRING, kStartCaptureCommandId, kCaptureRegionMenuText);
-    AppendMenuW(menu, MF_STRING, kCopyMonitorCommandId, kCaptureMonitorMenuText);
-    AppendMenuW(menu, MF_STRING, kCopyWindowCommandId, kCaptureWindowMenuText);
-    AppendMenuW(menu, MF_STRING, kCopyDesktopCommandId, kCaptureFullScreenMenuText);
+    AppendMenuW(menu, MF_STRING, StartCapture, kCaptureRegionMenuText);
+    AppendMenuW(menu, MF_STRING, CopyMonitor, kCaptureMonitorMenuText);
+    AppendMenuW(menu, MF_STRING, CopyWindow, kCaptureWindowMenuText);
+    AppendMenuW(menu, MF_STRING, CopyDesktop, kCaptureFullScreenMenuText);
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, kCopyLastRegionCommandId, kCaptureLastRegionMenuText);
-    AppendMenuW(menu, MF_STRING, kCopyLastWindowCommandId, kCaptureLastWindowMenuText);
+    AppendMenuW(menu, MF_STRING, CopyLastRegion, kCaptureLastRegionMenuText);
+    AppendMenuW(menu, MF_STRING, CopyLastWindow, kCaptureLastWindowMenuText);
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, kExitCommandId, L"Exit");
+    AppendMenuW(menu, MF_STRING, Exit, L"Exit");
     POINT cursor{};
     GetCursorPos(&cursor);
     SetForegroundWindow(hwnd_);

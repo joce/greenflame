@@ -894,6 +894,11 @@ LRESULT OverlayWindow::On_paint() {
             cursor =
                 core::Snap_point_to_edges(cursor, state_->vertical_edges,
                                           state_->horizontal_edges, kSnapThresholdPx);
+            // Monitor right/bottom snap edges are exclusive boundaries
+            // (e.g. x == width) but pixel indices are zero-based, so clamp
+            // to the last valid pixel to keep crosshair/magnifier visible.
+            if (cursor.x >= rect.right) cursor.x = rect.right - 1;
+            if (cursor.y >= rect.bottom) cursor.y = rect.bottom - 1;
         }
         input.cursor_client_px = cursor;
         input.paint_buffer = std::span<uint8_t>(resources_->paint_buffer);

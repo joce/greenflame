@@ -70,8 +70,9 @@ AppConfig AppConfig::Load() {
             auto read_string = [&](char const *key, std::wstring &target) {
                 if (save.has_key(key)) {
                     easyjson::JSON const &value = save[key];
-                    if (value.JSON_type() == easyjson::JSON::Class::String) {
-                        target = To_wide(value.to_string());
+                    if (value.JSON_type() == easyjson::JSON::Class::String &&
+                        value.Internal.String.has_value()) {
+                        target = To_wide(*value.Internal.String.value());
                     }
                 }
             };

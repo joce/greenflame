@@ -290,13 +290,15 @@ LRESULT OverlayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
 }
 
 std::wstring OverlayWindow::Resolve_save_directory() const {
+    std::wstring dir;
     if (config_ && !config_->last_save_dir.empty()) {
-        return config_->last_save_dir;
+        dir = config_->last_save_dir;
+    } else {
+        wchar_t pictures_dir[MAX_PATH] = {};
+        SHGetFolderPathW(nullptr, CSIDL_MYPICTURES, nullptr, 0, pictures_dir);
+        dir = pictures_dir;
+        dir += L"\\greenflame";
     }
-    wchar_t pictures_dir[MAX_PATH] = {};
-    SHGetFolderPathW(nullptr, CSIDL_MYPICTURES, nullptr, 0, pictures_dir);
-    std::wstring dir = pictures_dir;
-    dir += L"\\greenflame";
     CreateDirectoryW(dir.c_str(), nullptr);
     return dir;
 }
@@ -512,8 +514,8 @@ void OverlayWindow::Save_directly_and_close() {
             events_->On_selection_saved_to_file(Selection_screen_rect(),
                                                 state_->selection_window);
         }
-        Destroy();
     }
+    Destroy();
 }
 
 void OverlayWindow::Save_as_and_close() {

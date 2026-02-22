@@ -100,13 +100,19 @@ void Blend_magnifier_crosshair_onto_pixels(std::span<uint8_t> pixels, int width,
     }
 }
 
-void Fill_magnifier_checkerboard(HDC dc, int left, int top) noexcept {
+void Fill_magnifier_checkerboard(HDC dc, int left, int top, int src_x,
+                                 int src_y) noexcept {
     HBRUSH const dc_brush = static_cast<HBRUSH>(GetStockObject(DC_BRUSH));
     if (!dc_brush) {
         RECT fallback = {left, top, left + kMagnifierSize, top + kMagnifierSize};
         FillRect(dc, &fallback, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
         return;
     }
+
+    // Offset the checkerboard phase by the source coordinates so the pattern
+    // scrolls with the mouse, giving visual motion feedback near edges.
+    int const phase_x = ((src_x % 2) + 2) % 2;
+    int const phase_y = ((src_y % 2) + 2) % 2;
 
     for (int y = 0; y < kMagnifierSize; y += kMagnifierCheckerTile) {
         int const cell_top = top + y;
@@ -117,7 +123,9 @@ void Fill_magnifier_checkerboard(HDC dc, int left, int top) noexcept {
             int const cell_right =
                 std::min(left + x + kMagnifierCheckerTile, left + kMagnifierSize);
             bool const dark =
-                (((x / kMagnifierCheckerTile) + (y / kMagnifierCheckerTile)) & 1) != 0;
+                (((x / kMagnifierCheckerTile) + phase_x +
+                  (y / kMagnifierCheckerTile) + phase_y) &
+                 1) != 0;
             SetDCBrushColor(dc, dark ? kMagnifierCheckerDark : kMagnifierCheckerLight);
             RECT cell = {cell_left, cell_top, cell_right, cell_bottom};
             FillRect(dc, &cell, dc_brush);
@@ -436,7 +444,7 @@ void Draw_crosshair_and_coord_tooltip(HDC buf_dc, HBITMAP buf_bmp, HWND hwnd, in
                                      mag_top + kMagnifierSize);
         if (rgn) {
             SelectClipRgn(buf_dc, rgn);
-            Fill_magnifier_checkerboard(buf_dc, mag_left, mag_top);
+            Fill_magnifier_checkerboard(buf_dc, mag_left, mag_top, src_x, src_y);
 
             if (source_has_coverage) {
                 int const dst_left = mag_left + (sample_left - src_x) * kMagnifierZoom;

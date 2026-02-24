@@ -16,6 +16,11 @@ TEST_CASE("SanitizeFilenameSegment enforces max chars", "[save_image_policy]") {
     REQUIRE(out == L"abc");
 }
 
+TEST_CASE("SanitizeFilenameSegment replaces whitespace", "[save_image_policy]") {
+    std::wstring const out = Sanitize_filename_segment(L"My App\tTitle", 128);
+    REQUIRE(out == L"My_App_Title");
+}
+
 // --- Expand_filename_pattern ---
 
 TEST_CASE("Expand_filename_pattern with date/time variables", "[save_image_policy]") {
@@ -47,7 +52,7 @@ TEST_CASE("Expand_filename_pattern with title variable", "[save_image_policy]") 
     ctx.window_title = L"My App";
     std::wstring const result =
         Expand_filename_pattern(L"${YYYY}-${MM}-${DD}_${hh}${mm}${ss}-${title}", ctx);
-    REQUIRE(result == L"2026-02-21_143025-My App");
+    REQUIRE(result == L"2026-02-21_143025-My_App");
 }
 
 TEST_CASE("Expand_filename_pattern title sanitizes special chars",
@@ -55,7 +60,7 @@ TEST_CASE("Expand_filename_pattern title sanitizes special chars",
     FilenamePatternContext ctx{};
     ctx.timestamp = {1, 1, 2026, 0, 0, 0};
     ctx.window_title = L"File: <test>";
-    REQUIRE(Expand_filename_pattern(L"${title}", ctx) == L"File_ _test_");
+    REQUIRE(Expand_filename_pattern(L"${title}", ctx) == L"File___test_");
 }
 
 TEST_CASE("Expand_filename_pattern empty title falls back to window",

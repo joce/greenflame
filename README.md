@@ -102,7 +102,7 @@ Saved files are named using configurable patterns with Greenshot-style `${VARIAB
 | `${hh}` | 2-digit hour (24h) | `14` |
 | `${mm}` | 2-digit minute | `30` |
 | `${ss}` | 2-digit second | `25` |
-| `${title}` | Sanitized window title (max 50 chars, falls back to `window`) | `My_App` |
+| `${title}` | Sanitized window title (spaces and invalid filename chars become `_`; max 50 chars; falls back to `window`) | `My_App` |
 | `${monitor}` | 1-based monitor number | `2` |
 | `${num}` | Incrementing counter (6-digit, zero-padded, next available by directory scan) | `000042` |
 
@@ -110,10 +110,10 @@ Saved files are named using configurable patterns with Greenshot-style `${VARIAB
 
 | Capture type | Default pattern | Example output |
 |---|---|---|
-| Region | `${YYYY}-${MM}-${DD}_${hh}${mm}${ss}` | `2026-02-21_143025` |
-| Desktop | `${YYYY}-${MM}-${DD}_${hh}${mm}${ss}` | `2026-02-21_143025` |
-| Monitor | `${YYYY}-${MM}-${DD}_${hh}${mm}${ss}-monitor${monitor}` | `2026-02-21_143025-monitor2` |
-| Window | `${YYYY}-${MM}-${DD}_${hh}${mm}${ss}-${title}` | `2026-02-21_143025-My_App` |
+| Region | `screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}` | `screenshot-2026-02-21_143025` |
+| Desktop | `screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}` | `screenshot-2026-02-21_143025` |
+| Monitor | `screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}-monitor${monitor}` | `screenshot-2026-02-21_143025-monitor2` |
+| Window | `screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}-${title}` | `screenshot-2026-02-21_143025-My_App` |
 
 To customize, add the corresponding key to the config file:
 

@@ -10,8 +10,7 @@ constexpr size_t kMaxWindowTitleChars = 50;
     return static_cast<unsigned>(ch) < 0x20u || std::wcschr(kInvalid, ch) != nullptr;
 }
 
-[[nodiscard]] bool Equals_no_case(std::wstring_view a,
-                                  std::wstring_view b) noexcept {
+[[nodiscard]] bool Equals_no_case(std::wstring_view a, std::wstring_view b) noexcept {
     if (a.size() != b.size()) return false;
     for (size_t i = 0; i < a.size(); ++i) {
         if (std::towlower(a[i]) != std::towlower(b[i])) return false;
@@ -96,7 +95,7 @@ std::wstring Sanitize_filename_segment(std::wstring_view input, size_t max_chars
     out.reserve(out_size);
     for (size_t i = 0; i < out_size; ++i) {
         wchar_t const ch = input[i];
-        out.push_back(Is_invalid_filename_char(ch) ? L'_' : ch);
+        out.push_back(Is_invalid_filename_char(ch) || std::iswspace(ch) ? L'_' : ch);
     }
     return out;
 }
@@ -132,9 +131,9 @@ bool Pattern_uses_num(std::wstring_view pattern) noexcept {
     return pattern.find(L"${num}") != std::wstring_view::npos;
 }
 
-unsigned Find_next_num_for_pattern(std::wstring_view pattern,
-                                   FilenamePatternContext const &ctx,
-                                   std::vector<std::wstring> const &existing_filenames) {
+unsigned
+Find_next_num_for_pattern(std::wstring_view pattern, FilenamePatternContext const &ctx,
+                          std::vector<std::wstring> const &existing_filenames) {
     if (!Pattern_uses_num(pattern)) return 1;
 
     static constexpr std::wstring_view kExtensions[] = {L".png", L".jpg", L".jpeg",

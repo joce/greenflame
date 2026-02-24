@@ -13,6 +13,12 @@ enum class CliCaptureMode : uint8_t {
     Help = 5,
 };
 
+enum class CliOutputFormat : uint8_t {
+    Png = 0,
+    Jpeg = 1,
+    Bmp = 2,
+};
+
 [[nodiscard]] constexpr bool Is_capture_mode(CliCaptureMode mode) noexcept {
     return mode == CliCaptureMode::Region || mode == CliCaptureMode::Window ||
            mode == CliCaptureMode::Monitor || mode == CliCaptureMode::Desktop;
@@ -24,6 +30,7 @@ struct CliOptions final {
     std::wstring window_name = {};
     int32_t monitor_id = 0; // 1-based.
     std::wstring output_path = {};
+    std::optional<CliOutputFormat> output_format = std::nullopt;
 #ifdef DEBUG
     bool testing_1_2 = false;
 #endif

@@ -11,7 +11,7 @@ class AppConfig final {
     std::wstring filename_pattern_desktop = {};
     std::wstring filename_pattern_monitor = {};
     std::wstring filename_pattern_window = {};
-    std::wstring default_save_format = {}; // "png" (default), "jpg", or "bmp".
+    std::wstring default_save_format = {}; // "png" (default), "jpg"/"jpeg", or "bmp".
 
     [[nodiscard]] static AppConfig Load();
     [[nodiscard]] bool Save() const;

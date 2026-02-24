@@ -230,32 +230,109 @@ Pattern_for_source(greenflame::AppConfig const &config,
     return {};
 }
 
-[[nodiscard]] uint32_t
-Default_filter_index_from_config(greenflame::AppConfig const &config) noexcept {
-    if (config.default_save_format == L"jpg") {
-        return 2;
+[[nodiscard]] greenflame::core::ImageSaveFormat
+Default_image_save_format_from_config(greenflame::AppConfig const &config) noexcept {
+    if (config.default_save_format == L"jpg" || config.default_save_format == L"jpeg") {
+        return greenflame::core::ImageSaveFormat::Jpeg;
     }
     if (config.default_save_format == L"bmp") {
-        return 3;
+        return greenflame::core::ImageSaveFormat::Bmp;
     }
-    return 1;
+    return greenflame::core::ImageSaveFormat::Png;
 }
 
-[[nodiscard]] std::wstring
-Default_extension_from_config(greenflame::AppConfig const &config) {
-    uint32_t const filter_index = Default_filter_index_from_config(config);
-    if (filter_index == 2) {
+[[nodiscard]] std::wstring_view
+Extension_for_image_save_format(greenflame::core::ImageSaveFormat format) noexcept {
+    switch (format) {
+    case greenflame::core::ImageSaveFormat::Jpeg:
         return L".jpg";
-    }
-    if (filter_index == 3) {
+    case greenflame::core::ImageSaveFormat::Bmp:
         return L".bmp";
+    case greenflame::core::ImageSaveFormat::Png:
+        return L".png";
     }
     return L".png";
 }
 
+[[nodiscard]] std::wstring_view
+Name_for_image_save_format(greenflame::core::ImageSaveFormat format) noexcept {
+    switch (format) {
+    case greenflame::core::ImageSaveFormat::Jpeg:
+        return L"jpg";
+    case greenflame::core::ImageSaveFormat::Bmp:
+        return L"bmp";
+    case greenflame::core::ImageSaveFormat::Png:
+        return L"png";
+    }
+    return L"png";
+}
+
+[[nodiscard]] greenflame::core::ImageSaveFormat
+Image_save_format_from_cli_format(greenflame::core::CliOutputFormat format) noexcept {
+    switch (format) {
+    case greenflame::core::CliOutputFormat::Jpeg:
+        return greenflame::core::ImageSaveFormat::Jpeg;
+    case greenflame::core::CliOutputFormat::Bmp:
+        return greenflame::core::ImageSaveFormat::Bmp;
+    case greenflame::core::CliOutputFormat::Png:
+        return greenflame::core::ImageSaveFormat::Png;
+    }
+    return greenflame::core::ImageSaveFormat::Png;
+}
+
+enum class OutputPathExtensionKind : uint8_t {
+    None = 0,
+    Supported = 1,
+    Unsupported = 2,
+};
+
+struct OutputPathExtensionResult {
+    OutputPathExtensionKind kind = OutputPathExtensionKind::None;
+    greenflame::core::ImageSaveFormat format = greenflame::core::ImageSaveFormat::Png;
+    std::wstring extension = {};
+};
+
+[[nodiscard]] OutputPathExtensionResult
+Inspect_output_path_extension(std::wstring_view path) {
+    OutputPathExtensionResult result{};
+    size_t const slash = path.find_last_of(L"\\/");
+    size_t const dot = path.find_last_of(L'.');
+    if (dot == std::wstring_view::npos ||
+        (slash != std::wstring_view::npos && dot < slash)) {
+        result.kind = OutputPathExtensionKind::None;
+        return result;
+    }
+
+    std::wstring ext(path.substr(dot));
+    for (wchar_t &ch : ext) {
+        ch = static_cast<wchar_t>(std::towlower(ch));
+    }
+    result.extension = ext;
+
+    if (ext == L".png") {
+        result.kind = OutputPathExtensionKind::Supported;
+        result.format = greenflame::core::ImageSaveFormat::Png;
+        return result;
+    }
+    if (ext == L".jpg" || ext == L".jpeg") {
+        result.kind = OutputPathExtensionKind::Supported;
+        result.format = greenflame::core::ImageSaveFormat::Jpeg;
+        return result;
+    }
+    if (ext == L".bmp") {
+        result.kind = OutputPathExtensionKind::Supported;
+        result.format = greenflame::core::ImageSaveFormat::Bmp;
+        return result;
+    }
+
+    result.kind = OutputPathExtensionKind::Unsupported;
+    return result;
+}
+
 [[nodiscard]] std::wstring Build_default_output_path(
     greenflame::AppConfig const &config, greenflame::core::SaveSelectionSource source,
-    std::optional<size_t> monitor_index_zero_based, std::wstring_view window_title) {
+    std::optional<size_t> monitor_index_zero_based, std::wstring_view window_title,
+    greenflame::core::ImageSaveFormat format) {
     std::wstring const save_dir = Resolve_save_directory_from_config(config);
 
     SYSTEMTIME st{};
@@ -287,21 +364,61 @@ Default_extension_from_config(greenflame::AppConfig const &config) {
         output_path += L'\\';
     }
     output_path += base_name;
-    output_path += Default_extension_from_config(config);
+    output_path += Extension_for_image_save_format(format);
     return output_path;
 }
 
-[[nodiscard]] std::wstring
+struct ResolveOutputPathResult {
+    bool ok = false;
+    std::wstring path = {};
+    std::wstring error_message = {};
+};
+
+[[nodiscard]] ResolveOutputPathResult
 Resolve_output_path(greenflame::AppConfig const &config,
                     greenflame::core::SaveSelectionSource source,
                     std::optional<size_t> monitor_index_zero_based,
-                    std::wstring_view window_title, std::wstring_view explicit_path) {
-    if (!explicit_path.empty()) {
-        return greenflame::core::Ensure_image_save_extension(
-            explicit_path, Default_filter_index_from_config(config));
+                    std::wstring_view window_title, std::wstring_view explicit_path,
+                    std::optional<greenflame::core::CliOutputFormat> cli_format) {
+    greenflame::core::ImageSaveFormat const default_format =
+        cli_format.has_value() ? Image_save_format_from_cli_format(*cli_format)
+                               : Default_image_save_format_from_config(config);
+
+    if (explicit_path.empty()) {
+        return ResolveOutputPathResult{
+            true,
+            Build_default_output_path(config, source, monitor_index_zero_based,
+                                      window_title, default_format),
+            {}};
     }
-    return Build_default_output_path(config, source, monitor_index_zero_based,
-                                     window_title);
+
+    OutputPathExtensionResult const ext = Inspect_output_path_extension(explicit_path);
+    if (ext.kind == OutputPathExtensionKind::Unsupported) {
+        std::wstring message = L"Error: --output has unsupported extension ";
+        message += ext.extension;
+        message += L". Supported extensions are .png, .jpg/.jpeg, and .bmp.";
+        return ResolveOutputPathResult{false, {}, message};
+    }
+
+    if (ext.kind == OutputPathExtensionKind::Supported) {
+        if (cli_format.has_value()) {
+            greenflame::core::ImageSaveFormat const requested_format =
+                Image_save_format_from_cli_format(*cli_format);
+            if (requested_format != ext.format) {
+                std::wstring message = L"Error: --output extension ";
+                message += ext.extension;
+                message += L" conflicts with --format ";
+                message += Name_for_image_save_format(requested_format);
+                message += L".";
+                return ResolveOutputPathResult{false, {}, message};
+            }
+        }
+        return ResolveOutputPathResult{true, std::wstring(explicit_path), {}};
+    }
+
+    std::wstring path(explicit_path);
+    path += Extension_for_image_save_format(default_format);
+    return ResolveOutputPathResult{true, path, {}};
 }
 
 void Update_default_save_dir_from_path(greenflame::AppConfig &config,
@@ -798,13 +915,18 @@ int GreenflameApp::Run_cli_capture_mode() {
     }
 
     bool const has_explicit_output_path = !cli_options_.output_path.empty();
-    std::wstring output_path =
+    ResolveOutputPathResult const resolved_output =
         Resolve_output_path(config_, source, monitor_index_zero_based, window_title,
-                            cli_options_.output_path);
-    if (output_path.empty()) {
-        Write_console_line(L"Error: Unable to resolve output path.", true);
+                            cli_options_.output_path, cli_options_.output_format);
+    if (!resolved_output.ok || resolved_output.path.empty()) {
+        if (!resolved_output.error_message.empty()) {
+            Write_console_line(resolved_output.error_message, true);
+        } else {
+            Write_console_line(L"Error: Unable to resolve output path.", true);
+        }
         return kCliExitOutputPathFailure;
     }
+    std::wstring output_path = resolved_output.path;
     bool reserved_output_path = false;
     if (!has_explicit_output_path) {
         std::wstring const reserved = Reserve_unique_file_path(output_path);

@@ -73,6 +73,7 @@ Optional:
 | Option | Meaning |
 |---|---|
 | `-o, --output <path>` | Output file path (valid only with a capture mode) |
+| `-t, --format <png\|jpg\|jpeg\|bmp>` | Output format override |
 
 Both `--option=value` and `--option value` forms are supported.
 
@@ -80,10 +81,21 @@ Examples:
 
 ```bat
 greenflame.exe --desktop
+greenflame.exe --desktop --format jpeg
 greenflame.exe --monitor 2 --output "D:\shots\monitor2.png"
+greenflame.exe --window "Notepad" --output "D:\shots\note" --format jpg
 greenflame.exe --window="Notepad" --output "D:\shots\note"
 greenflame.exe --region 1200,100,800,600
 ```
+
+**A note on output format resolution**
+
+1. If `--output` has a supported extension (`.png`, `.jpg`, `.jpeg`, `.bmp`), that extension defines the format.
+2. Otherwise, if `--format` is provided, `--format` defines the format.
+3. Otherwise, `save.default_save_format` defines the format.
+4. If `--output` extension conflicts with `--format`, the command fails.
+5. If `--output` has an unsupported extension (for example `.tiff`), the command fails.
+6. If `--output` has no extension, Greenflame appends one based on the resolved format.
 
 ---
 
@@ -98,7 +110,7 @@ Greenflame reads `%APPDATA%\greenflame\greenflame.json`.
 | `ui.show_balloons` | `boolean` | `true` | Show tray toast notifications after copy/save actions. |
 | `save.default_save_dir` | `string` | `%USERPROFILE%\Pictures\greenflame` (runtime fallback when unset) | Folder used by **Ctrl-S** and CLI captures when `--output` is not provided. |
 | `save.last_save_as_dir` | `string` | Falls back to `save.default_save_dir`, then `%USERPROFILE%\Pictures\greenflame` | Initial folder used by **Ctrl-Shift-S** (Save As). |
-| `save.default_save_format` | `string` | `"png"` | Default image format for **Ctrl-S**. Accepted values: `"png"`, `"jpg"`, `"bmp"`. |
+| `save.default_save_format` | `string` | `"png"` | Default image format for **Ctrl-S** and CLI output paths without explicit extension. Accepted values: `"png"`, `"jpg"`/`"jpeg"`, `"bmp"`. |
 | `save.filename_pattern_region` | `string` | `screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}` | Default filename pattern for region captures. |
 | `save.filename_pattern_desktop` | `string` | `screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}` | Default filename pattern for desktop captures. |
 | `save.filename_pattern_monitor` | `string` | `screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}-monitor${monitor}` | Default filename pattern for monitor captures. |

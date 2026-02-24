@@ -11,8 +11,9 @@ enum class CliOptionId : uint8_t {
     Desktop = 3,
     Help = 4,
     Output = 5,
+    Format = 6,
 #ifdef DEBUG
-    Testing12 = 6,
+    Testing12 = 7,
 #endif
 };
 
@@ -99,6 +100,16 @@ constexpr CliOptionSpec kCliOptionSpecs[] = {
         L'o',
         CliOptionId::Output,
         CliOptionValueKind::Path,
+        CliOptionGroup::Optional,
+        false,
+    },
+    {
+        L"format",
+        L"<png|jpg|bmp>",
+        L"Output image format. Accepts png, jpg/jpeg, or bmp.",
+        L't',
+        CliOptionId::Format,
+        CliOptionValueKind::String,
         CliOptionGroup::Optional,
         false,
     },
@@ -217,6 +228,34 @@ constexpr CliOptionSpec kCliOptionSpecs[] = {
     region = RectPx::From_ltrb(x, y, static_cast<int32_t>(right64),
                                static_cast<int32_t>(bottom64));
     return true;
+}
+
+[[nodiscard]] bool Try_parse_output_format(std::wstring_view value,
+                                           CliOutputFormat &format) noexcept {
+    std::wstring_view const trimmed = Trim_wspace(value);
+    if (trimmed.empty()) {
+        return false;
+    }
+
+    std::wstring lower;
+    lower.reserve(trimmed.size());
+    for (wchar_t const ch : trimmed) {
+        lower.push_back(static_cast<wchar_t>(std::towlower(ch)));
+    }
+
+    if (lower == L"png") {
+        format = CliOutputFormat::Png;
+        return true;
+    }
+    if (lower == L"jpg" || lower == L"jpeg") {
+        format = CliOutputFormat::Jpeg;
+        return true;
+    }
+    if (lower == L"bmp") {
+        format = CliOutputFormat::Bmp;
+        return true;
+    }
+    return false;
 }
 
 [[nodiscard]] std::wstring Make_option_display_name(CliOptionSpec const &spec) {
@@ -366,6 +405,17 @@ Find_option_by_short_name(wchar_t name, bool debug_build) noexcept {
         }
         options.output_path = value;
         return CliParseResult{true, options, {}};
+    case CliOptionId::Format: {
+        CliOutputFormat format = CliOutputFormat::Png;
+        if (!Try_parse_output_format(value, format)) {
+            return Make_error(L"--format expects one of: png, jpg/jpeg, or bmp.");
+        }
+        if (options.output_format.has_value()) {
+            return Make_error(L"--format can only be specified once.");
+        }
+        options.output_format = format;
+        return CliParseResult{true, options, {}};
+    }
 #ifdef DEBUG
     case CliOptionId::Testing12:
         options.testing_1_2 = true;
@@ -379,6 +429,11 @@ Find_option_by_short_name(wchar_t name, bool debug_build) noexcept {
     if (!options.output_path.empty() && !Is_capture_mode(options.capture_mode)) {
         return Make_error(
             L"--output requires one capture mode: --region, --window, --monitor, "
+            L"or --desktop.");
+    }
+    if (options.output_format.has_value() && !Is_capture_mode(options.capture_mode)) {
+        return Make_error(
+            L"--format requires one capture mode: --region, --window, --monitor, "
             L"or --desktop.");
     }
     if (options.capture_mode == CliCaptureMode::Region &&

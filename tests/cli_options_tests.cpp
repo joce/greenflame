@@ -9,6 +9,7 @@ TEST_CASE("CLI parser accepts no options", "[cli_options]") {
     REQUIRE(result.options.capture_mode == CliCaptureMode::None);
     REQUIRE_FALSE(result.options.region_px.has_value());
     REQUIRE(result.options.output_path.empty());
+    REQUIRE_FALSE(result.options.output_format.has_value());
 }
 
 TEST_CASE("CLI parser accepts region with equals syntax", "[cli_options]") {
@@ -78,6 +79,47 @@ TEST_CASE("CLI parser accepts short monitor option with value", "[cli_options]")
     REQUIRE(result.options.monitor_id == 2);
 }
 
+TEST_CASE("CLI parser accepts format option including jpeg alias", "[cli_options]") {
+    {
+        std::vector<std::wstring> args = {L"--desktop", L"--format", L"png"};
+        CliParseResult const result = Parse_cli_arguments(args, false);
+        REQUIRE(result.ok);
+        REQUIRE(result.options.capture_mode == CliCaptureMode::Desktop);
+        REQUIRE(result.options.output_format.has_value());
+        REQUIRE(*result.options.output_format == CliOutputFormat::Png);
+    }
+    {
+        std::vector<std::wstring> args = {L"--desktop", L"-t", L"jpeg"};
+        CliParseResult const result = Parse_cli_arguments(args, false);
+        REQUIRE(result.ok);
+        REQUIRE(result.options.output_format.has_value());
+        REQUIRE(*result.options.output_format == CliOutputFormat::Jpeg);
+    }
+    {
+        std::vector<std::wstring> args = {L"--desktop", L"--format=bMp"};
+        CliParseResult const result = Parse_cli_arguments(args, false);
+        REQUIRE(result.ok);
+        REQUIRE(result.options.output_format.has_value());
+        REQUIRE(*result.options.output_format == CliOutputFormat::Bmp);
+    }
+}
+
+TEST_CASE("CLI parser rejects invalid format option value", "[cli_options]") {
+    std::vector<std::wstring> args = {L"--desktop", L"--format", L"tiff"};
+    CliParseResult const result = Parse_cli_arguments(args, false);
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(result.error_message.find(L"--format expects one of") !=
+            std::wstring::npos);
+}
+
+TEST_CASE("CLI parser rejects format without capture mode", "[cli_options]") {
+    std::vector<std::wstring> args = {L"--format", L"jpg"};
+    CliParseResult const result = Parse_cli_arguments(args, false);
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(result.error_message.find(L"--format requires one capture mode") !=
+            std::wstring::npos);
+}
+
 TEST_CASE("CLI parser rejects output without capture mode", "[cli_options]") {
     std::vector<std::wstring> args = {L"--output", L"C:\\tmp\\shot"};
     CliParseResult const result = Parse_cli_arguments(args, false);
@@ -124,6 +166,7 @@ TEST_CASE("CLI help text includes declared options", "[cli_options]") {
     REQUIRE(help_release.find(L"--desktop") != std::wstring::npos);
     REQUIRE(help_release.find(L"--help") != std::wstring::npos);
     REQUIRE(help_release.find(L"--output") != std::wstring::npos);
+    REQUIRE(help_release.find(L"--format") != std::wstring::npos);
     REQUIRE(help_release.find(L"--testing-1-2") == std::wstring::npos);
 
 #ifdef DEBUG

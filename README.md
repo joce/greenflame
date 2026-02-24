@@ -28,7 +28,7 @@ Once a region is selected:
 
 - **Drag the handles** on the selection to resize (hold **Alt** to disable snapping).
 - Hold **Tab** and drag inside the selection to **move** it (hold **Alt** to disable snapping).
-- **Ctrl-S** ➜ save directly (no dialog) to the last-used folder as the configured format (default PNG), then close.
+- **Ctrl-S** ➜ save directly (no dialog) to the configured default save folder as the configured format (default PNG), then close.
 - **Ctrl-Shift-S** ➜ open **Save As** dialog, then save and close.
 - **Ctrl-C** ➜ copy the selection to the clipboard, then close.
 - **Escape** ➜ cancel or go back.
@@ -82,16 +82,54 @@ Examples:
 greenflame.exe --desktop
 greenflame.exe --monitor 2 --output "D:\shots\monitor2.png"
 greenflame.exe --window="Notepad" --output "D:\shots\note"
-greenflame.exe --region -1200,100,800,600
+greenflame.exe --region 1200,100,800,600
 ```
 
 ---
 
-## Filename patterns
+## Configuration
 
-Saved files are named using configurable patterns with Greenshot-style `${VARIABLE}` placeholders. Each capture type has its own pattern, editable in `%APPDATA%\greenflame\greenflame.json` under the `"save"` section.
+Greenflame reads `%APPDATA%\greenflame\greenflame.json`.
 
-### Supported variables
+### All config keys
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `ui.show_balloons` | `boolean` | `true` | Show tray toast notifications after copy/save actions. |
+| `save.default_save_dir` | `string` | `%USERPROFILE%\Pictures\greenflame` (runtime fallback when unset) | Folder used by **Ctrl-S** and CLI captures when `--output` is not provided. |
+| `save.last_save_as_dir` | `string` | Falls back to `save.default_save_dir`, then `%USERPROFILE%\Pictures\greenflame` | Initial folder used by **Ctrl-Shift-S** (Save As). |
+| `save.default_save_format` | `string` | `"png"` | Default image format for **Ctrl-S**. Accepted values: `"png"`, `"jpg"`, `"bmp"`. |
+| `save.filename_pattern_region` | `string` | `screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}` | Default filename pattern for region captures. |
+| `save.filename_pattern_desktop` | `string` | `screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}` | Default filename pattern for desktop captures. |
+| `save.filename_pattern_monitor` | `string` | `screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}-monitor${monitor}` | Default filename pattern for monitor captures. |
+| `save.filename_pattern_window` | `string` | `screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}-${title}` | Default filename pattern for window captures. |
+
+Example:
+
+```json
+{
+  "ui": {
+    "show_balloons": true
+  },
+  "save": {
+    "default_save_dir": "C:\\Users\\you\\Pictures\\greenflame",
+    "last_save_as_dir": "D:\\shots\\scratch",
+    "default_save_format": "png",
+    "filename_pattern_region": "screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}",
+    "filename_pattern_desktop": "screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}",
+    "filename_pattern_monitor": "screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}-monitor${monitor}",
+    "filename_pattern_window": "screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}-${title}"
+  }
+}
+```
+
+### Save filenames
+
+Saved files use one pattern per capture type and Greenshot-style `${VARIABLE}` placeholders.
+
+#### Filename patterns
+
+##### Supported variables
 
 | Variable | Expansion | Example |
 |----------|-----------|---------|
@@ -106,7 +144,7 @@ Saved files are named using configurable patterns with Greenshot-style `${VARIAB
 | `${monitor}` | 1-based monitor number | `2` |
 | `${num}` | Incrementing counter (6-digit, zero-padded, next available by directory scan) | `000042` |
 
-### Default patterns
+##### Default patterns
 
 | Capture type | Default pattern | Example output |
 |---|---|---|
@@ -114,47 +152,6 @@ Saved files are named using configurable patterns with Greenshot-style `${VARIAB
 | Desktop | `screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}` | `screenshot-2026-02-21_143025` |
 | Monitor | `screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}-monitor${monitor}` | `screenshot-2026-02-21_143025-monitor2` |
 | Window | `screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}-${title}` | `screenshot-2026-02-21_143025-My_App` |
-
-To customize, add the corresponding key to the config file:
-
-```json
-{
-  "save": {
-    "filename_pattern_region": "${YYYY}${MM}${DD}_${hh}${mm}${ss}",
-    "filename_pattern_window": "Greenflame-${title}-${YYYY}${MM}${DD}"
-  }
-}
-```
-
-Only patterns explicitly set in the config file are saved; omitted keys use the built-in defaults.
-
-### Direct save format
-
-The `default_save_format` setting controls which format **Ctrl-S** uses. Accepted values: `"png"` (default), `"jpg"`, `"bmp"`.
-
-```json
-{
-  "save": {
-    "default_save_format": "jpg"
-  }
-}
-```
-
-### Save directories
-
-Save paths are configured independently:
-
-- `default_save_dir`: used by **Ctrl-S** and CLI captures that do not pass `--output`.
-- `last_save_as_dir`: used as the initial folder for **Ctrl-Shift-S** (Save As).
-
-```json
-{
-  "save": {
-    "default_save_dir": "C:\\Users\\you\\Pictures\\greenflame",
-    "last_save_as_dir": "D:\\shots\\scratch"
-  }
-}
-```
 
 ---
 
@@ -166,4 +163,4 @@ Save paths are configured independently:
 
 ---
 
-**License** — [MIT](LICENSE)
+**[MIT](LICENSE) License**

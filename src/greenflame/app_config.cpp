@@ -76,16 +76,8 @@ AppConfig AppConfig::Load() {
                     }
                 }
             };
-            std::wstring legacy_last_save_dir = {};
             read_string("default_save_dir", config.default_save_dir);
             read_string("last_save_as_dir", config.last_save_as_dir);
-            read_string("last_save_dir", legacy_last_save_dir);
-            if (config.default_save_dir.empty() && !legacy_last_save_dir.empty()) {
-                config.default_save_dir = legacy_last_save_dir;
-            }
-            if (config.last_save_as_dir.empty() && !legacy_last_save_dir.empty()) {
-                config.last_save_as_dir = legacy_last_save_dir;
-            }
             read_string("filename_pattern_region", config.filename_pattern_region);
             read_string("filename_pattern_desktop", config.filename_pattern_desktop);
             read_string("filename_pattern_monitor", config.filename_pattern_monitor);

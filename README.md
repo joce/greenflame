@@ -74,6 +74,7 @@ Optional:
 |---|---|
 | `-o, --output <path>` | Output file path (valid only with a capture mode) |
 | `-t, --format <png\|jpg\|jpeg\|bmp>` | Output format override |
+| `-f, --overwrite` | Allow replacing an existing explicit `--output` file |
 
 Both `--option=value` and `--option value` forms are supported.
 
@@ -84,6 +85,7 @@ greenflame.exe --desktop
 greenflame.exe --desktop --format jpeg
 greenflame.exe --monitor 2 --output "D:\shots\monitor2.png"
 greenflame.exe --window "Notepad" --output "D:\shots\note" --format jpg
+greenflame.exe --window "Notepad" --output "D:\shots\note.jpg" --overwrite
 greenflame.exe --window="Notepad" --output "D:\shots\note"
 greenflame.exe --region 1200,100,800,600
 ```

@@ -10,6 +10,7 @@ TEST_CASE("CLI parser accepts no options", "[cli_options]") {
     REQUIRE_FALSE(result.options.region_px.has_value());
     REQUIRE(result.options.output_path.empty());
     REQUIRE_FALSE(result.options.output_format.has_value());
+    REQUIRE_FALSE(result.options.overwrite_output);
 }
 
 TEST_CASE("CLI parser accepts region with equals syntax", "[cli_options]") {
@@ -128,6 +129,24 @@ TEST_CASE("CLI parser rejects output without capture mode", "[cli_options]") {
             std::wstring::npos);
 }
 
+TEST_CASE("CLI parser accepts overwrite option with and without capture mode",
+          "[cli_options]") {
+    {
+        std::vector<std::wstring> args = {L"--overwrite"};
+        CliParseResult const result = Parse_cli_arguments(args, false);
+        REQUIRE(result.ok);
+        REQUIRE(result.options.capture_mode == CliCaptureMode::None);
+        REQUIRE(result.options.overwrite_output);
+    }
+    {
+        std::vector<std::wstring> args = {L"--desktop", L"-f"};
+        CliParseResult const result = Parse_cli_arguments(args, false);
+        REQUIRE(result.ok);
+        REQUIRE(result.options.capture_mode == CliCaptureMode::Desktop);
+        REQUIRE(result.options.overwrite_output);
+    }
+}
+
 TEST_CASE("CLI parser rejects mutually exclusive capture modes", "[cli_options]") {
     std::vector<std::wstring> args = {L"--desktop", L"--monitor", L"1"};
     CliParseResult const result = Parse_cli_arguments(args, false);
@@ -167,6 +186,7 @@ TEST_CASE("CLI help text includes declared options", "[cli_options]") {
     REQUIRE(help_release.find(L"--help") != std::wstring::npos);
     REQUIRE(help_release.find(L"--output") != std::wstring::npos);
     REQUIRE(help_release.find(L"--format") != std::wstring::npos);
+    REQUIRE(help_release.find(L"--overwrite") != std::wstring::npos);
     REQUIRE(help_release.find(L"--testing-1-2") == std::wstring::npos);
 
 #ifdef DEBUG

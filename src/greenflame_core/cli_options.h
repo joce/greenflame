@@ -31,6 +31,7 @@ struct CliOptions final {
     int32_t monitor_id = 0; // 1-based.
     std::wstring output_path = {};
     std::optional<CliOutputFormat> output_format = std::nullopt;
+    bool overwrite_output = false;
 #ifdef DEBUG
     bool testing_1_2 = false;
 #endif

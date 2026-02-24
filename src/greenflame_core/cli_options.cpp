@@ -12,8 +12,9 @@ enum class CliOptionId : uint8_t {
     Help = 4,
     Output = 5,
     Format = 6,
+    Overwrite = 7,
 #ifdef DEBUG
-    Testing12 = 7,
+    Testing12 = 8,
 #endif
 };
 
@@ -110,6 +111,16 @@ constexpr CliOptionSpec kCliOptionSpecs[] = {
         L't',
         CliOptionId::Format,
         CliOptionValueKind::String,
+        CliOptionGroup::Optional,
+        false,
+    },
+    {
+        L"overwrite",
+        nullptr,
+        L"Allow replacing an existing explicit --output path.",
+        L'f',
+        CliOptionId::Overwrite,
+        CliOptionValueKind::None,
         CliOptionGroup::Optional,
         false,
     },
@@ -416,6 +427,9 @@ Find_option_by_short_name(wchar_t name, bool debug_build) noexcept {
         options.output_format = format;
         return CliParseResult{true, options, {}};
     }
+    case CliOptionId::Overwrite:
+        options.overwrite_output = true;
+        return CliParseResult{true, options, {}};
 #ifdef DEBUG
     case CliOptionId::Testing12:
         options.testing_1_2 = true;

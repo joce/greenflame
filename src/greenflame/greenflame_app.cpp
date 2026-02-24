@@ -421,6 +421,49 @@ Resolve_output_path(greenflame::AppConfig const &config,
     return ResolveOutputPathResult{true, path, {}};
 }
 
+[[nodiscard]] std::wstring Resolve_absolute_path(std::wstring_view path) {
+    if (path.empty()) {
+        return {};
+    }
+
+    std::wstring input(path);
+    DWORD const required = GetFullPathNameW(input.c_str(), 0, nullptr, nullptr);
+    if (required == 0) {
+        return input;
+    }
+
+    std::wstring result;
+    result.resize(required);
+    DWORD const written =
+        GetFullPathNameW(input.c_str(), required, result.data(), nullptr);
+    if (written == 0) {
+        return input;
+    }
+    if (written < result.size()) {
+        result.resize(written);
+    }
+    return result;
+}
+
+[[nodiscard]] bool Try_reserve_exact_file_path(std::wstring_view path,
+                                               bool &already_exists) noexcept {
+    already_exists = false;
+    if (path.empty()) {
+        return false;
+    }
+    std::wstring path_string(path);
+    HANDLE const handle =
+        CreateFileW(path_string.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ,
+                    nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (handle != INVALID_HANDLE_VALUE) {
+        CloseHandle(handle);
+        return true;
+    }
+    DWORD const error = GetLastError();
+    already_exists = error == ERROR_FILE_EXISTS || error == ERROR_ALREADY_EXISTS;
+    return false;
+}
+
 void Update_default_save_dir_from_path(greenflame::AppConfig &config,
                                        std::wstring_view full_path) {
     size_t const slash = full_path.find_last_of(L"\\/");
@@ -927,7 +970,8 @@ int GreenflameApp::Run_cli_capture_mode() {
         return kCliExitOutputPathFailure;
     }
     std::wstring output_path = resolved_output.path;
-    bool reserved_output_path = false;
+    output_path = Resolve_absolute_path(output_path);
+    bool delete_output_path_on_failure = false;
     if (!has_explicit_output_path) {
         std::wstring const reserved = Reserve_unique_file_path(output_path);
         if (reserved.empty()) {
@@ -935,7 +979,21 @@ int GreenflameApp::Run_cli_capture_mode() {
             return kCliExitOutputPathFailure;
         }
         output_path = reserved;
-        reserved_output_path = true;
+        delete_output_path_on_failure = true;
+    } else if (!cli_options_.overwrite_output) {
+        bool already_exists = false;
+        if (!Try_reserve_exact_file_path(output_path, already_exists)) {
+            if (already_exists) {
+                std::wstring message = L"Error: Output file already exists: ";
+                message += output_path;
+                message += L". Use --overwrite (or -f) to replace it.";
+                Write_console_line(message, true);
+            } else {
+                Write_console_line(L"Error: Unable to reserve the output path.", true);
+            }
+            return kCliExitOutputPathFailure;
+        }
+        delete_output_path_on_failure = true;
     }
 
     if (window_obscuration == WindowObscuration::Full) {
@@ -965,7 +1023,7 @@ int GreenflameApp::Run_cli_capture_mode() {
     SaveScreenRectResult const save_result =
         Save_screen_rect_to_file(target_rect, output_path);
     if (!save_result.ok) {
-        if (reserved_output_path) {
+        if (delete_output_path_on_failure) {
             (void)DeleteFileW(output_path.c_str());
         }
         switch (save_result.failure) {

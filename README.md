@@ -30,6 +30,8 @@ Once a region is selected:
 - Hold **Tab** and drag inside the selection to **move** it (hold **Alt** to disable snapping).
 - **Ctrl-S** ➜ save directly (no dialog) to the configured default save folder as the configured format (default PNG), then close.
 - **Ctrl-Shift-S** ➜ open **Save As** dialog, then save and close.
+- **Ctrl-Alt-S** ➜ save directly (no dialog), copy the saved file to the clipboard, then close.
+- **Ctrl-Shift-Alt-S** ➜ open **Save As** dialog, save, copy the saved file to the clipboard, then close.
 - **Ctrl-C** ➜ copy the selection to the clipboard, then close.
 - **Escape** ➜ cancel or go back.
 
@@ -99,6 +101,28 @@ greenflame.exe --region 1200,100,800,600
 5. If `--output` has an unsupported extension (for example `.tiff`), the command fails.
 6. If `--output` has no extension, Greenflame appends one based on the resolved format.
 
+### Exit codes
+
+Greenflame uses these process exit codes for command-line invocations. Non-zero
+codes are unique and not reused.
+
+| Code | Meaning |
+|---|---|
+| `0` | Success (includes `--help` and "already running" tray startup) |
+| `1` | Failed to register application window classes |
+| `2` | CLI argument parse/validation failed |
+| `3` | Failed to create tray window |
+| `4` | Failed to enforce single-instance tray mode |
+| `5` | `--region` capture requested but region data is missing |
+| `6` | `--window` matched no visible window |
+| `7` | `--window` matched multiple windows (ambiguous) |
+| `8` | `--monitor` capture requested but no monitors are available |
+| `9` | `--monitor` id is out of range |
+| `10` | Output path resolution/reservation failed |
+| `11` | Capture/save operation failed |
+| `12` | Matched window became unavailable before capture |
+| `13` | Matched window is minimized |
+
 ---
 
 ## Configuration
@@ -110,9 +134,9 @@ Greenflame reads `%APPDATA%\greenflame\greenflame.json`.
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `ui.show_balloons` | `boolean` | `true` | Show tray toast notifications after copy/save actions. |
-| `save.default_save_dir` | `string` | `%USERPROFILE%\Pictures\greenflame` (runtime fallback when unset) | Folder used by **Ctrl-S** and CLI captures when `--output` is not provided. |
-| `save.last_save_as_dir` | `string` | Falls back to `save.default_save_dir`, then `%USERPROFILE%\Pictures\greenflame` | Initial folder used by **Ctrl-Shift-S** (Save As). |
-| `save.default_save_format` | `string` | `"png"` | Default image format for **Ctrl-S** and CLI output paths without explicit extension. Accepted values: `"png"`, `"jpg"`/`"jpeg"`, `"bmp"`. |
+| `save.default_save_dir` | `string` | `%USERPROFILE%\Pictures\greenflame` (runtime fallback when unset) | Folder used by **Ctrl-S**, **Ctrl-Alt-S**, and CLI captures when `--output` is not provided. |
+| `save.last_save_as_dir` | `string` | Falls back to `save.default_save_dir`, then `%USERPROFILE%\Pictures\greenflame` | Initial folder used by **Ctrl-Shift-S** and **Ctrl-Shift-Alt-S** (Save As). |
+| `save.default_save_format` | `string` | `"png"` | Default image format for **Ctrl-S**, **Ctrl-Alt-S**, and CLI output paths without explicit extension. Accepted values: `"png"`, `"jpg"`/`"jpeg"`, `"bmp"`. |
 | `save.filename_pattern_region` | `string` | `screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}` | Default filename pattern for region captures. |
 | `save.filename_pattern_desktop` | `string` | `screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}` | Default filename pattern for desktop captures. |
 | `save.filename_pattern_monitor` | `string` | `screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}-monitor${monitor}` | Default filename pattern for monitor captures. |

@@ -80,6 +80,79 @@ Create_thumbnail_from_capture(greenflame::GdiCaptureResult const &capture) {
     return result;
 }
 
+[[nodiscard]] std::wstring Resolve_absolute_path(std::wstring_view path) {
+    if (path.empty()) {
+        return {};
+    }
+
+    std::wstring input(path);
+    DWORD const required = GetFullPathNameW(input.c_str(), 0, nullptr, nullptr);
+    if (required == 0) {
+        return input;
+    }
+
+    std::wstring result(required, L'\0');
+    DWORD const written =
+        GetFullPathNameW(input.c_str(), required, result.data(), nullptr);
+    if (written == 0) {
+        return input;
+    }
+    if (written < result.size()) {
+        result.resize(written);
+    }
+    return result;
+}
+
+[[nodiscard]] bool Copy_file_path_to_clipboard(std::wstring_view path,
+                                               HWND owner_window) {
+    std::wstring const absolute_path = Resolve_absolute_path(path);
+    if (absolute_path.empty()) {
+        return false;
+    }
+
+    size_t const path_chars = absolute_path.size();
+    size_t const bytes = sizeof(DROPFILES) + (path_chars + 2) * sizeof(wchar_t);
+    HGLOBAL file_list_memory = GlobalAlloc(GMEM_MOVEABLE, bytes);
+    if (file_list_memory == nullptr) {
+        return false;
+    }
+
+    void *const raw = GlobalLock(file_list_memory);
+    if (raw == nullptr) {
+        GlobalFree(file_list_memory);
+        return false;
+    }
+
+    DROPFILES *dropfiles = static_cast<DROPFILES *>(raw);
+    *dropfiles = {};
+    dropfiles->pFiles = sizeof(DROPFILES);
+    dropfiles->fWide = TRUE;
+
+    wchar_t *files =
+        reinterpret_cast<wchar_t *>(static_cast<uint8_t *>(raw) + sizeof(DROPFILES));
+    memcpy(files, absolute_path.c_str(), path_chars * sizeof(wchar_t));
+    files[path_chars] = L'\0';
+    files[path_chars + 1] = L'\0';
+    GlobalUnlock(file_list_memory);
+
+    bool copied = false;
+    HWND const clipboard_owner =
+        (owner_window != nullptr && IsWindow(owner_window) != 0) ? owner_window
+                                                                 : nullptr;
+    if (OpenClipboard(clipboard_owner) != 0) {
+        if (EmptyClipboard() != 0 &&
+            SetClipboardData(CF_HDROP, file_list_memory) != nullptr) {
+            copied = true;
+            file_list_memory = nullptr; // Clipboard owns memory after success.
+        }
+        CloseClipboard();
+    }
+    if (file_list_memory != nullptr) {
+        GlobalFree(file_list_memory);
+    }
+    return copied;
+}
+
 [[nodiscard]] POINT To_point(greenflame::core::PointPx p) {
     POINT out{};
     out.x = p.x;
@@ -317,8 +390,10 @@ LRESULT CALLBACK OverlayWindow::Static_wnd_proc(HWND hwnd, UINT msg, WPARAM wpar
 LRESULT OverlayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
     switch (msg) {
     case WM_KEYDOWN:
+    case WM_SYSKEYDOWN:
         return On_key_down(wparam, lparam);
     case WM_KEYUP:
+    case WM_SYSKEYUP:
         return On_key_up(wparam, lparam);
     case WM_LBUTTONDOWN:
         return On_l_button_down();
@@ -523,7 +598,7 @@ core::RectPx OverlayWindow::Selection_screen_rect() const {
                                    sel.bottom + static_cast<int32_t>(overlay_rect.top));
 }
 
-void OverlayWindow::Save_directly_and_close() {
+void OverlayWindow::Save_directly_and_close(bool copy_saved_file_to_clipboard) {
     if (!resources_->capture.Is_valid()) {
         return;
     }
@@ -585,13 +660,19 @@ void OverlayWindow::Save_directly_and_close() {
     HBITMAP thumb = saved ? Create_thumbnail_from_capture(cropped) : nullptr;
     cropped.Free();
     if (saved) {
+        bool file_copied_to_clipboard = false;
+        if (copy_saved_file_to_clipboard) {
+            file_copied_to_clipboard =
+                Copy_file_path_to_clipboard(reserved_path, hwnd_);
+        }
         if (config_) {
             config_->default_save_dir = save_dir;
             config_->Normalize();
         }
         if (events_) {
-            events_->On_selection_saved_to_file(Selection_screen_rect(),
-                                                state_->selection_window, thumb);
+            events_->On_selection_saved_to_file(
+                Selection_screen_rect(), state_->selection_window, thumb, reserved_path,
+                file_copied_to_clipboard);
             thumb = nullptr;
         }
         if (thumb != nullptr) {
@@ -601,7 +682,7 @@ void OverlayWindow::Save_directly_and_close() {
     Destroy();
 }
 
-void OverlayWindow::Save_as_and_close() {
+void OverlayWindow::Save_as_and_close(bool copy_saved_file_to_clipboard) {
     if (!resources_->capture.Is_valid()) {
         return;
     }
@@ -661,6 +742,10 @@ void OverlayWindow::Save_as_and_close() {
     HBITMAP thumb = saved ? Create_thumbnail_from_capture(cropped) : nullptr;
     cropped.Free();
     if (saved) {
+        bool file_copied_to_clipboard = false;
+        if (copy_saved_file_to_clipboard) {
+            file_copied_to_clipboard = Copy_file_path_to_clipboard(path_buffer, hwnd_);
+        }
         wchar_t *last_slash = wcsrchr(path_buffer, L'\\');
         if (last_slash && config_) {
             size_t const dir_len = static_cast<size_t>(last_slash - path_buffer);
@@ -671,7 +756,8 @@ void OverlayWindow::Save_as_and_close() {
         }
         if (events_) {
             events_->On_selection_saved_to_file(Selection_screen_rect(),
-                                                state_->selection_window, thumb);
+                                                state_->selection_window, thumb,
+                                                path_buffer, file_copied_to_clipboard);
             thumb = nullptr;
         }
         if (thumb != nullptr) {
@@ -734,10 +820,12 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
     if ((GetKeyState(VK_CONTROL) & 0x8000) != 0 &&
         !state_->final_selection.Is_empty()) {
         if (wparam == L'S') {
+            bool const copy_saved_file_to_clipboard =
+                (GetKeyState(VK_MENU) & 0x8000) != 0;
             if ((GetKeyState(VK_SHIFT) & 0x8000) != 0) {
-                Save_as_and_close();
+                Save_as_and_close(copy_saved_file_to_clipboard);
             } else {
-                Save_directly_and_close();
+                Save_directly_and_close(copy_saved_file_to_clipboard);
             }
             return 0;
         }
@@ -761,7 +849,9 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
         InvalidateRect(hwnd_, nullptr, TRUE);
         return 0;
     }
-    return DefWindowProcW(hwnd_, WM_KEYDOWN, wparam, lparam);
+    UINT const message_id =
+        (lparam & (static_cast<LPARAM>(1) << 29)) != 0 ? WM_SYSKEYDOWN : WM_KEYDOWN;
+    return DefWindowProcW(hwnd_, message_id, wparam, lparam);
 }
 
 LRESULT OverlayWindow::On_key_up(WPARAM wparam, LPARAM lparam) {
@@ -770,7 +860,9 @@ LRESULT OverlayWindow::On_key_up(WPARAM wparam, LPARAM lparam) {
         return 0;
     }
     if (wparam != VK_SHIFT && wparam != VK_CONTROL) {
-        return DefWindowProcW(hwnd_, WM_KEYUP, wparam, lparam);
+        UINT const message_id =
+            (lparam & (static_cast<LPARAM>(1) << 29)) != 0 ? WM_SYSKEYUP : WM_KEYUP;
+        return DefWindowProcW(hwnd_, message_id, wparam, lparam);
     }
     if (state_->modifier_preview) {
         state_->modifier_preview = false;

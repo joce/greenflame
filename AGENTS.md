@@ -120,4 +120,5 @@ Breaking these rules is considered a correctness bug.
 - Do not move testable logic into the GUI executable
 - Prefer failing loudly over silently doing the wrong thing
 - When unsure, preserve correctness over convenience
+- Keep process/CLI exit codes in a single enum with globally unique numeric values (no reuse). When codes change, update the README exit-code table in the command-line section.
 - Your main instinct should be to debug issues and find problems' root causes rather than introduce new abstractions or code paths, or changing the architecture or existing code.

@@ -14,7 +14,9 @@ class IOverlayEvents {
                                                   std::optional<HWND> window) = 0;
     virtual void On_selection_saved_to_file(core::RectPx screen_rect,
                                             std::optional<HWND> window,
-                                            HBITMAP thumbnail) = 0;
+                                            HBITMAP thumbnail,
+                                            std::wstring_view saved_path,
+                                            bool file_copied_to_clipboard) = 0;
 };
 
 class OverlayWindow final {
@@ -48,8 +50,8 @@ class OverlayWindow final {
     [[nodiscard]] static std::vector<std::wstring>
     List_directory_filenames(std::wstring_view dir);
     [[nodiscard]] core::RectPx Selection_screen_rect() const;
-    void Save_directly_and_close();
-    void Save_as_and_close();
+    void Save_directly_and_close(bool copy_saved_file_to_clipboard);
+    void Save_as_and_close(bool copy_saved_file_to_clipboard);
     void Copy_to_clipboard_and_close();
 
     LRESULT On_key_down(WPARAM wparam, LPARAM lparam);

@@ -143,12 +143,13 @@ int WINAPI wWinMain(HINSTANCE h_instance, HINSTANCE, PWSTR, int) {
         std::wstring error_line = L"Error: ";
         error_line += parse_result.error_message;
         Write_console_line(error_line, true);
-        return 2;
+        return greenflame::To_exit_code(
+            greenflame::ProcessExitCode::CliArgumentParseFailed);
     }
 
     if (parse_result.options.capture_mode == greenflame::core::CliCaptureMode::Help) {
         Write_console_text(greenflame::core::Build_cli_help_text(kDebugBuild), false);
-        return 0;
+        return greenflame::To_exit_code(greenflame::ProcessExitCode::Success);
     }
 
     if (parse_result.options.capture_mode == greenflame::core::CliCaptureMode::None &&
@@ -162,7 +163,8 @@ int WINAPI wWinMain(HINSTANCE h_instance, HINSTANCE, PWSTR, int) {
                                DETACHED_PROCESS, nullptr, nullptr, &si, &pi)) {
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
-                ExitProcess(0);
+                ExitProcess(
+                    greenflame::To_exit_code(greenflame::ProcessExitCode::Success));
             }
         }
     }
@@ -172,12 +174,13 @@ int WINAPI wWinMain(HINSTANCE h_instance, HINSTANCE, PWSTR, int) {
         SingleInstanceResult const lock_result =
             Acquire_tray_single_instance_lock(tray_single_instance_lock);
         if (lock_result == SingleInstanceResult::AlreadyRunning) {
-            return 0;
+            return greenflame::To_exit_code(greenflame::ProcessExitCode::Success);
         }
         if (lock_result == SingleInstanceResult::Error) {
             Write_console_line(L"Error: Failed to enforce single-instance tray mode.",
                                true);
-            return 3;
+            return greenflame::To_exit_code(
+                greenflame::ProcessExitCode::TraySingleInstanceEnforcementFailed);
         }
     }
 

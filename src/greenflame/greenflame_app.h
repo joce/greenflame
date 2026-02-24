@@ -3,6 +3,7 @@
 #include "app_config.h"
 #include "greenflame_core/cli_options.h"
 #include "greenflame_core/rect_px.h"
+#include "process_exit_code.h"
 #include "win/overlay_window.h"
 #include "win/tray_window.h"
 
@@ -16,7 +17,7 @@ class GreenflameApp final : public ITrayEvents, public IOverlayEvents {
     [[nodiscard]] int Run();
 
   private:
-    [[nodiscard]] int Run_cli_capture_mode();
+    [[nodiscard]] ProcessExitCode Run_cli_capture_mode();
     void On_start_capture_requested() override;
     void On_copy_window_to_clipboard_requested(HWND target_window) override;
     void On_copy_monitor_to_clipboard_requested() override;
@@ -28,8 +29,9 @@ class GreenflameApp final : public ITrayEvents, public IOverlayEvents {
     void On_selection_copied_to_clipboard(core::RectPx screen_rect,
                                           std::optional<HWND> window) override;
     void On_selection_saved_to_file(core::RectPx screen_rect,
-                                    std::optional<HWND> window,
-                                    HBITMAP thumbnail) override;
+                                    std::optional<HWND> window, HBITMAP thumbnail,
+                                    std::wstring_view saved_path,
+                                    bool file_copied_to_clipboard) override;
 
     void Store_last_capture(core::RectPx screen_rect, std::optional<HWND> window);
 

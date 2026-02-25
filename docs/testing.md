@@ -1,15 +1,15 @@
 ---
 title: Testing Guide
-summary: Build and run unit tests for greenflame_core with Catch2.
+summary: Build and run unit tests for greenflame_core with GoogleTest.
 audience: contributors
 status: authoritative
 owners:
   - core-team
-last_updated: 2026-02-21
+last_updated: 2026-02-24
 tags:
   - tests
   - ctest
-  - catch2
+  - gtest
 ---
 
 # Testing Guide
@@ -56,14 +56,13 @@ ctest --test-dir build\x64-debug-clang
 
 Test must be run and must pass before any task is considered complete. This is a hard requirement.
 
-## Catch2 integration (authoritative)
+## GoogleTest integration (authoritative)
 
-- Test framework: **Catch2 v3**
-- Integration method: **CMake FetchContent** in `tests/CMakeLists.txt` (tag v3.5.4). First configure (or when the FetchContent cache is missing) **requires network**; request network permission for that configure step in sandboxed/CI environments.
+- Test framework: **GoogleTest**
+- Integration method: **CMake FetchContent** in `tests/CMakeLists.txt` (tag v1.14.0). First configure (or when the FetchContent cache is missing) **requires network**; request network permission for that configure step in sandboxed/CI environments.
 - No global install and no vcpkg requirement
 - The test binary is: `greenflame_tests`
-
-Do not add ad-hoc test runners or alternate test frameworks.
+- Link target: `GTest::gtest_main`
 
 ## Where to add tests
 
@@ -73,14 +72,14 @@ Do not add ad-hoc test runners or alternate test frameworks.
 
 ## Writing a test
 
-Use Catch2 v3 macros.
+Use GoogleTest macros.
 
 ```cpp
-# include <catch2/catch_test_macros.hpp>
+#include <gtest/gtest.h>
 
-TEST_CASE("something important")
+TEST(Suite, Name)
 {
-    REQUIRE(1 + 1 == 2);
+    EXPECT_EQ(1 + 1, 2);
 }
 ```
 
@@ -92,10 +91,10 @@ You can run the test executable (useful for filters):
 build\x64-debug\greenflame_tests.exe
 ```
 
-Run a subset via Catch2 filters:
+Run a subset via GoogleTest filters:
 
 ```bat
-build\x64-debug\greenflame_tests.exe "RectPx*"
+build\x64-debug\greenflame_tests.exe --gtest_filter="RectPx*"
 ```
 
 Prefer `ctest` for standard runs; use direct execution for local filtering.

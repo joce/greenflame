@@ -9,64 +9,62 @@ constexpr int32_t kThreshold = 10;
 
 } // namespace
 
-TEST_CASE("Snap_rect_to_edges snaps left when within threshold", "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_rect_to_edges_SnapsLeft) {
     RectPx rect = RectPx::From_ltrb(103, 50, 200, 150); // left near 100
     std::array<int32_t, 1> vertical = {100};
     std::array<int32_t, 0> horizontal = {};
     RectPx out = Snap_rect_to_edges(rect, vertical, horizontal, kThreshold);
-    REQUIRE(out.left == 100);
-    REQUIRE(out.right == 200);
-    REQUIRE(out.top == 50);
-    REQUIRE(out.bottom == 150);
+    EXPECT_EQ(out.left, 100);
+    EXPECT_EQ(out.right, 200);
+    EXPECT_EQ(out.top, 50);
+    EXPECT_EQ(out.bottom, 150);
 }
 
-TEST_CASE("Snap_rect_to_edges snaps right when within threshold", "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_rect_to_edges_SnapsRight) {
     RectPx rect = RectPx::From_ltrb(100, 50, 197, 150); // right near 200
     std::array<int32_t, 1> vertical = {200};
     std::array<int32_t, 0> horizontal = {};
     RectPx out = Snap_rect_to_edges(rect, vertical, horizontal, kThreshold);
-    REQUIRE(out.left == 100);
-    REQUIRE(out.right == 200);
+    EXPECT_EQ(out.left, 100);
+    EXPECT_EQ(out.right, 200);
 }
 
-TEST_CASE("Snap_rect_to_edges snaps top and bottom when within threshold",
-          "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_rect_to_edges_SnapsTopAndBottom) {
     RectPx rect = RectPx::From_ltrb(100, 52, 200, 148); // top near 50, bottom near 150
     std::array<int32_t, 0> vertical = {};
     std::array<int32_t, 2> horizontal = {50, 150};
     RectPx out = Snap_rect_to_edges(rect, vertical, horizontal, kThreshold);
-    REQUIRE(out.top == 50);
-    REQUIRE(out.bottom == 150);
+    EXPECT_EQ(out.top, 50);
+    EXPECT_EQ(out.bottom, 150);
 }
 
-TEST_CASE("Snap_rect_to_edges does not snap when beyond threshold", "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_rect_to_edges_NoSnapBeyondThreshold) {
     RectPx rect = RectPx::From_ltrb(115, 50, 200, 150); // left 15px from 100
     std::array<int32_t, 1> vertical = {100};
     std::array<int32_t, 0> horizontal = {};
     RectPx out = Snap_rect_to_edges(rect, vertical, horizontal, kThreshold);
-    REQUIRE(out.left == 115);
-    REQUIRE(out.right == 200);
+    EXPECT_EQ(out.left, 115);
+    EXPECT_EQ(out.right, 200);
 }
 
-TEST_CASE("Snap_rect_to_edges snaps to closest of multiple lines", "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_rect_to_edges_SnapsToClosest) {
     // left at 103: 100 is 3 away, 90 is 13 away -> snap to 100
     RectPx rect = RectPx::From_ltrb(103, 50, 200, 150);
     std::array<int32_t, 2> vertical = {90, 100};
     std::array<int32_t, 0> horizontal = {};
     RectPx out = Snap_rect_to_edges(rect, vertical, horizontal, kThreshold);
-    REQUIRE(out.left == 100);
+    EXPECT_EQ(out.left, 100);
 }
 
-TEST_CASE("Snap_rect_to_edges does not snap left if would invert rect",
-          "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_rect_to_edges_NoSnapIfWouldInvert) {
     // rect 105..200; line at 205 would snap right but 205 > 200 so no snap right;
     // line at 199: snapping left to 199 would give left>=right, so skip
     RectPx rect = RectPx::From_ltrb(195, 50, 200, 150); // narrow
     std::array<int32_t, 1> vertical = {199}; // would make left 199, right 200 ok
     std::array<int32_t, 0> horizontal = {};
     RectPx out = Snap_rect_to_edges(rect, vertical, horizontal, kThreshold);
-    REQUIRE(out.left == 199);
-    REQUIRE(out.right == 200);
+    EXPECT_EQ(out.left, 199);
+    EXPECT_EQ(out.right, 200);
     // Snapping right to 199 would require right > left; 199 > 195 so we could snap
     // right to 199. Snapping left to 199: left would become 199, right 200, so
     // left < right, that's valid. So left could snap to 199. Let me re-read
@@ -87,99 +85,97 @@ TEST_CASE("Snap_rect_to_edges does not snap left if would invert rect",
     RectPx narrow = RectPx::From_ltrb(100, 50, 101, 150); // width 1
     std::array<int32_t, 2> vertical_narrow = {100, 101};
     RectPx out2 = Snap_rect_to_edges(narrow, vertical_narrow, horizontal, kThreshold);
-    REQUIRE(out2.left == 100);
-    REQUIRE(out2.right == 101); // no snap that would make left >= right
+    EXPECT_EQ(out2.left, 100);
+    EXPECT_EQ(out2.right, 101); // no snap that would make left >= right
 }
 
-TEST_CASE("Snap_rect_to_edges empty spans leave rect unchanged", "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_rect_to_edges_EmptySpansUnchanged) {
     RectPx rect = RectPx::From_ltrb(100, 50, 200, 150);
     std::array<int32_t, 0> empty_v = {};
     std::array<int32_t, 0> empty_h = {};
     RectPx out = Snap_rect_to_edges(rect, empty_v, empty_h, kThreshold);
-    REQUIRE(out.left == 100);
-    REQUIRE(out.right == 200);
-    REQUIRE(out.top == 50);
-    REQUIRE(out.bottom == 150);
+    EXPECT_EQ(out.left, 100);
+    EXPECT_EQ(out.right, 200);
+    EXPECT_EQ(out.top, 50);
+    EXPECT_EQ(out.bottom, 150);
 }
 
-TEST_CASE("Snap_rect_to_edges preserves minimum size 1x1 after snap",
-          "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_rect_to_edges_PreservesMinimumSize) {
     RectPx rect = RectPx::From_ltrb(100, 50, 101, 51); // 1x1
     std::array<int32_t, 1> vertical = {100};
     std::array<int32_t, 1> horizontal = {50};
     RectPx out = Snap_rect_to_edges(rect, vertical, horizontal, kThreshold);
-    REQUIRE(out.Width() >= 1);
-    REQUIRE(out.Height() >= 1);
+    EXPECT_GE(out.Width(), 1);
+    EXPECT_GE(out.Height(), 1);
 }
 
-TEST_CASE("Snap_rect_to_edges threshold zero does not snap", "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_rect_to_edges_ThresholdZeroNoSnap) {
     RectPx rect = RectPx::From_ltrb(100, 50, 200, 150);
     std::array<int32_t, 1> vertical = {100};
     std::array<int32_t, 0> horizontal = {};
     RectPx out = Snap_rect_to_edges(rect, vertical, horizontal, 0);
-    REQUIRE(out.left == 100);
-    REQUIRE(out.right == 200);
+    EXPECT_EQ(out.left, 100);
+    EXPECT_EQ(out.right, 200);
 }
 
-TEST_CASE("Snap_rect_to_edges negative threshold does not snap", "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_rect_to_edges_NegativeThresholdNoSnap) {
     RectPx rect = RectPx::From_ltrb(103, 50, 200, 150);
     std::array<int32_t, 1> vertical = {100};
     std::array<int32_t, 0> horizontal = {};
     RectPx out = Snap_rect_to_edges(rect, vertical, horizontal, -1);
-    REQUIRE(out.left == 103);
+    EXPECT_EQ(out.left, 103);
 }
 
-TEST_CASE("Snap_rect_to_edges empty rect returns normalized empty", "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_rect_to_edges_EmptyRectReturnsEmpty) {
     RectPx rect = RectPx::From_ltrb(10, 10, 10, 10);
     std::array<int32_t, 1> vertical = {100};
     std::array<int32_t, 1> horizontal = {50};
     RectPx out = Snap_rect_to_edges(rect, vertical, horizontal, kThreshold);
-    REQUIRE(out.Is_empty());
+    EXPECT_TRUE(out.Is_empty());
 }
 
-TEST_CASE("Snap_rect_to_edges uses span of vector", "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_rect_to_edges_UsesSpanOfVector) {
     RectPx rect = RectPx::From_ltrb(104, 50, 200, 150);
     std::vector<int32_t> vertical = {100, 200};
     std::vector<int32_t> horizontal = {};
     RectPx out = Snap_rect_to_edges(rect, vertical, horizontal, kThreshold);
-    REQUIRE(out.left == 100);
+    EXPECT_EQ(out.left, 100);
 }
 
-TEST_CASE("Snap_point_to_edges snaps each axis independently", "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_point_to_edges_SnapsEachAxisIndependently) {
     PointPx point = {103, 48};
     std::array<int32_t, 2> vertical = {100, 140};
     std::array<int32_t, 2> horizontal = {50, 120};
 
     PointPx out = Snap_point_to_edges(point, vertical, horizontal, kThreshold);
 
-    REQUIRE(out.x == 100);
-    REQUIRE(out.y == 50);
+    EXPECT_EQ(out.x, 100);
+    EXPECT_EQ(out.y, 50);
 }
 
-TEST_CASE("Snap_point_to_edges picks the closest line per axis", "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_point_to_edges_PicksClosestLine) {
     PointPx point = {108, 112};
     std::array<int32_t, 3> vertical = {100, 105, 130};
     std::array<int32_t, 3> horizontal = {100, 109, 130};
 
     PointPx out = Snap_point_to_edges(point, vertical, horizontal, kThreshold);
 
-    REQUIRE(out.x == 105);
-    REQUIRE(out.y == 109);
+    EXPECT_EQ(out.x, 105);
+    EXPECT_EQ(out.y, 109);
 }
 
-TEST_CASE("Snap_point_to_edges does not snap outside threshold", "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_point_to_edges_NoSnapOutsideThreshold) {
     PointPx point = {120, 140};
     std::array<int32_t, 1> vertical = {100};
     std::array<int32_t, 1> horizontal = {120};
 
     PointPx out = Snap_point_to_edges(point, vertical, horizontal, kThreshold);
 
-    REQUIRE(out.x == 120);
-    REQUIRE(out.y == 140);
+    EXPECT_EQ(out.x, 120);
+    EXPECT_EQ(out.y, 140);
 }
 
-TEST_CASE("Snap_point_to_edges threshold zero or negative does not snap",
-          "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_point_to_edges_ThresholdZeroOrNegativeNoSnap) {
     PointPx point = {103, 103};
     std::array<int32_t, 1> vertical = {100};
     std::array<int32_t, 1> horizontal = {100};
@@ -187,109 +183,104 @@ TEST_CASE("Snap_point_to_edges threshold zero or negative does not snap",
     PointPx out_zero = Snap_point_to_edges(point, vertical, horizontal, 0);
     PointPx out_negative = Snap_point_to_edges(point, vertical, horizontal, -1);
 
-    REQUIRE(out_zero == point);
-    REQUIRE(out_negative == point);
+    EXPECT_EQ(out_zero, point);
+    EXPECT_EQ(out_negative, point);
 }
 
 // --- Snap_moved_rect_to_edges tests ---
 
-TEST_CASE("Snap_moved_rect left edge snaps, right follows preserving width",
-          "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_moved_rect_LeftEdgeSnaps) {
     RectPx rect = RectPx::From_ltrb(103, 50, 203, 150); // width 100
     std::array<int32_t, 1> vertical = {100};
     std::array<int32_t, 0> horizontal = {};
     RectPx out = Snap_moved_rect_to_edges(rect, vertical, horizontal, kThreshold);
-    REQUIRE(out.left == 100);
-    REQUIRE(out.right == 200);
-    REQUIRE(out.Width() == 100);
-    REQUIRE(out.top == 50);
-    REQUIRE(out.bottom == 150);
+    EXPECT_EQ(out.left, 100);
+    EXPECT_EQ(out.right, 200);
+    EXPECT_EQ(out.Width(), 100);
+    EXPECT_EQ(out.top, 50);
+    EXPECT_EQ(out.bottom, 150);
 }
 
-TEST_CASE("Snap_moved_rect right edge snaps, left follows preserving width",
-          "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_moved_rect_RightEdgeSnaps) {
     RectPx rect = RectPx::From_ltrb(100, 50, 297, 150); // right near 300
     std::array<int32_t, 1> vertical = {300};
     std::array<int32_t, 0> horizontal = {};
     RectPx out = Snap_moved_rect_to_edges(rect, vertical, horizontal, kThreshold);
-    REQUIRE(out.right == 300);
-    REQUIRE(out.left == 103);
-    REQUIRE(out.Width() == 197);
+    EXPECT_EQ(out.right, 300);
+    EXPECT_EQ(out.left, 103);
+    EXPECT_EQ(out.Width(), 197);
 }
 
-TEST_CASE("Snap_moved_rect top edge snaps, bottom follows preserving height",
-          "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_moved_rect_TopEdgeSnaps) {
     RectPx rect = RectPx::From_ltrb(100, 53, 200, 153); // height 100
     std::array<int32_t, 0> vertical = {};
     std::array<int32_t, 1> horizontal = {50};
     RectPx out = Snap_moved_rect_to_edges(rect, vertical, horizontal, kThreshold);
-    REQUIRE(out.top == 50);
-    REQUIRE(out.bottom == 150);
-    REQUIRE(out.Height() == 100);
+    EXPECT_EQ(out.top, 50);
+    EXPECT_EQ(out.bottom, 150);
+    EXPECT_EQ(out.Height(), 100);
 }
 
-TEST_CASE("Snap_moved_rect bottom edge snaps, top follows preserving height",
-          "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_moved_rect_BottomEdgeSnaps) {
     RectPx rect = RectPx::From_ltrb(100, 50, 200, 248); // bottom near 250
     std::array<int32_t, 0> vertical = {};
     std::array<int32_t, 1> horizontal = {250};
     RectPx out = Snap_moved_rect_to_edges(rect, vertical, horizontal, kThreshold);
-    REQUIRE(out.bottom == 250);
-    REQUIRE(out.top == 52);
-    REQUIRE(out.Height() == 198);
+    EXPECT_EQ(out.bottom, 250);
+    EXPECT_EQ(out.top, 52);
+    EXPECT_EQ(out.Height(), 198);
 }
 
-TEST_CASE("Snap_moved_rect closer edge wins when both within threshold",
-          "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_moved_rect_CloserEdgeWins) {
     // left at 103 (3 from 100), right at 203 (7 from 210) -> left wins
     RectPx rect = RectPx::From_ltrb(103, 50, 203, 150);
     std::array<int32_t, 2> vertical = {100, 210};
     std::array<int32_t, 0> horizontal = {};
     RectPx out = Snap_moved_rect_to_edges(rect, vertical, horizontal, kThreshold);
-    REQUIRE(out.left == 100);
-    REQUIRE(out.right == 200);
-    REQUIRE(out.Width() == 100);
+    EXPECT_EQ(out.left, 100);
+    EXPECT_EQ(out.right, 200);
+    EXPECT_EQ(out.Width(), 100);
 }
 
-TEST_CASE("Snap_moved_rect both axes snap independently", "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_moved_rect_BothAxesSnap) {
     RectPx rect = RectPx::From_ltrb(103, 48, 203, 148);
     std::array<int32_t, 1> vertical = {100};
     std::array<int32_t, 1> horizontal = {50};
     RectPx out = Snap_moved_rect_to_edges(rect, vertical, horizontal, kThreshold);
-    REQUIRE(out.left == 100);
-    REQUIRE(out.right == 200);
-    REQUIRE(out.top == 50);
-    REQUIRE(out.bottom == 150);
+    EXPECT_EQ(out.left, 100);
+    EXPECT_EQ(out.right, 200);
+    EXPECT_EQ(out.top, 50);
+    EXPECT_EQ(out.bottom, 150);
 }
 
-TEST_CASE("Snap_moved_rect no snap when beyond threshold", "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_moved_rect_NoSnapBeyondThreshold) {
     RectPx rect = RectPx::From_ltrb(115, 65, 215, 165);
     std::array<int32_t, 1> vertical = {100};
     std::array<int32_t, 1> horizontal = {50};
     RectPx out = Snap_moved_rect_to_edges(rect, vertical, horizontal, kThreshold);
-    REQUIRE(out == rect);
+    EXPECT_EQ(out, rect);
 }
 
-TEST_CASE("Snap_moved_rect empty edges leave rect unchanged", "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_moved_rect_EmptyEdgesUnchanged) {
     RectPx rect = RectPx::From_ltrb(100, 50, 200, 150);
     std::array<int32_t, 0> empty_v = {};
     std::array<int32_t, 0> empty_h = {};
     RectPx out = Snap_moved_rect_to_edges(rect, empty_v, empty_h, kThreshold);
-    REQUIRE(out == rect);
+    EXPECT_EQ(out, rect);
 }
 
-TEST_CASE("Snap_moved_rect threshold zero does not snap", "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_moved_rect_ThresholdZeroNoSnap) {
     RectPx rect = RectPx::From_ltrb(103, 50, 203, 150);
     std::array<int32_t, 1> vertical = {100};
     std::array<int32_t, 0> horizontal = {};
     RectPx out = Snap_moved_rect_to_edges(rect, vertical, horizontal, 0);
-    REQUIRE(out == rect);
+    EXPECT_EQ(out, rect);
 }
 
-TEST_CASE("Snap_moved_rect empty rect is returned unchanged", "[snap_to_edges]") {
+TEST(snap_to_edges, Snap_moved_rect_EmptyRectUnchanged) {
     RectPx rect = RectPx::From_ltrb(10, 10, 10, 10);
     std::array<int32_t, 1> vertical = {100};
     std::array<int32_t, 1> horizontal = {50};
     RectPx out = Snap_moved_rect_to_edges(rect, vertical, horizontal, kThreshold);
-    REQUIRE(out == rect);
+    EXPECT_EQ(out, rect);
 }

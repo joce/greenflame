@@ -2,73 +2,70 @@
 
 using namespace greenflame::core;
 
-TEST_CASE("RectPx::From_points — same point (zero width/height)",
-          "[rect][from_points]") {
+TEST(rect_from_points, SamePoint_ZeroWidthHeight) {
     PointPx p{100, 50};
     RectPx r = RectPx::From_points(p, p);
-    REQUIRE(r.left == 100);
-    REQUIRE(r.top == 50);
-    REQUIRE(r.right == 100);
-    REQUIRE(r.bottom == 50);
-    REQUIRE(r.Width() == 0);
-    REQUIRE(r.Height() == 0);
-    REQUIRE(r.Is_empty());
+    EXPECT_EQ(r.left, 100);
+    EXPECT_EQ(r.top, 50);
+    EXPECT_EQ(r.right, 100);
+    EXPECT_EQ(r.bottom, 50);
+    EXPECT_EQ(r.Width(), 0);
+    EXPECT_EQ(r.Height(), 0);
+    EXPECT_TRUE(r.Is_empty());
 }
 
-TEST_CASE("RectPx::From_points — opposite corners", "[rect][from_points]") {
+TEST(rect_from_points, OppositeCorners) {
     PointPx a{10, 20};
     PointPx b{100, 80};
     RectPx r = RectPx::From_points(a, b);
-    REQUIRE(r.left == 10);
-    REQUIRE(r.top == 20);
-    REQUIRE(r.right == 100);
-    REQUIRE(r.bottom == 80);
-    REQUIRE(r.Width() == 90);
-    REQUIRE(r.Height() == 60);
-    REQUIRE(!r.Is_empty());
+    EXPECT_EQ(r.left, 10);
+    EXPECT_EQ(r.top, 20);
+    EXPECT_EQ(r.right, 100);
+    EXPECT_EQ(r.bottom, 80);
+    EXPECT_EQ(r.Width(), 90);
+    EXPECT_EQ(r.Height(), 60);
+    EXPECT_FALSE(r.Is_empty());
 }
 
-TEST_CASE("RectPx::From_points — reversed order (b then a)", "[rect][from_points]") {
+TEST(rect_from_points, ReversedOrder) {
     PointPx a{100, 80};
     PointPx b{10, 20};
     RectPx r = RectPx::From_points(a, b);
-    REQUIRE(r.left == 10);
-    REQUIRE(r.top == 20);
-    REQUIRE(r.right == 100);
-    REQUIRE(r.bottom == 80);
+    EXPECT_EQ(r.left, 10);
+    EXPECT_EQ(r.top, 20);
+    EXPECT_EQ(r.right, 100);
+    EXPECT_EQ(r.bottom, 80);
 }
 
-TEST_CASE("RectPx::From_points — negative coordinates (virtual desktop)",
-          "[rect][from_points]") {
+TEST(rect_from_points, NegativeCoordinates) {
     PointPx a{-1920, 100};
     PointPx b{-100, 500};
     RectPx r = RectPx::From_points(a, b);
-    REQUIRE(r.left == -1920);
-    REQUIRE(r.top == 100);
-    REQUIRE(r.right == -100);
-    REQUIRE(r.bottom == 500);
-    REQUIRE(r.Width() == 1820);
-    REQUIRE(r.Height() == 400);
+    EXPECT_EQ(r.left, -1920);
+    EXPECT_EQ(r.top, 100);
+    EXPECT_EQ(r.right, -100);
+    EXPECT_EQ(r.bottom, 500);
+    EXPECT_EQ(r.Width(), 1820);
+    EXPECT_EQ(r.Height(), 400);
 }
 
-TEST_CASE("RectPx::From_points — equivalence to Normalized when a,b swapped",
-          "[rect][from_points]") {
+TEST(rect_from_points, EquivalenceToNormalized) {
     PointPx a{50, 60};
     PointPx b{10, 20};
     RectPx from_points = RectPx::From_points(a, b);
     RectPx from_ltrb = RectPx::From_ltrb(10, 20, 50, 60);
-    REQUIRE(from_points.Normalized().left == from_ltrb.left);
-    REQUIRE(from_points.Normalized().top == from_ltrb.top);
-    REQUIRE(from_points.Normalized().right == from_ltrb.right);
-    REQUIRE(from_points.Normalized().bottom == from_ltrb.bottom);
+    EXPECT_EQ(from_points.Normalized().left, from_ltrb.left);
+    EXPECT_EQ(from_points.Normalized().top, from_ltrb.top);
+    EXPECT_EQ(from_points.Normalized().right, from_ltrb.right);
+    EXPECT_EQ(from_points.Normalized().bottom, from_ltrb.bottom);
 }
 
-TEST_CASE("RectPx::From_ltrb — builds rect", "[rect][from_ltrb]") {
+TEST(rect_from_ltrb, BuildsRect) {
     RectPx r = RectPx::From_ltrb(5, 10, 25, 30);
-    REQUIRE(r.left == 5);
-    REQUIRE(r.top == 10);
-    REQUIRE(r.right == 25);
-    REQUIRE(r.bottom == 30);
-    REQUIRE(r.Width() == 20);
-    REQUIRE(r.Height() == 20);
+    EXPECT_EQ(r.left, 5);
+    EXPECT_EQ(r.top, 10);
+    EXPECT_EQ(r.right, 25);
+    EXPECT_EQ(r.bottom, 30);
+    EXPECT_EQ(r.Width(), 20);
+    EXPECT_EQ(r.Height(), 20);
 }

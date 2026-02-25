@@ -2,83 +2,75 @@
 
 using namespace greenflame::core;
 
-TEST_CASE("Rect_px_from_virtual_screen_metrics — positive origin and size",
-          "[virtual_screen][rect]") {
+TEST(virtual_screen_rect, PositiveOriginAndSize) {
     RectPx r = Rect_px_from_virtual_screen_metrics(0, 0, 1920, 1080);
-    REQUIRE(r.left == 0);
-    REQUIRE(r.top == 0);
-    REQUIRE(r.right == 1920);
-    REQUIRE(r.bottom == 1080);
-    REQUIRE(r.Width() == 1920);
-    REQUIRE(r.Height() == 1080);
-    REQUIRE(!r.Is_empty());
+    EXPECT_EQ(r.left, 0);
+    EXPECT_EQ(r.top, 0);
+    EXPECT_EQ(r.right, 1920);
+    EXPECT_EQ(r.bottom, 1080);
+    EXPECT_EQ(r.Width(), 1920);
+    EXPECT_EQ(r.Height(), 1080);
+    EXPECT_FALSE(r.Is_empty());
 }
 
-TEST_CASE("Rect_px_from_virtual_screen_metrics — negative origin (multi-monitor)",
-          "[virtual_screen][rect]") {
+TEST(virtual_screen_rect, NegativeOrigin) {
     RectPx r = Rect_px_from_virtual_screen_metrics(-1920, 0, 1920, 1080);
-    REQUIRE(r.left == -1920);
-    REQUIRE(r.top == 0);
-    REQUIRE(r.right == 0);
-    REQUIRE(r.bottom == 1080);
-    REQUIRE(r.Width() == 1920);
-    REQUIRE(r.Height() == 1080);
+    EXPECT_EQ(r.left, -1920);
+    EXPECT_EQ(r.top, 0);
+    EXPECT_EQ(r.right, 0);
+    EXPECT_EQ(r.bottom, 1080);
+    EXPECT_EQ(r.Width(), 1920);
+    EXPECT_EQ(r.Height(), 1080);
 }
 
-TEST_CASE("Rect_px_from_virtual_screen_metrics — zero width",
-          "[virtual_screen][rect]") {
+TEST(virtual_screen_rect, ZeroWidth) {
     RectPx r = Rect_px_from_virtual_screen_metrics(0, 0, 0, 1080);
-    REQUIRE(r.left == 0);
-    REQUIRE(r.top == 0);
-    REQUIRE(r.right == 0);
-    REQUIRE(r.bottom == 1080);
-    REQUIRE(r.Width() == 0);
-    REQUIRE(r.Height() == 1080);
-    REQUIRE(r.Is_empty());
+    EXPECT_EQ(r.left, 0);
+    EXPECT_EQ(r.top, 0);
+    EXPECT_EQ(r.right, 0);
+    EXPECT_EQ(r.bottom, 1080);
+    EXPECT_EQ(r.Width(), 0);
+    EXPECT_EQ(r.Height(), 1080);
+    EXPECT_TRUE(r.Is_empty());
 }
 
-TEST_CASE("Rect_px_from_virtual_screen_metrics — zero height",
-          "[virtual_screen][rect]") {
+TEST(virtual_screen_rect, ZeroHeight) {
     RectPx r = Rect_px_from_virtual_screen_metrics(0, 0, 1920, 0);
-    REQUIRE(r.left == 0);
-    REQUIRE(r.top == 0);
-    REQUIRE(r.right == 1920);
-    REQUIRE(r.bottom == 0);
-    REQUIRE(r.Width() == 1920);
-    REQUIRE(r.Height() == 0);
-    REQUIRE(r.Is_empty());
+    EXPECT_EQ(r.left, 0);
+    EXPECT_EQ(r.top, 0);
+    EXPECT_EQ(r.right, 1920);
+    EXPECT_EQ(r.bottom, 0);
+    EXPECT_EQ(r.Width(), 1920);
+    EXPECT_EQ(r.Height(), 0);
+    EXPECT_TRUE(r.Is_empty());
 }
 
-TEST_CASE("Rect_px_from_virtual_screen_metrics — equivalence to Make_rect_px",
-          "[virtual_screen][rect]") {
+TEST(virtual_screen_rect, EquivalenceToMakeRectPx) {
     const int32_t left = 100;
     const int32_t top = 50;
     const int32_t width = 800;
     const int32_t height = 600;
     RectPx from_metrics = Rect_px_from_virtual_screen_metrics(left, top, width, height);
     RectPx from_make = Make_rect_px(PointPx{left, top}, SizePx{width, height});
-    REQUIRE(from_metrics.left == from_make.left);
-    REQUIRE(from_metrics.top == from_make.top);
-    REQUIRE(from_metrics.right == from_make.right);
-    REQUIRE(from_metrics.bottom == from_make.bottom);
+    EXPECT_EQ(from_metrics.left, from_make.left);
+    EXPECT_EQ(from_metrics.top, from_make.top);
+    EXPECT_EQ(from_metrics.right, from_make.right);
+    EXPECT_EQ(from_metrics.bottom, from_make.bottom);
 }
 
-TEST_CASE("Rect_px_from_virtual_screen_metrics — normalized invariant (non-empty)",
-          "[virtual_screen][rect]") {
+TEST(virtual_screen_rect, NormalizedInvariant_NonEmpty) {
     RectPx r = Rect_px_from_virtual_screen_metrics(0, 0, 1920, 1080);
-    REQUIRE(r.left <= r.right);
-    REQUIRE(r.top <= r.bottom);
+    EXPECT_LE(r.left, r.right);
+    EXPECT_LE(r.top, r.bottom);
     RectPx n = r.Normalized();
-    REQUIRE(n.left == r.left);
-    REQUIRE(n.top == r.top);
-    REQUIRE(n.right == r.right);
-    REQUIRE(n.bottom == r.bottom);
+    EXPECT_EQ(n.left, r.left);
+    EXPECT_EQ(n.top, r.top);
+    EXPECT_EQ(n.right, r.right);
+    EXPECT_EQ(n.bottom, r.bottom);
 }
 
-TEST_CASE(
-    "Rect_px_from_virtual_screen_metrics — normalized invariant (negative origin)",
-    "[virtual_screen][rect]") {
+TEST(virtual_screen_rect, NormalizedInvariant_NegativeOrigin) {
     RectPx r = Rect_px_from_virtual_screen_metrics(-1920, 0, 1920, 1080);
-    REQUIRE(r.left <= r.right);
-    REQUIRE(r.top <= r.bottom);
+    EXPECT_LE(r.left, r.right);
+    EXPECT_LE(r.top, r.bottom);
 }

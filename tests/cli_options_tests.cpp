@@ -2,198 +2,195 @@
 
 using namespace greenflame::core;
 
-TEST_CASE("CLI parser accepts no options", "[cli_options]") {
+TEST(cli_options, CLI_parser_AcceptsNoOptions) {
     std::vector<std::wstring> args = {};
     CliParseResult const result = Parse_cli_arguments(args, false);
-    REQUIRE(result.ok);
-    REQUIRE(result.options.capture_mode == CliCaptureMode::None);
-    REQUIRE_FALSE(result.options.region_px.has_value());
-    REQUIRE(result.options.output_path.empty());
-    REQUIRE_FALSE(result.options.output_format.has_value());
-    REQUIRE_FALSE(result.options.overwrite_output);
+    EXPECT_TRUE(result.ok);
+    EXPECT_EQ(result.options.capture_mode, CliCaptureMode::None);
+    EXPECT_FALSE(result.options.region_px.has_value());
+    EXPECT_TRUE(result.options.output_path.empty());
+    EXPECT_FALSE(result.options.output_format.has_value());
+    EXPECT_FALSE(result.options.overwrite_output);
 }
 
-TEST_CASE("CLI parser accepts region with equals syntax", "[cli_options]") {
+TEST(cli_options, CLI_parser_AcceptsRegionEquals) {
     std::vector<std::wstring> args = {L"--region=10,20,30,40"};
     CliParseResult const result = Parse_cli_arguments(args, false);
-    REQUIRE(result.ok);
-    REQUIRE(result.options.capture_mode == CliCaptureMode::Region);
-    REQUIRE(result.options.region_px.has_value());
-    REQUIRE(result.options.region_px->left == 10);
-    REQUIRE(result.options.region_px->top == 20);
-    REQUIRE(result.options.region_px->right == 40);
-    REQUIRE(result.options.region_px->bottom == 60);
+    EXPECT_TRUE(result.ok);
+    EXPECT_EQ(result.options.capture_mode, CliCaptureMode::Region);
+    EXPECT_TRUE(result.options.region_px.has_value());
+    EXPECT_EQ(result.options.region_px->left, 10);
+    EXPECT_EQ(result.options.region_px->top, 20);
+    EXPECT_EQ(result.options.region_px->right, 40);
+    EXPECT_EQ(result.options.region_px->bottom, 60);
 }
 
-TEST_CASE("CLI parser rejects region with negative x or y", "[cli_options]") {
+TEST(cli_options, CLI_parser_RejectsRegionNegativeX) {
     std::vector<std::wstring> args = {L"--region=-10,20,30,40"};
     CliParseResult const result = Parse_cli_arguments(args, false);
-    REQUIRE_FALSE(result.ok);
-    REQUIRE(result.error_message.find(L"x>=0") != std::wstring::npos);
+    EXPECT_FALSE(result.ok);
+    EXPECT_NE(result.error_message.find(L"x>=0"), std::wstring::npos);
 }
 
-TEST_CASE("CLI parser rejects region with negative y", "[cli_options]") {
+TEST(cli_options, CLI_parser_RejectsRegionNegativeY) {
     std::vector<std::wstring> args = {L"--region=10,-20,30,40"};
     CliParseResult const result = Parse_cli_arguments(args, false);
-    REQUIRE_FALSE(result.ok);
-    REQUIRE(result.error_message.find(L"y>=0") != std::wstring::npos);
+    EXPECT_FALSE(result.ok);
+    EXPECT_NE(result.error_message.find(L"y>=0"), std::wstring::npos);
 }
 
-TEST_CASE("CLI parser rejects region with non-positive width or height",
-          "[cli_options]") {
+TEST(cli_options, CLI_parser_RejectsNonPositiveWidthOrHeight) {
     {
         std::vector<std::wstring> args = {L"--region=10,20,0,40"};
         CliParseResult const result = Parse_cli_arguments(args, false);
-        REQUIRE_FALSE(result.ok);
-        REQUIRE(result.error_message.find(L"w>0") != std::wstring::npos);
+        EXPECT_FALSE(result.ok);
+        EXPECT_NE(result.error_message.find(L"w>0"), std::wstring::npos);
     }
     {
         std::vector<std::wstring> args = {L"--region=10,20,30,-1"};
         CliParseResult const result = Parse_cli_arguments(args, false);
-        REQUIRE_FALSE(result.ok);
-        REQUIRE(result.error_message.find(L"h>0") != std::wstring::npos);
+        EXPECT_FALSE(result.ok);
+        EXPECT_NE(result.error_message.find(L"h>0"), std::wstring::npos);
     }
 }
 
-TEST_CASE("CLI parser rejects region split across four args", "[cli_options]") {
+TEST(cli_options, CLI_parser_RejectsRegionSplitAcrossArgs) {
     std::vector<std::wstring> args = {L"-r", L"-100", L"-100", L"10", L"10"};
     CliParseResult const result = Parse_cli_arguments(args, false);
-    REQUIRE_FALSE(result.ok);
-    REQUIRE(result.error_message.find(L"one value x,y,w,h") != std::wstring::npos);
+    EXPECT_FALSE(result.ok);
+    EXPECT_NE(result.error_message.find(L"one value x,y,w,h"), std::wstring::npos);
 }
 
-TEST_CASE("CLI parser accepts window and output with spaced values", "[cli_options]") {
+TEST(cli_options, CLI_parser_AcceptsWindowAndOutput) {
     std::vector<std::wstring> args = {L"--window", L"Notepad", L"--output",
                                       L"C:\\tmp\\shot"};
     CliParseResult const result = Parse_cli_arguments(args, false);
-    REQUIRE(result.ok);
-    REQUIRE(result.options.capture_mode == CliCaptureMode::Window);
-    REQUIRE(result.options.window_name == L"Notepad");
-    REQUIRE(result.options.output_path == L"C:\\tmp\\shot");
+    EXPECT_TRUE(result.ok);
+    EXPECT_EQ(result.options.capture_mode, CliCaptureMode::Window);
+    EXPECT_EQ(result.options.window_name, L"Notepad");
+    EXPECT_EQ(result.options.output_path, L"C:\\tmp\\shot");
 }
 
-TEST_CASE("CLI parser accepts short monitor option with value", "[cli_options]") {
+TEST(cli_options, CLI_parser_AcceptsShortMonitor) {
     std::vector<std::wstring> args = {L"-m", L"2"};
     CliParseResult const result = Parse_cli_arguments(args, false);
-    REQUIRE(result.ok);
-    REQUIRE(result.options.capture_mode == CliCaptureMode::Monitor);
-    REQUIRE(result.options.monitor_id == 2);
+    EXPECT_TRUE(result.ok);
+    EXPECT_EQ(result.options.capture_mode, CliCaptureMode::Monitor);
+    EXPECT_EQ(result.options.monitor_id, 2);
 }
 
-TEST_CASE("CLI parser accepts format option including jpeg alias", "[cli_options]") {
+TEST(cli_options, CLI_parser_AcceptsFormatOption) {
     {
         std::vector<std::wstring> args = {L"--desktop", L"--format", L"png"};
         CliParseResult const result = Parse_cli_arguments(args, false);
-        REQUIRE(result.ok);
-        REQUIRE(result.options.capture_mode == CliCaptureMode::Desktop);
-        REQUIRE(result.options.output_format.has_value());
-        REQUIRE(*result.options.output_format == CliOutputFormat::Png);
+        EXPECT_TRUE(result.ok);
+        EXPECT_EQ(result.options.capture_mode, CliCaptureMode::Desktop);
+        EXPECT_TRUE(result.options.output_format.has_value());
+        EXPECT_EQ(*result.options.output_format, CliOutputFormat::Png);
     }
     {
         std::vector<std::wstring> args = {L"--desktop", L"-t", L"jpeg"};
         CliParseResult const result = Parse_cli_arguments(args, false);
-        REQUIRE(result.ok);
-        REQUIRE(result.options.output_format.has_value());
-        REQUIRE(*result.options.output_format == CliOutputFormat::Jpeg);
+        EXPECT_TRUE(result.ok);
+        EXPECT_TRUE(result.options.output_format.has_value());
+        EXPECT_EQ(*result.options.output_format, CliOutputFormat::Jpeg);
     }
     {
         std::vector<std::wstring> args = {L"--desktop", L"--format=bMp"};
         CliParseResult const result = Parse_cli_arguments(args, false);
-        REQUIRE(result.ok);
-        REQUIRE(result.options.output_format.has_value());
-        REQUIRE(*result.options.output_format == CliOutputFormat::Bmp);
+        EXPECT_TRUE(result.ok);
+        EXPECT_TRUE(result.options.output_format.has_value());
+        EXPECT_EQ(*result.options.output_format, CliOutputFormat::Bmp);
     }
 }
 
-TEST_CASE("CLI parser rejects invalid format option value", "[cli_options]") {
+TEST(cli_options, CLI_parser_RejectsInvalidFormat) {
     std::vector<std::wstring> args = {L"--desktop", L"--format", L"tiff"};
     CliParseResult const result = Parse_cli_arguments(args, false);
-    REQUIRE_FALSE(result.ok);
-    REQUIRE(result.error_message.find(L"--format expects one of") !=
-            std::wstring::npos);
+    EXPECT_FALSE(result.ok);
+    EXPECT_NE(result.error_message.find(L"--format expects one of"),
+              std::wstring::npos);
 }
 
-TEST_CASE("CLI parser rejects format without capture mode", "[cli_options]") {
+TEST(cli_options, CLI_parser_RejectsFormatWithoutCaptureMode) {
     std::vector<std::wstring> args = {L"--format", L"jpg"};
     CliParseResult const result = Parse_cli_arguments(args, false);
-    REQUIRE_FALSE(result.ok);
-    REQUIRE(result.error_message.find(L"--format requires one capture mode") !=
-            std::wstring::npos);
+    EXPECT_FALSE(result.ok);
+    EXPECT_NE(result.error_message.find(L"--format requires one capture mode"),
+              std::wstring::npos);
 }
 
-TEST_CASE("CLI parser rejects output without capture mode", "[cli_options]") {
+TEST(cli_options, CLI_parser_RejectsOutputWithoutCaptureMode) {
     std::vector<std::wstring> args = {L"--output", L"C:\\tmp\\shot"};
     CliParseResult const result = Parse_cli_arguments(args, false);
-    REQUIRE_FALSE(result.ok);
-    REQUIRE(result.error_message.find(L"--output requires one capture mode") !=
-            std::wstring::npos);
+    EXPECT_FALSE(result.ok);
+    EXPECT_NE(result.error_message.find(L"--output requires one capture mode"),
+              std::wstring::npos);
 }
 
-TEST_CASE("CLI parser accepts overwrite option with and without capture mode",
-          "[cli_options]") {
+TEST(cli_options, CLI_parser_AcceptsOverwrite) {
     {
         std::vector<std::wstring> args = {L"--overwrite"};
         CliParseResult const result = Parse_cli_arguments(args, false);
-        REQUIRE(result.ok);
-        REQUIRE(result.options.capture_mode == CliCaptureMode::None);
-        REQUIRE(result.options.overwrite_output);
+        EXPECT_TRUE(result.ok);
+        EXPECT_EQ(result.options.capture_mode, CliCaptureMode::None);
+        EXPECT_TRUE(result.options.overwrite_output);
     }
     {
         std::vector<std::wstring> args = {L"--desktop", L"-f"};
         CliParseResult const result = Parse_cli_arguments(args, false);
-        REQUIRE(result.ok);
-        REQUIRE(result.options.capture_mode == CliCaptureMode::Desktop);
-        REQUIRE(result.options.overwrite_output);
+        EXPECT_TRUE(result.ok);
+        EXPECT_EQ(result.options.capture_mode, CliCaptureMode::Desktop);
+        EXPECT_TRUE(result.options.overwrite_output);
     }
 }
 
-TEST_CASE("CLI parser rejects mutually exclusive capture modes", "[cli_options]") {
+TEST(cli_options, CLI_parser_RejectsMutuallyExclusiveModes) {
     std::vector<std::wstring> args = {L"--desktop", L"--monitor", L"1"};
     CliParseResult const result = Parse_cli_arguments(args, false);
-    REQUIRE_FALSE(result.ok);
-    REQUIRE(result.error_message.find(L"Only one capture mode") != std::wstring::npos);
+    EXPECT_FALSE(result.ok);
+    EXPECT_NE(result.error_message.find(L"Only one capture mode"), std::wstring::npos);
 }
 
-TEST_CASE("CLI parser accepts help option", "[cli_options]") {
+TEST(cli_options, CLI_parser_AcceptsHelp) {
     std::vector<std::wstring> args = {L"--help"};
     CliParseResult const result = Parse_cli_arguments(args, false);
-    REQUIRE(result.ok);
-    REQUIRE(result.options.capture_mode == CliCaptureMode::Help);
+    EXPECT_TRUE(result.ok);
+    EXPECT_EQ(result.options.capture_mode, CliCaptureMode::Help);
 }
 
 #ifdef DEBUG
-TEST_CASE("CLI parser accepts debug-only testing flag in debug mode", "[cli_options]") {
+TEST(cli_options, CLI_parser_AcceptsDebugFlag) {
     std::vector<std::wstring> args = {L"--testing-1-2"};
     CliParseResult const result = Parse_cli_arguments(args, true);
-    REQUIRE(result.ok);
-    REQUIRE(result.options.testing_1_2);
+    EXPECT_TRUE(result.ok);
+    EXPECT_TRUE(result.options.testing_1_2);
 }
 #endif
 
-TEST_CASE("CLI parser rejects debug-only testing flag in release mode",
-          "[cli_options]") {
+TEST(cli_options, CLI_parser_RejectsDebugFlagInRelease) {
     std::vector<std::wstring> args = {L"--testing-1-2"};
     CliParseResult const result = Parse_cli_arguments(args, false);
-    REQUIRE_FALSE(result.ok);
+    EXPECT_FALSE(result.ok);
 }
 
-TEST_CASE("CLI help text includes declared options", "[cli_options]") {
+TEST(cli_options, CLI_help_IncludesDeclaredOptions) {
     std::wstring const help_release = Build_cli_help_text(false);
-    REQUIRE(help_release.find(L"--region") != std::wstring::npos);
-    REQUIRE(help_release.find(L"--window") != std::wstring::npos);
-    REQUIRE(help_release.find(L"--monitor") != std::wstring::npos);
-    REQUIRE(help_release.find(L"--desktop") != std::wstring::npos);
-    REQUIRE(help_release.find(L"--help") != std::wstring::npos);
-    REQUIRE(help_release.find(L"--output") != std::wstring::npos);
-    REQUIRE(help_release.find(L"--format") != std::wstring::npos);
-    REQUIRE(help_release.find(L"--overwrite") != std::wstring::npos);
-    REQUIRE(help_release.find(L"--testing-1-2") == std::wstring::npos);
+    EXPECT_NE(help_release.find(L"--region"), std::wstring::npos);
+    EXPECT_NE(help_release.find(L"--window"), std::wstring::npos);
+    EXPECT_NE(help_release.find(L"--monitor"), std::wstring::npos);
+    EXPECT_NE(help_release.find(L"--desktop"), std::wstring::npos);
+    EXPECT_NE(help_release.find(L"--help"), std::wstring::npos);
+    EXPECT_NE(help_release.find(L"--output"), std::wstring::npos);
+    EXPECT_NE(help_release.find(L"--format"), std::wstring::npos);
+    EXPECT_NE(help_release.find(L"--overwrite"), std::wstring::npos);
+    EXPECT_EQ(help_release.find(L"--testing-1-2"), std::wstring::npos);
 
 #ifdef DEBUG
     std::wstring const help_debug = Build_cli_help_text(true);
-    REQUIRE(help_debug.find(L"--testing-1-2") != std::wstring::npos);
+    EXPECT_NE(help_debug.find(L"--testing-1-2"), std::wstring::npos);
 #else
     std::wstring const help_debug = Build_cli_help_text(true);
-    REQUIRE(help_debug.find(L"--testing-1-2") == std::wstring::npos);
+    EXPECT_EQ(help_debug.find(L"--testing-1-2"), std::wstring::npos);
 #endif
 }

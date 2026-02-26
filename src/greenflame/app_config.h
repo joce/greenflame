@@ -16,6 +16,7 @@ class AppConfig final {
     [[nodiscard]] static AppConfig Load();
     [[nodiscard]] bool Save() const;
     void Normalize();
+    [[nodiscard]] static std::filesystem::path Get_config_dir();
 };
 
 } // namespace greenflame

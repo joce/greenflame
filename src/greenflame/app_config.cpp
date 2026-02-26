@@ -16,6 +16,19 @@ std::filesystem::path Get_config_path() {
     return path;
 }
 
+} // namespace
+
+// static
+std::filesystem::path AppConfig::Get_config_dir() {
+    std::filesystem::path const p = Get_config_path();
+    if (p.empty()) {
+        return {};
+    }
+    return p.parent_path();
+}
+
+namespace {
+
 std::wstring To_wide(std::string const &value) {
     if (value.empty()) {
         return {};
@@ -65,6 +78,7 @@ AppConfig AppConfig::Load() {
     AppConfig config;
     std::filesystem::path const path = Get_config_path();
     if (path.empty() || !std::filesystem::exists(path)) {
+        (void)config.Save();   // creates dir + empty file on first run
         return config;
     }
     try {

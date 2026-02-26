@@ -840,6 +840,15 @@ Copy_current_monitor_to_clipboard() {
     return std::nullopt;
 }
 
+struct ChangeNotificationGuard {
+    HANDLE handle = INVALID_HANDLE_VALUE;
+    ~ChangeNotificationGuard() {
+        if (handle != INVALID_HANDLE_VALUE) {
+            FindCloseChangeNotification(handle);
+        }
+    }
+};
+
 } // namespace
 
 namespace greenflame {
@@ -867,10 +876,64 @@ int GreenflameApp::Run() {
         return To_exit_code(ProcessExitCode::TrayWindowCreateFailed);
     }
 
+    // Set up directory change notification (watches parent dir of greenflame.ini).
+    ChangeNotificationGuard watcher;
+    {
+        std::filesystem::path const cfg_dir = AppConfig::Get_config_dir();
+        if (!cfg_dir.empty()) {
+            watcher.handle = FindFirstChangeNotificationW(
+                cfg_dir.c_str(),
+                FALSE,
+                FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_FILE_NAME);
+        }
+    }
+    // If watcher.handle == INVALID_HANDLE_VALUE, watch_count = 0 and the loop
+    // degrades gracefully to a plain MsgWaitForMultipleObjects message pump.
+
+    constexpr DWORD kDebounceMs = 400;
+    bool debouncing = false;
+    ULONGLONG debounce_deadline = 0;
+
+    bool quit = false;
     MSG message{};
-    while (GetMessageW(&message, nullptr, 0, 0) > 0) {
-        TranslateMessage(&message);
-        DispatchMessageW(&message);
+    while (!quit) {
+        DWORD timeout = INFINITE;
+        if (debouncing) {
+            ULONGLONG const now = GetTickCount64();
+            timeout = (now >= debounce_deadline)
+                          ? 0
+                          : static_cast<DWORD>(debounce_deadline - now);
+        }
+
+        DWORD const watch_count = (watcher.handle != INVALID_HANDLE_VALUE) ? 1u : 0u;
+        DWORD const result = MsgWaitForMultipleObjects(
+            watch_count,
+            (watch_count > 0) ? &watcher.handle : nullptr,
+            FALSE,
+            timeout,
+            QS_ALLINPUT);
+
+        if (result == WAIT_OBJECT_0 && watch_count > 0) {
+            // Directory changed. Re-arm immediately, then start/extend debounce.
+            FindNextChangeNotification(watcher.handle);
+            debouncing = true;
+            debounce_deadline = GetTickCount64() + kDebounceMs;
+        } else if (result == WAIT_TIMEOUT) {
+            // Debounce window elapsed — reload.
+            debouncing = false;
+            config_ = AppConfig::Load();
+            continue;
+        }
+
+        // Drain all pending messages.
+        while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+            if (message.message == WM_QUIT) {
+                quit = true;
+                break;
+            }
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
+        }
     }
 
     (void)config_.Save();

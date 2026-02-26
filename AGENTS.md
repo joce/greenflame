@@ -67,6 +67,16 @@ Before considering a task complete:
 - all required builds in [docs/build.md](docs/build.md) must pass
 - all required test runs in [docs/testing.md](docs/testing.md) must pass
 
+### Build runner reliability rule (Ninja + Codex runner)
+
+When builds are launched through the Codex command runner, `pwsh.exe` may intermittently hang at 0% CPU while `cmake`/`ninja` appear idle.
+
+- In **sandboxed** Codex runs, run build/test commands **sequentially**.
+- In **non-sandboxed** runs, parallel builds are allowed.
+- Use a **20-second timeout** for each sandboxed build/test command.
+- Prefer running build/test commands **outside sandbox restrictions** when possible.
+- If a run hangs, terminate the stuck **`pwsh.exe`** process and rerun.
+
 ---
 
 ## Unit Test Policy (MANDATORY FOR CORE LOGIC)

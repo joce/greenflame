@@ -58,7 +58,7 @@ Inspired by:
 Build and test commands have been moved to docs:
 
 - [docs/build.md](docs/build.md) for configure/build/analysis/lint expectations
-- [docs/testing.md](docs/testing.md) for test build/run commands and Catch2 usage
+- [docs/testing.md](docs/testing.md) for test build/run commands, framework, and test policy
 
 These docs are authoritative for execution steps and command lines.
 
@@ -79,21 +79,17 @@ When builds are launched through the Codex command runner, `pwsh.exe` may interm
 
 ---
 
-## Unit Test Policy (MANDATORY FOR CORE LOGIC)
+## Unit Test Policy (MANDATORY)
 
-- **All testable logic lives in `greenflame_core`**
-- The GUI executable (`greenflame`) must remain thin
-- Tests MUST NOT depend on Win32 UI, GDI capture, or WGC
-- Tests are required for:
-  - geometry and math
-  - DPI and coordinate conversions
-  - cross-monitor selection rules
-  - annotation model logic
-- Use Catch2 v3 integration defined in `tests/CMakeLists.txt`
-- Do not add ad-hoc test runners or alternate test frameworks
-- Add new test files under `tests/`
-- Register them in `tests/CMakeLists.txt` as sources of `greenflame_tests`
-- Tests must only link against `greenflame_core` (never `greenflame`)
+See **[docs/testing.md](docs/testing.md)** — authoritative for philosophy, framework, what
+requires tests, and how to write them.
+
+Non-negotiables (repeated here for visibility):
+
+- Tests MUST pass before any task is considered complete
+- Do not move testable orchestration logic into the `greenflame` GUI executable
+- Tests must never link against `greenflame` directly
+- Tests should link against `greenflame_core` and `greenflame_logic` for unit coverage
 
 ---
 

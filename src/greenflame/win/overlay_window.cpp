@@ -332,222 +332,217 @@ LRESULT CALLBACK OverlayWindow::Static_wnd_proc(HWND hwnd, UINT msg, WPARAM wpar
     return result;
 }
 
-LRESULT OverlayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
-    // Helper: translate OverlayAction to a Win32 side effect.
-    auto apply_action = [&](core::OverlayAction action) {
-        switch (action) {
-        case core::OverlayAction::Repaint:
-            InvalidateRect(hwnd_, nullptr, TRUE);
-            break;
-        case core::OverlayAction::Close:
-            Destroy();
-            break;
-        case core::OverlayAction::SaveDirect:
-            Save_directly_and_close(false);
-            break;
-        case core::OverlayAction::SaveDirectAndCopyFile:
-            Save_directly_and_close(true);
-            break;
-        case core::OverlayAction::SaveAs:
-            Save_as_and_close(false);
-            break;
-        case core::OverlayAction::SaveAsAndCopyFile:
-            Save_as_and_close(true);
-            break;
-        case core::OverlayAction::CopyToClipboard:
-            Copy_to_clipboard_and_close();
-            break;
-        case core::OverlayAction::None:
-        default:
-            break;
-        }
-    };
-
-    switch (msg) {
-    case WM_KEYDOWN:
-    case WM_SYSKEYDOWN: {
-        bool const ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-        bool const shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
-        bool const alt   = (GetKeyState(VK_MENU)    & 0x8000) != 0;
-        bool const eff_ctrl  = ctrl  || (wparam == VK_CONTROL);
-        bool const eff_shift = shift || (wparam == VK_SHIFT);
-        bool const eff_alt   = alt   || (wparam == VK_MENU);
-
-        if (wparam == VK_ESCAPE) {
-            apply_action(controller_.On_cancel());
-            return 0;
-        }
-        if (eff_ctrl && wparam == L'S') {
-            apply_action(controller_.On_save_requested(eff_shift, eff_alt));
-            return 0;
-        }
-        if (eff_ctrl && wparam == L'C') {
-            apply_action(controller_.On_copy_to_clipboard_requested());
-            return 0;
-        }
-        if (wparam == VK_SHIFT || wparam == VK_CONTROL || wparam == VK_MENU) {
-            core::OverlayModifierState new_mods{eff_shift, eff_ctrl, eff_alt};
-            // Pre-resolve preview hints when a preview update is needed.
-            core::PointPx cursor_screen{};
-            std::optional<core::RectPx> win_rect;
-            core::RectPx vdesk{};
-            std::optional<size_t> monitor_idx;
-            int32_t ox = 0, oy = 0;
-            auto const &s = controller_.State();
-            bool const needs_preview = !s.dragging && !s.handle_dragging &&
-                                       s.final_selection.Is_empty() &&
-                                       (eff_shift || eff_ctrl);
-            if (needs_preview) {
-                cursor_screen = Get_cursor_pos_px();
-                RECT wr{};
-                GetWindowRect(hwnd_, &wr);
-                ox = wr.left;
-                oy = wr.top;
-                if (eff_ctrl && !eff_shift) {
-                    win_rect = Get_window_rect_under_cursor(
-                        To_point(cursor_screen), hwnd_);
-                }
-                if (eff_shift && eff_ctrl) {
-                    vdesk = Get_virtual_desktop_bounds_px();
-                }
-                if (eff_shift && !eff_ctrl) {
-                    monitor_idx = core::Index_of_monitor_containing(
-                        cursor_screen, s.cached_monitors);
-                }
-            }
-            apply_action(controller_.On_modifier_changed(new_mods, cursor_screen,
-                                                         win_rect, vdesk, monitor_idx,
-                                                         ox, oy));
-            return 0;
-        }
-        UINT const message_id =
-            (lparam & (static_cast<LPARAM>(1) << 29)) != 0 ? WM_SYSKEYDOWN : WM_KEYDOWN;
-        return DefWindowProcW(hwnd_, message_id, wparam, lparam);
+void OverlayWindow::Apply_action(core::OverlayAction action) {
+    switch (action) {
+    case core::OverlayAction::Repaint:
+        InvalidateRect(hwnd_, nullptr, TRUE);
+        break;
+    case core::OverlayAction::Close:
+        Destroy();
+        break;
+    case core::OverlayAction::SaveDirect:
+        Save_directly_and_close(false);
+        break;
+    case core::OverlayAction::SaveDirectAndCopyFile:
+        Save_directly_and_close(true);
+        break;
+    case core::OverlayAction::SaveAs:
+        Save_as_and_close(false);
+        break;
+    case core::OverlayAction::SaveAsAndCopyFile:
+        Save_as_and_close(true);
+        break;
+    case core::OverlayAction::CopyToClipboard:
+        Copy_to_clipboard_and_close();
+        break;
+    case core::OverlayAction::None:
+    default:
+        break;
     }
+}
 
-    case WM_KEYUP:
-    case WM_SYSKEYUP: {
-        // Force-clear the released key from the effective modifier state.
-        bool const eff_shift =
-            (wparam != VK_SHIFT)   && (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
-        bool const eff_ctrl  =
-            (wparam != VK_CONTROL) && (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-        bool const eff_alt   =
-            (wparam != VK_MENU)    && (GetKeyState(VK_MENU)    & 0x8000) != 0;
-        if (wparam == VK_SHIFT || wparam == VK_CONTROL || wparam == VK_MENU) {
-            core::OverlayModifierState new_mods{eff_shift, eff_ctrl, eff_alt};
-            // On key-up, no preview hints: preview is being cleared, not set.
-            apply_action(controller_.On_modifier_changed(new_mods, {}, {}, {}, {}, 0, 0));
-            return 0;
-        }
-        UINT const message_id =
-            (lparam & (static_cast<LPARAM>(1) << 29)) != 0 ? WM_SYSKEYUP : WM_KEYUP;
-        return DefWindowProcW(hwnd_, message_id, wparam, lparam);
-    }
+LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
+    bool const ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+    bool const shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
+    bool const alt   = (GetKeyState(VK_MENU)    & 0x8000) != 0;
+    bool const eff_ctrl  = ctrl  || (wparam == VK_CONTROL);
+    bool const eff_shift = shift || (wparam == VK_SHIFT);
+    bool const eff_alt   = alt   || (wparam == VK_MENU);
 
-    case WM_LBUTTONDOWN: {
-        if (!resources_->capture.Is_valid()) {
-            return 0;
-        }
-        bool const shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
-        bool const ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-        bool const alt   = (GetKeyState(VK_MENU)    & 0x8000) != 0;
-        bool const tab   = (GetKeyState(VK_TAB)     & 0x8000) != 0;
-        core::OverlayModifierState mods{shift, ctrl, alt, tab};
-        core::PointPx const cursor_client = Get_client_cursor_pos_px(hwnd_);
-        core::PointPx const cursor_screen = Get_cursor_pos_px();
-        RECT wr{};
-        GetWindowRect(hwnd_, &wr);
-
-        std::optional<HWND> win_handle;
-        std::optional<size_t> monitor_idx;
-        core::RectPx vdesk{};
-        bool const in_preview = controller_.State().modifier_preview;
-        if (ctrl && !shift && in_preview) {
-            win_handle = Get_window_under_cursor(To_point(cursor_screen), hwnd_);
-        }
-        if (shift && !ctrl && in_preview) {
-            monitor_idx = core::Index_of_monitor_containing(
-                cursor_screen, controller_.State().cached_monitors);
-        }
-        if (shift && ctrl && in_preview) {
-            vdesk = Get_virtual_desktop_bounds_px();
-        }
-
-        // Collect all rects for snap-edge rebuild (window rects + monitor bounds).
-        std::vector<core::RectPx> vis_rects;
-        Get_visible_top_level_window_rects(hwnd_, vis_rects);
-        for (auto const &m : controller_.State().cached_monitors) {
-            vis_rects.push_back(m.bounds);
-        }
-
-        apply_action(controller_.On_primary_press(
-            mods, cursor_client, cursor_screen, win_handle, monitor_idx,
-            std::optional<core::RectPx>{}, vdesk, std::move(vis_rects), wr.left,
-            wr.top));
+    if (wparam == VK_ESCAPE) {
+        Apply_action(controller_.On_cancel());
         return 0;
     }
-
-    case WM_MOUSEMOVE: {
-        bool const shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
-        bool const ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-        bool const alt   = (GetKeyState(VK_MENU)    & 0x8000) != 0;
-        core::OverlayModifierState mods{shift, ctrl, alt};
-        core::PointPx const cursor_client = Get_client_cursor_pos_px(hwnd_);
-
-        auto const &s = controller_.State();
-        bool const needs_preview = !s.dragging && !s.handle_dragging &&
-                                   !s.move_dragging && s.final_selection.Is_empty() &&
-                                   (shift || ctrl);
-
+    if (eff_ctrl && wparam == L'S') {
+        Apply_action(controller_.On_save_requested(eff_shift, eff_alt));
+        return 0;
+    }
+    if (eff_ctrl && wparam == L'C') {
+        Apply_action(controller_.On_copy_to_clipboard_requested());
+        return 0;
+    }
+    if (wparam == VK_SHIFT || wparam == VK_CONTROL || wparam == VK_MENU) {
+        core::OverlayModifierState new_mods{eff_shift, eff_ctrl, eff_alt};
+        // Pre-resolve preview hints only when a preview update is needed.
         core::PointPx cursor_screen{};
         std::optional<core::RectPx> win_rect;
         core::RectPx vdesk{};
         std::optional<size_t> monitor_idx;
         int32_t ox = 0, oy = 0;
+        auto const &s = controller_.State();
+        bool const needs_preview = !s.dragging && !s.handle_dragging &&
+                                   s.final_selection.Is_empty() &&
+                                   (eff_shift || eff_ctrl);
         if (needs_preview) {
             cursor_screen = Get_cursor_pos_px();
             RECT wr{};
             GetWindowRect(hwnd_, &wr);
             ox = wr.left;
             oy = wr.top;
-            if (ctrl && !shift) {
+            if (eff_ctrl && !eff_shift) {
                 win_rect = Get_window_rect_under_cursor(To_point(cursor_screen), hwnd_);
             }
-            if (shift && ctrl) {
+            if (eff_shift && eff_ctrl) {
                 vdesk = Get_virtual_desktop_bounds_px();
             }
-            if (shift && !ctrl) {
+            if (eff_shift && !eff_ctrl) {
                 monitor_idx = core::Index_of_monitor_containing(
                     cursor_screen, s.cached_monitors);
             }
         }
-        apply_action(controller_.On_pointer_move(
-            mods, cursor_client, cursor_screen, win_rect, vdesk, monitor_idx, ox, oy,
-            static_cast<uint64_t>(GetTickCount64())));
+        Apply_action(controller_.On_modifier_changed(new_mods, cursor_screen, win_rect,
+                                                     vdesk, monitor_idx, ox, oy));
         return 0;
     }
+    UINT const message_id =
+        (lparam & (static_cast<LPARAM>(1) << 29)) != 0 ? WM_SYSKEYDOWN : WM_KEYDOWN;
+    return DefWindowProcW(hwnd_, message_id, wparam, lparam);
+}
 
-    case WM_LBUTTONUP: {
-        core::OverlayModifierState mods{};
-        mods.alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
-        apply_action(
-            controller_.On_primary_release(mods, Get_client_cursor_pos_px(hwnd_)));
+LRESULT OverlayWindow::On_key_up(WPARAM wparam, LPARAM lparam) {
+    // Force-clear the released key from the effective modifier state.
+    bool const eff_shift =
+        (wparam != VK_SHIFT)   && (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
+    bool const eff_ctrl  =
+        (wparam != VK_CONTROL) && (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+    bool const eff_alt   =
+        (wparam != VK_MENU)    && (GetKeyState(VK_MENU)    & 0x8000) != 0;
+    if (wparam == VK_SHIFT || wparam == VK_CONTROL || wparam == VK_MENU) {
+        core::OverlayModifierState new_mods{eff_shift, eff_ctrl, eff_alt};
+        // On key-up, no preview hints: preview is being cleared, not set.
+        Apply_action(controller_.On_modifier_changed(new_mods, {}, {}, {}, {}, 0, 0));
         return 0;
     }
+    UINT const message_id =
+        (lparam & (static_cast<LPARAM>(1) << 29)) != 0 ? WM_SYSKEYUP : WM_KEYUP;
+    return DefWindowProcW(hwnd_, message_id, wparam, lparam);
+}
 
-    case WM_PAINT:
-        return On_paint();
-    case WM_SETCURSOR:
-        return On_set_cursor(wparam, lparam);
-    case WM_ERASEBKGND:
-        return 1;
-    case WM_DESTROY:
-        return On_destroy();
-    case WM_CLOSE:
-        return On_close();
-    default:
-        return DefWindowProcW(hwnd_, msg, wparam, lparam);
+LRESULT OverlayWindow::On_l_button_down() {
+    if (!resources_->capture.Is_valid()) {
+        return 0;
+    }
+    bool const shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
+    bool const ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+    bool const alt   = (GetKeyState(VK_MENU)    & 0x8000) != 0;
+    bool const tab   = (GetKeyState(VK_TAB)     & 0x8000) != 0;
+    core::OverlayModifierState mods{shift, ctrl, alt, tab};
+    core::PointPx const cursor_client = Get_client_cursor_pos_px(hwnd_);
+    core::PointPx const cursor_screen = Get_cursor_pos_px();
+    RECT wr{};
+    GetWindowRect(hwnd_, &wr);
+
+    // Pre-resolve only the hint relevant to the active preview mode.
+    std::optional<HWND> win_handle;
+    std::optional<size_t> monitor_idx;
+    core::RectPx vdesk{};
+    bool const in_preview = controller_.State().modifier_preview;
+    if (ctrl && !shift && in_preview) {
+        win_handle = Get_window_under_cursor(To_point(cursor_screen), hwnd_);
+    }
+    if (shift && !ctrl && in_preview) {
+        monitor_idx = core::Index_of_monitor_containing(
+            cursor_screen, controller_.State().cached_monitors);
+    }
+    if (shift && ctrl && in_preview) {
+        vdesk = Get_virtual_desktop_bounds_px();
+    }
+
+    // Collect all rects for snap-edge rebuild (window rects + monitor bounds).
+    std::vector<core::RectPx> vis_rects;
+    Get_visible_top_level_window_rects(hwnd_, vis_rects);
+    for (auto const &m : controller_.State().cached_monitors) {
+        vis_rects.push_back(m.bounds);
+    }
+
+    Apply_action(controller_.On_primary_press(mods, cursor_client, cursor_screen,
+                                              win_handle, monitor_idx,
+                                              std::optional<core::RectPx>{}, vdesk,
+                                              std::move(vis_rects), wr.left, wr.top));
+    return 0;
+}
+
+LRESULT OverlayWindow::On_mouse_move() {
+    bool const shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
+    bool const ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+    bool const alt   = (GetKeyState(VK_MENU)    & 0x8000) != 0;
+    core::OverlayModifierState mods{shift, ctrl, alt};
+    core::PointPx const cursor_client = Get_client_cursor_pos_px(hwnd_);
+
+    // Resolve expensive screen queries lazily — only when a preview update is needed.
+    auto const &s = controller_.State();
+    bool const needs_preview = !s.dragging && !s.handle_dragging && !s.move_dragging &&
+                               s.final_selection.Is_empty() && (shift || ctrl);
+    core::PointPx cursor_screen{};
+    std::optional<core::RectPx> win_rect;
+    core::RectPx vdesk{};
+    std::optional<size_t> monitor_idx;
+    int32_t ox = 0, oy = 0;
+    if (needs_preview) {
+        cursor_screen = Get_cursor_pos_px();
+        RECT wr{};
+        GetWindowRect(hwnd_, &wr);
+        ox = wr.left;
+        oy = wr.top;
+        if (ctrl && !shift) {
+            win_rect = Get_window_rect_under_cursor(To_point(cursor_screen), hwnd_);
+        }
+        if (shift && ctrl) {
+            vdesk = Get_virtual_desktop_bounds_px();
+        }
+        if (shift && !ctrl) {
+            monitor_idx = core::Index_of_monitor_containing(
+                cursor_screen, s.cached_monitors);
+        }
+    }
+    Apply_action(controller_.On_pointer_move(mods, cursor_client, cursor_screen, win_rect,
+                                             vdesk, monitor_idx, ox, oy,
+                                             static_cast<uint64_t>(GetTickCount64())));
+    return 0;
+}
+
+LRESULT OverlayWindow::On_l_button_up() {
+    core::OverlayModifierState mods{};
+    mods.alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
+    Apply_action(controller_.On_primary_release(mods, Get_client_cursor_pos_px(hwnd_)));
+    return 0;
+}
+
+LRESULT OverlayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
+    switch (msg) {
+    case WM_KEYDOWN:
+    case WM_SYSKEYDOWN:  return On_key_down(wparam, lparam);
+    case WM_KEYUP:
+    case WM_SYSKEYUP:    return On_key_up(wparam, lparam);
+    case WM_LBUTTONDOWN: return On_l_button_down();
+    case WM_MOUSEMOVE:   return On_mouse_move();
+    case WM_LBUTTONUP:   return On_l_button_up();
+    case WM_PAINT:       return On_paint();
+    case WM_SETCURSOR:   return On_set_cursor(wparam, lparam);
+    case WM_ERASEBKGND:  return 1;
+    case WM_DESTROY:     return On_destroy();
+    case WM_CLOSE:       return On_close();
+    default:             return DefWindowProcW(hwnd_, msg, wparam, lparam);
     }
 }
 

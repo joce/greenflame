@@ -40,6 +40,12 @@ class OverlayWindow final {
     static LRESULT CALLBACK Static_wnd_proc(HWND hwnd, UINT msg, WPARAM wparam,
                                             LPARAM lparam);
     LRESULT Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam);
+    void Apply_action(core::OverlayAction action);
+    LRESULT On_key_down(WPARAM wparam, LPARAM lparam);
+    LRESULT On_key_up(WPARAM wparam, LPARAM lparam);
+    LRESULT On_l_button_down();
+    LRESULT On_mouse_move();
+    LRESULT On_l_button_up();
 
     void Build_default_save_name(std::wstring_view save_dir_for_num_scan, wchar_t *out,
                                  size_t out_chars) const;

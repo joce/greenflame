@@ -3,7 +3,6 @@
 namespace greenflame::core {
 
 struct AppConfig final {
-    bool show_balloons = true;
     std::wstring default_save_dir = {};
     std::wstring last_save_as_dir = {};
     std::wstring filename_pattern_region = {};
@@ -11,6 +10,7 @@ struct AppConfig final {
     std::wstring filename_pattern_monitor = {};
     std::wstring filename_pattern_window = {};
     std::wstring default_save_format = {}; // "png" (default), "jpg"/"jpeg", or "bmp".
+    bool show_balloons = true;
 
     void Normalize();
 };

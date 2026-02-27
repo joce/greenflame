@@ -34,13 +34,24 @@ namespace {
 struct MonitorEnumState {
     std::vector<HMONITOR> handles;
     std::vector<RECT> rects;
+    bool had_exception = false;
 };
 
-BOOL CALLBACK Enum_monitors_proc(HMONITOR monitor, HDC, LPRECT rect, LPARAM lparam) {
+BOOL CALLBACK Enum_monitors_proc(HMONITOR monitor, HDC, LPRECT rect,
+                                 LPARAM lparam) noexcept {
     auto *state = reinterpret_cast<MonitorEnumState *>(lparam);
-    state->handles.push_back(monitor);
-    state->rects.push_back(*rect);
-    return TRUE;
+    if (state == nullptr || rect == nullptr) {
+        return FALSE;
+    }
+
+    try {
+        state->handles.push_back(monitor);
+        state->rects.push_back(*rect);
+        return TRUE;
+    } catch (...) {
+        state->had_exception = true;
+        return FALSE;
+    }
 }
 
 core::MonitorOrientation Orientation_from_rect(RECT const &rect) noexcept {
@@ -56,6 +67,9 @@ std::vector<core::MonitorWithBounds> Get_monitors_with_bounds() {
     MonitorEnumState state;
     if (!EnumDisplayMonitors(nullptr, nullptr, Enum_monitors_proc,
                              reinterpret_cast<LPARAM>(&state))) {
+        return {};
+    }
+    if (state.had_exception) {
         return {};
     }
 

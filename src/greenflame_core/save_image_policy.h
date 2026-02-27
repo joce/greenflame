@@ -34,9 +34,9 @@ inline constexpr wchar_t kDefaultPatternWindow[] =
     L"screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}-${title}";
 
 struct FilenamePatternContext {
+    std::wstring_view window_title = {};
     SaveTimestamp timestamp = {};
     std::optional<size_t> monitor_index_zero_based = std::nullopt;
-    std::wstring_view window_title = {};
     unsigned incrementing_number = 0; // For ${num}; 0 = not set.
 };
 

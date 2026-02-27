@@ -2,7 +2,7 @@
 
 namespace greenflame {
 
-enum class ProcessExitCode : int {
+enum class ProcessExitCode : uint8_t {
     Success = 0,
     WindowClassRegistrationFailed = 1,
     CliArgumentParseFailed = 2,
@@ -19,8 +19,8 @@ enum class ProcessExitCode : int {
     CliWindowMinimized = 13,
 };
 
-[[nodiscard]] constexpr int To_exit_code(ProcessExitCode code) noexcept {
-    return static_cast<int>(code);
+[[nodiscard]] constexpr uint8_t To_exit_code(ProcessExitCode code) noexcept {
+    return static_cast<uint8_t>(code);
 }
 
 } // namespace greenflame

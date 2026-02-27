@@ -26,25 +26,25 @@ enum class OverlayAction : uint8_t {
 };
 
 struct OverlaySessionData {
-    bool dragging = false;
-    bool handle_dragging = false;
-    bool move_dragging = false;
-    bool modifier_preview = false;
-    std::optional<SelectionHandle> resize_handle = std::nullopt;
     RectPx resize_anchor_rect = {};
     PointPx move_grab_offset = {};
     RectPx move_anchor_rect = {};
     PointPx start_px = {};
     RectPx live_rect = {};
     RectPx final_selection = {};
-    SaveSelectionSource selection_source = SaveSelectionSource::Region;
-    std::optional<HWND> selection_window = std::nullopt;
-    std::optional<size_t> selection_monitor_index = std::nullopt;
     uint64_t last_invalidate_tick = 0;
     std::vector<RectPx> window_rects = {};
     std::vector<int32_t> vertical_edges = {};
     std::vector<int32_t> horizontal_edges = {};
     std::vector<MonitorWithBounds> cached_monitors = {};
+    std::optional<HWND> selection_window = std::nullopt;
+    std::optional<size_t> selection_monitor_index = std::nullopt;
+    std::optional<SelectionHandle> resize_handle = std::nullopt;
+    bool dragging = false;
+    bool handle_dragging = false;
+    bool move_dragging = false;
+    bool modifier_preview = false;
+    SaveSelectionSource selection_source = SaveSelectionSource::Region;
 
     void Reset_for_session();
 };

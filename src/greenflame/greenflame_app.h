@@ -15,6 +15,11 @@ class GreenflameApp final : public ITrayEvents, public IOverlayEvents {
   public:
     explicit GreenflameApp(HINSTANCE hinstance,
                            core::CliOptions const &cli_options = {});
+    GreenflameApp(GreenflameApp const &) = delete;
+    GreenflameApp &operator=(GreenflameApp const &) = delete;
+    GreenflameApp(GreenflameApp &&) = delete;
+    GreenflameApp &operator=(GreenflameApp &&) = delete;
+    ~GreenflameApp() = default;
 
     [[nodiscard]] int Run();
 
@@ -36,8 +41,6 @@ class GreenflameApp final : public ITrayEvents, public IOverlayEvents {
                                     bool file_copied_to_clipboard) override;
 
     HINSTANCE hinstance_ = nullptr;
-    core::CliOptions cli_options_ = {};
-    core::AppConfig config_ = {};
     TrayWindow tray_window_;
     Win32WindowQuery window_query_;
     OverlayWindow overlay_window_;
@@ -46,6 +49,8 @@ class GreenflameApp final : public ITrayEvents, public IOverlayEvents {
     Win32CaptureService capture_service_;
     Win32FileSystemService file_system_service_;
     AppController app_controller_;
+    core::CliOptions cli_options_ = {};
+    core::AppConfig config_ = {};
 };
 
 } // namespace greenflame

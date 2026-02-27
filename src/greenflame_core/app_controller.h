@@ -10,19 +10,19 @@ namespace core {
 struct AppConfig;
 }
 
-struct ClipboardCopyResult final {
-    bool success = false;
-    std::wstring balloon_message = {};
-};
-
 struct SelectionSavedResult final {
     std::wstring balloon_message = {};
 };
 
+struct ClipboardCopyResult final {
+    std::wstring balloon_message = {};
+    bool success = false;
+};
+
 struct CliResult final {
-    ProcessExitCode exit_code = ProcessExitCode::Success;
     std::wstring stdout_message = {};
     std::wstring stderr_message = {};
+    ProcessExitCode exit_code = ProcessExitCode::Success;
 };
 
 class AppController final {
@@ -30,6 +30,11 @@ class AppController final {
     AppController(core::AppConfig &config, IDisplayQueries &display_queries,
                   IWindowInspector &window_inspector, ICaptureService &capture_service,
                   IFileSystemService &file_system_service);
+    AppController(AppController const &) = delete;
+    AppController &operator=(AppController const &) = delete;
+    AppController(AppController &&) = delete;
+    AppController &operator=(AppController &&) = delete;
+    ~AppController() = default;
 
     [[nodiscard]] ClipboardCopyResult
     On_copy_window_to_clipboard_requested(HWND target_window);

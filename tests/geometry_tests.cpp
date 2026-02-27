@@ -7,6 +7,13 @@ using namespace greenflame::core;
 // tests/fixtures).
 class RectPxFixture : public ::testing::Test {
   protected:
+    RectPxFixture() = default;
+    RectPxFixture(RectPxFixture const &) = delete;
+    RectPxFixture &operator=(RectPxFixture const &) = delete;
+    RectPxFixture(RectPxFixture &&) = delete;
+    RectPxFixture &operator=(RectPxFixture &&) = delete;
+    ~RectPxFixture() override = default;
+
     RectPx inverted{10, 10, 0, 0};
     RectPx normal{0, 0, 10, 10};
     RectPx overlapping{5, 5, 15, 15};

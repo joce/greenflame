@@ -12,16 +12,16 @@ enum class OutputPathExtensionKind : uint8_t {
 };
 
 struct OutputPathExtensionResult final {
+    std::wstring extension = {};
     OutputPathExtensionKind kind = OutputPathExtensionKind::None;
     ImageSaveFormat format = ImageSaveFormat::Png;
-    std::wstring extension = {};
 };
 
 struct ResolveExplicitPathResult final {
-    bool ok = false;
     std::wstring path = {};
-    ImageSaveFormat format = ImageSaveFormat::Png;
     std::wstring error_message = {};
+    ImageSaveFormat format = ImageSaveFormat::Png;
+    bool ok = false;
 };
 
 [[nodiscard]] OutputPathExtensionResult

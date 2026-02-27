@@ -24,15 +24,15 @@ struct PaintResources {
 
 struct PaintOverlayInput {
     GdiCaptureResult const *capture = nullptr;
-    bool dragging = false;
-    bool handle_dragging = false;
-    bool move_dragging = false;
-    bool modifier_preview = false; // Shift/Ctrl: live_rect = window or monitor
     core::RectPx live_rect = {};
     core::RectPx final_selection = {};
     core::PointPx cursor_client_px = {};
     std::span<uint8_t> paint_buffer = {};
     PaintResources const *resources = nullptr;
+    bool dragging = false;
+    bool handle_dragging = false;
+    bool move_dragging = false;
+    bool modifier_preview = false; // Shift/Ctrl: live_rect = window or monitor
 };
 
 void Paint_overlay(HDC hdc, HWND hwnd, const RECT &rc, const PaintOverlayInput &in);

@@ -14,6 +14,8 @@ bool Within_radius_sq(PointPx a, PointPx b, int radius_px) noexcept {
     return dx * dx + dy * dy <= r * r;
 }
 
+#pragma warning(push)
+#pragma warning(disable : 4061)
 PointPx Corner_position(RectPx const &r, SelectionHandle h) noexcept {
     switch (h) {
     case SelectionHandle::TopLeft:
@@ -45,7 +47,7 @@ PointPx Edge_midpoint_position(RectPx const &r, SelectionHandle h) noexcept {
         return {0, 0};
     }
 }
-
+#pragma warning(pop)
 } // namespace
 
 std::optional<SelectionHandle> Hit_test_selection_handle(RectPx selection,

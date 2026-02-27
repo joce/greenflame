@@ -21,6 +21,8 @@ constexpr int kThumbnailMaxHeight = 120;
         CloseClipboard();
         return nullptr;
     }
+#pragma warning(push)
+#pragma warning(disable : 5219)
     float const scale_w = static_cast<float>(kThumbnailMaxWidth) / bm.bmWidth;
     float const scale_h = static_cast<float>(kThumbnailMaxHeight) / bm.bmHeight;
     float scale = (std::min)(scale_w, scale_h);
@@ -29,6 +31,7 @@ constexpr int kThumbnailMaxHeight = 120;
     }
     int thumb_w = static_cast<int>(bm.bmWidth * scale);
     int thumb_h = static_cast<int>(bm.bmHeight * scale);
+#pragma warning(pop)
     if (thumb_w <= 0) {
         thumb_w = 1;
     }
@@ -67,17 +70,7 @@ constexpr int kThumbnailMaxHeight = 120;
 }
 
 void Enable_per_monitor_dpi_awareness_v2() {
-    HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    if (!user32) {
-        return;
-    }
-    using SetDpiAwarenessContextFn =
-        DPI_AWARENESS_CONTEXT(WINAPI *)(DPI_AWARENESS_CONTEXT);
-    auto fn = reinterpret_cast<SetDpiAwarenessContextFn>(
-        GetProcAddress(user32, "SetProcessDpiAwarenessContext"));
-    if (fn) {
-        fn(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    }
+    (void)SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 }
 
 [[nodiscard]] bool
@@ -203,10 +196,11 @@ struct ChangeNotificationGuard {
 namespace greenflame {
 
 GreenflameApp::GreenflameApp(HINSTANCE hinstance, core::CliOptions const &cli_options)
-    : hinstance_(hinstance), cli_options_(cli_options), tray_window_(this),
+    : hinstance_(hinstance), tray_window_(this),
       overlay_window_(this, &config_, &window_query_),
       app_controller_(config_, display_queries_, window_inspector_, capture_service_,
-                      file_system_service_) {}
+                      file_system_service_),
+      cli_options_(cli_options) {}
 
 int GreenflameApp::Run() {
     Enable_per_monitor_dpi_awareness_v2();

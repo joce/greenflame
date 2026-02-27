@@ -56,7 +56,7 @@ HWND s_last_foreground_hwnd = nullptr;
 HWINEVENTHOOK s_foreground_hook = nullptr;
 
 void CALLBACK Foreground_changed_hook(HWINEVENTHOOK, DWORD, HWND hwnd, LONG id_object,
-                                      LONG id_child, DWORD, DWORD) {
+                                      LONG id_child, DWORD, DWORD) noexcept {
     if (id_object != OBJID_WINDOW || id_child != 0) {
         return;
     }
@@ -107,6 +107,8 @@ Gdiplus::Color Gdiplus_color(COLORREF c, BYTE alpha = kOpaqueAlpha) {
 // Icon glyphs are vector paths normalized to [0,1] and scaled at draw-time.
 // NOLINTBEGIN(readability-magic-numbers,cppcoreguidelines-avoid-magic-numbers)
 void Draw_info_icon(HDC hdc, int x, int y, int size, COLORREF color) {
+#pragma warning(push)
+#pragma warning(disable : 5219)
     if (!Ensure_gdiplus()) {
         return;
     }
@@ -130,9 +132,12 @@ void Draw_info_icon(HDC hdc, int x, int y, int size, COLORREF color) {
         {x + size * 0.75f, y + size * 0.32f},
     };
     g.DrawLines(&pen, check, 3);
+#pragma warning(pop)
 }
 
 void Draw_warning_icon(HDC hdc, int x, int y, int size, COLORREF color) {
+#pragma warning(push)
+#pragma warning(disable : 5219)
     if (!Ensure_gdiplus()) {
         return;
     }
@@ -162,9 +167,12 @@ void Draw_warning_icon(HDC hdc, int x, int y, int size, COLORREF color) {
     float const dot_y = y + size * 0.72f + nudge;
     Gdiplus::SolidBrush dot_brush(bang_color);
     g.FillEllipse(&dot_brush, cx - dot_r, dot_y - dot_r, dot_r * 2, dot_r * 2);
+#pragma warning(pop)
 }
 
 void Draw_error_icon(HDC hdc, int x, int y, int size, COLORREF color) {
+#pragma warning(push)
+#pragma warning(disable : 5219)
     if (!Ensure_gdiplus()) {
         return;
     }
@@ -192,6 +200,7 @@ void Draw_error_icon(HDC hdc, int x, int y, int size, COLORREF color) {
     pen.SetEndCap(Gdiplus::LineCapRound);
     g.DrawLine(&pen, x + m, y + m, x + size - m, y + size - m);
     g.DrawLine(&pen, x + size - m, y + m, x + m, y + size - m);
+#pragma warning(pop)
 }
 // NOLINTEND(readability-magic-numbers,cppcoreguidelines-avoid-magic-numbers)
 
@@ -340,6 +349,8 @@ class TrayWindow::ToastPopup final {
         int const body_row_height = std::max(icon_size, body_height);
         int height = padding + title_height + header_gap + body_row_height + padding;
 
+#pragma warning(push)
+#pragma warning(disable : 5219)
         if (thumbnail_ != nullptr && thumbnail_width_ > 0 && thumbnail_height_ > 0) {
             float const scale_w = static_cast<float>(content_width) / thumbnail_width_;
             float const scale_h =
@@ -350,6 +361,7 @@ class TrayWindow::ToastPopup final {
             }
             height += thumbnail_gap + static_cast<int>(thumbnail_height_ * scale);
         }
+#pragma warning(pop)
 
         height = std::clamp(height, min_height, max_height);
 
@@ -621,6 +633,9 @@ class TrayWindow::ToastPopup final {
 
                 if (thumbnail_ != nullptr && thumbnail_width_ > 0 &&
                     thumbnail_height_ > 0) {
+
+#pragma warning(push)
+#pragma warning(disable : 5219)
                     float const scale_w =
                         static_cast<float>(content_width) / thumbnail_width_;
                     float const scale_h =
@@ -635,6 +650,7 @@ class TrayWindow::ToastPopup final {
                         std::max(body_text_bottom, body_top + icon_size) +
                         thumbnail_gap;
                     int const thumb_left = content_left;
+#pragma warning(pop)
 
                     RECT thumb_border_rect{};
                     thumb_border_rect.left = thumb_left - 1;
@@ -676,9 +692,9 @@ class TrayWindow::ToastPopup final {
     HFONT body_font_ = nullptr;
     UINT title_font_dpi_ = 0;
     UINT body_font_dpi_ = 0;
-    TrayBalloonIcon icon_ = TrayBalloonIcon::Info;
     std::wstring message_ = {};
     HBITMAP thumbnail_ = nullptr;
+    TrayBalloonIcon icon_ = TrayBalloonIcon::Info;
     int thumbnail_width_ = 0;
     int thumbnail_height_ = 0;
 };

@@ -93,8 +93,9 @@ bool Save_capture_to_bmp(GdiCaptureResult const &capture, wchar_t const *path) {
     info.biHeight = capture.height; // positive = bottom-up for BMP file
 
     std::vector<uint8_t> pixels(image_size);
-    if (GetDIBits(dc, capture.bitmap, 0, capture.height, pixels.data(),
-                  reinterpret_cast<BITMAPINFO *>(&info), DIB_RGB_COLORS) == 0) {
+    if (GetDIBits(dc, capture.bitmap, 0, static_cast<UINT>(capture.height),
+                  pixels.data(), reinterpret_cast<BITMAPINFO *>(&info),
+                  DIB_RGB_COLORS) == 0) {
         ReleaseDC(nullptr, dc);
         return false;
     }
@@ -190,8 +191,8 @@ bool Copy_capture_to_clipboard(GdiCaptureResult const &capture, HWND owner_windo
             if (raw != nullptr) {
                 memcpy(raw, &info, sizeof(BITMAPINFOHEADER));
                 uint8_t *bits = static_cast<uint8_t *>(raw) + sizeof(BITMAPINFOHEADER);
-                ok = GetDIBits(dc, capture.bitmap, 0, capture.height, bits,
-                               reinterpret_cast<BITMAPINFO *>(&info),
+                ok = GetDIBits(dc, capture.bitmap, 0, static_cast<UINT>(capture.height),
+                               bits, reinterpret_cast<BITMAPINFO *>(&info),
                                DIB_RGB_COLORS) != 0;
                 GlobalUnlock(memory);
             }

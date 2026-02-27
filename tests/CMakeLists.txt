@@ -44,6 +44,35 @@ set_target_properties(greenflame_tests PROPERTIES
 target_precompile_headers(greenflame_tests PRIVATE
     "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/pch.h>"
 )
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(greenflame_tests PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wno-c++98-compat
+        -Wno-c++98-compat-pedantic
+        -Wno-pre-c++14-compat
+        -Wno-pre-c++17-compat
+        -Wno-pre-c++20-compat
+        -ftime-trace
+    )
+elseif(MSVC)
+    target_compile_options(greenflame_tests PRIVATE
+        /Wall
+        /wd4514 # 'function' : unreferenced inline function has been removed
+        /wd5045 # Compiler will insert Spectre mitigation for memory load if /Qspectre switch specified
+        /wd4820 # 'bytes' bytes padding added after construct 'member_name'
+        /wd4355 # 'this': used in base member initializer list
+        /wd4710 # 'function' : function not inlined
+        /wd4711 # 'function' : function selected for automatic inline expansion
+        /external:W0
+        /external:anglebrackets
+        /permissive-
+        /Zc:__cplusplus
+    )
+else()
+    target_compile_options(greenflame_tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
 target_link_libraries(greenflame_tests PRIVATE
     greenflame_core
     GTest::gtest_main

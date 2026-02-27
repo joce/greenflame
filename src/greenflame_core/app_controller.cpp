@@ -87,7 +87,7 @@ AppController::On_copy_window_to_clipboard_requested(HWND target_window) {
         if (target_rect.has_value() &&
             capture_service_.Copy_rect_to_clipboard(*target_rect)) {
             Store_last_capture(*target_rect, target_window);
-            return ClipboardCopyResult{true, kClipboardCopiedBalloonMessage};
+            return ClipboardCopyResult{kClipboardCopiedBalloonMessage, true};
         }
     }
 
@@ -96,7 +96,7 @@ AppController::On_copy_window_to_clipboard_requested(HWND target_window) {
     if (foreground_rect.has_value() &&
         capture_service_.Copy_rect_to_clipboard(*foreground_rect)) {
         Store_last_capture(*foreground_rect, std::nullopt);
-        return ClipboardCopyResult{true, kClipboardCopiedBalloonMessage};
+        return ClipboardCopyResult{kClipboardCopiedBalloonMessage, true};
     }
 
     core::PointPx const cursor = display_queries_.Get_cursor_pos_px();
@@ -106,7 +106,7 @@ AppController::On_copy_window_to_clipboard_requested(HWND target_window) {
     if (fallback_rect.has_value() &&
         capture_service_.Copy_rect_to_clipboard(*fallback_rect)) {
         Store_last_capture(*fallback_rect, std::nullopt);
-        return ClipboardCopyResult{true, kClipboardCopiedBalloonMessage};
+        return ClipboardCopyResult{kClipboardCopiedBalloonMessage, true};
     }
 
     return {};
@@ -129,7 +129,7 @@ ClipboardCopyResult AppController::On_copy_monitor_to_clipboard_requested() {
     core::RectPx const rect = monitors[*index].bounds;
     if (capture_service_.Copy_rect_to_clipboard(rect)) {
         Store_last_capture(rect, std::nullopt);
-        return ClipboardCopyResult{true, kClipboardCopiedBalloonMessage};
+        return ClipboardCopyResult{kClipboardCopiedBalloonMessage, true};
     }
     return {};
 }
@@ -138,41 +138,41 @@ ClipboardCopyResult AppController::On_copy_desktop_to_clipboard_requested() {
     core::RectPx const rect = display_queries_.Get_virtual_desktop_bounds_px();
     if (capture_service_.Copy_rect_to_clipboard(rect)) {
         Store_last_capture(rect, std::nullopt);
-        return ClipboardCopyResult{true, kClipboardCopiedBalloonMessage};
+        return ClipboardCopyResult{kClipboardCopiedBalloonMessage, true};
     }
     return {};
 }
 
 ClipboardCopyResult AppController::On_copy_last_region_to_clipboard_requested() {
     if (!last_capture_screen_rect_.has_value()) {
-        return ClipboardCopyResult{false, kNoLastRegionMessage};
+        return ClipboardCopyResult{kNoLastRegionMessage, false};
     }
     if (capture_service_.Copy_rect_to_clipboard(*last_capture_screen_rect_)) {
-        return ClipboardCopyResult{true, kClipboardCopiedBalloonMessage};
+        return ClipboardCopyResult{kClipboardCopiedBalloonMessage, true};
     }
-    return ClipboardCopyResult{false, kNoLastRegionMessage};
+    return ClipboardCopyResult{kNoLastRegionMessage, false};
 }
 
 ClipboardCopyResult AppController::On_copy_last_window_to_clipboard_requested() {
     if (!last_capture_window_.has_value()) {
-        return ClipboardCopyResult{false, kNoLastWindowMessage};
+        return ClipboardCopyResult{kNoLastWindowMessage, false};
     }
     HWND const hwnd = *last_capture_window_;
     if (!window_inspector_.Is_window_valid(hwnd)) {
         last_capture_window_ = std::nullopt;
-        return ClipboardCopyResult{false, kLastWindowClosedMessage};
+        return ClipboardCopyResult{kLastWindowClosedMessage, false};
     }
     if (window_inspector_.Is_window_minimized(hwnd)) {
-        return ClipboardCopyResult{false, kLastWindowMinimizedMessage};
+        return ClipboardCopyResult{kLastWindowMinimizedMessage, false};
     }
     std::optional<core::RectPx> const rect = window_inspector_.Get_window_rect(hwnd);
     if (!rect.has_value()) {
         last_capture_window_ = std::nullopt;
-        return ClipboardCopyResult{false, kLastWindowClosedMessage};
+        return ClipboardCopyResult{kLastWindowClosedMessage, false};
     }
     if (capture_service_.Copy_rect_to_clipboard(*rect)) {
         Store_last_capture(*rect, hwnd);
-        return ClipboardCopyResult{true, kClipboardCopiedBalloonMessage};
+        return ClipboardCopyResult{kClipboardCopiedBalloonMessage, true};
     }
     return {};
 }
@@ -181,7 +181,7 @@ ClipboardCopyResult
 AppController::On_selection_copied_to_clipboard(core::RectPx screen_rect,
                                                 std::optional<HWND> window) {
     Store_last_capture(screen_rect, window);
-    return ClipboardCopyResult{true, kClipboardCopiedBalloonMessage};
+    return ClipboardCopyResult{kClipboardCopiedBalloonMessage, true};
 }
 
 SelectionSavedResult AppController::On_selection_saved_to_file(
@@ -394,7 +394,7 @@ CliResult AppController::Run_cli_capture_mode(core::CliOptions const &cli_option
                         L"Error: Requested capture area is outside the virtual "
                         L"desktop.");
         }
-        return CliResult{ProcessExitCode::CliCaptureSaveFailed, {}, stderr_text};
+        return CliResult{{}, stderr_text, ProcessExitCode::CliCaptureSaveFailed};
     }
 
     if (!capture_service_.Save_rect_to_file(target_rect, output_path, output_format)) {
@@ -404,7 +404,7 @@ CliResult AppController::Run_cli_capture_mode(core::CliOptions const &cli_option
         std::wstring error_message = L"Error: Failed to encode or write image file: ";
         error_message += output_path;
         Append_line(stderr_text, error_message);
-        return CliResult{ProcessExitCode::CliCaptureSaveFailed, {}, stderr_text};
+        return CliResult{{}, stderr_text, ProcessExitCode::CliCaptureSaveFailed};
     }
 
     Update_default_save_dir_from_path(config_, output_path);
@@ -413,7 +413,7 @@ CliResult AppController::Run_cli_capture_mode(core::CliOptions const &cli_option
 
     std::wstring stdout_text = L"Saved: ";
     stdout_text += output_path;
-    return CliResult{ProcessExitCode::Success, stdout_text, stderr_text};
+    return CliResult{stdout_text, stderr_text, ProcessExitCode::Success};
 }
 
 std::wstring AppController::Build_default_output_path(

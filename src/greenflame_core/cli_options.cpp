@@ -375,7 +375,7 @@ Find_option_by_short_name(wchar_t name, bool debug_build) noexcept {
             return Make_error(error_message);
         }
         options.region_px = region;
-        return CliParseResult{true, options, {}};
+        return CliParseResult{{}, options, true};
     }
     case CliOptionId::Window:
         if (value.empty()) {
@@ -385,7 +385,7 @@ Find_option_by_short_name(wchar_t name, bool debug_build) noexcept {
             return Make_error(error_message);
         }
         options.window_name = value;
-        return CliParseResult{true, options, {}};
+        return CliParseResult{{}, options, true};
     case CliOptionId::Monitor: {
         int32_t monitor_id = 0;
         if (!Try_parse_int32(value, monitor_id) || monitor_id < 1) {
@@ -395,18 +395,18 @@ Find_option_by_short_name(wchar_t name, bool debug_build) noexcept {
             return Make_error(error_message);
         }
         options.monitor_id = monitor_id;
-        return CliParseResult{true, options, {}};
+        return CliParseResult{{}, options, true};
     }
     case CliOptionId::Desktop:
         if (!Try_set_capture_mode(options, CliCaptureMode::Desktop, error_message)) {
             return Make_error(error_message);
         }
-        return CliParseResult{true, options, {}};
+        return CliParseResult{{}, options, true};
     case CliOptionId::Help:
         if (!Try_set_capture_mode(options, CliCaptureMode::Help, error_message)) {
             return Make_error(error_message);
         }
-        return CliParseResult{true, options, {}};
+        return CliParseResult{{}, options, true};
     case CliOptionId::Output:
         if (value.empty()) {
             return Make_error(L"--output expects a non-empty path.");
@@ -415,7 +415,7 @@ Find_option_by_short_name(wchar_t name, bool debug_build) noexcept {
             return Make_error(L"--output can only be specified once.");
         }
         options.output_path = value;
-        return CliParseResult{true, options, {}};
+        return CliParseResult{{}, options, true};
     case CliOptionId::Format: {
         CliOutputFormat format = CliOutputFormat::Png;
         if (!Try_parse_output_format(value, format)) {
@@ -425,15 +425,15 @@ Find_option_by_short_name(wchar_t name, bool debug_build) noexcept {
             return Make_error(L"--format can only be specified once.");
         }
         options.output_format = format;
-        return CliParseResult{true, options, {}};
+        return CliParseResult{{}, options, true};
     }
     case CliOptionId::Overwrite:
         options.overwrite_output = true;
-        return CliParseResult{true, options, {}};
+        return CliParseResult{{}, options, true};
 #ifdef DEBUG
     case CliOptionId::Testing12:
         options.testing_1_2 = true;
-        return CliParseResult{true, options, {}};
+        return CliParseResult{{}, options, true};
 #endif
     }
     return Make_error(L"Internal CLI parser error.");
@@ -460,7 +460,7 @@ Find_option_by_short_name(wchar_t name, bool debug_build) noexcept {
     if (options.capture_mode == CliCaptureMode::Monitor && options.monitor_id <= 0) {
         return Make_error(L"--monitor value is missing.");
     }
-    return CliParseResult{true, options, {}};
+    return CliParseResult{{}, options, true};
 }
 
 [[nodiscard]] CliParseResult Parse_option(CliOptions &options,

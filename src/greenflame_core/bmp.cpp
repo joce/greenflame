@@ -8,7 +8,6 @@ constexpr size_t kFileHeaderSize = 14;
 constexpr size_t kInfoHeaderSize = 40;
 constexpr uint16_t kBmpMagic = 0x4D42; // 'BM'
 
-#pragma pack(push, 1)
 struct BmpFileHeader {
     uint16_t bfType = kBmpMagic;
     uint32_t bfSize = 0;
@@ -16,6 +15,7 @@ struct BmpFileHeader {
     uint16_t bfReserved2 = 0;
     uint32_t bfOffBits = kFileHeaderSize + kInfoHeaderSize;
 };
+
 struct BmpInfoHeader {
     uint32_t biSize = kInfoHeaderSize;
     int32_t biWidth = 0;
@@ -29,7 +29,6 @@ struct BmpInfoHeader {
     uint32_t biClrUsed = 0;
     uint32_t biClrImportant = 0;
 };
-#pragma pack(pop)
 
 } // namespace
 

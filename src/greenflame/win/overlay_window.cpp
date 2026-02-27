@@ -31,6 +31,9 @@ Create_thumbnail_from_capture(greenflame::GdiCaptureResult const &capture) {
     if (!capture.Is_valid()) {
         return nullptr;
     }
+
+#pragma warning(push)
+#pragma warning(disable : 5219)
     float const scale_w = static_cast<float>(kThumbnailMaxWidth) / capture.width;
     float const scale_h = static_cast<float>(kThumbnailMaxHeight) / capture.height;
     float scale = (std::min)(scale_w, scale_h);
@@ -39,6 +42,7 @@ Create_thumbnail_from_capture(greenflame::GdiCaptureResult const &capture) {
     }
     int tw = static_cast<int>(capture.width * scale);
     int th = static_cast<int>(capture.height * scale);
+#pragma warning(pop)
     if (tw <= 0) {
         tw = 1;
     }

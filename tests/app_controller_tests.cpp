@@ -17,6 +17,13 @@ namespace {
 
 class MockDisplayQueries : public IDisplayQueries {
   public:
+    MockDisplayQueries() = default;
+    MockDisplayQueries(MockDisplayQueries const &) = delete;
+    MockDisplayQueries &operator=(MockDisplayQueries const &) = delete;
+    MockDisplayQueries(MockDisplayQueries &&) = delete;
+    MockDisplayQueries &operator=(MockDisplayQueries &&) = delete;
+    ~MockDisplayQueries() override = default;
+
     MOCK_METHOD(core::PointPx, Get_cursor_pos_px, (), (const, override));
     MOCK_METHOD(core::RectPx, Get_virtual_desktop_bounds_px, (), (const, override));
     MOCK_METHOD(std::vector<core::MonitorWithBounds>, Get_monitors_with_bounds, (),
@@ -25,6 +32,13 @@ class MockDisplayQueries : public IDisplayQueries {
 
 class MockWindowInspector : public IWindowInspector {
   public:
+    MockWindowInspector() = default;
+    MockWindowInspector(MockWindowInspector const &) = delete;
+    MockWindowInspector &operator=(MockWindowInspector const &) = delete;
+    MockWindowInspector(MockWindowInspector &&) = delete;
+    MockWindowInspector &operator=(MockWindowInspector &&) = delete;
+    ~MockWindowInspector() override = default;
+
     MOCK_METHOD(std::optional<core::RectPx>, Get_window_rect, (HWND),
                 (const, override));
     MOCK_METHOD(bool, Is_window_valid, (HWND), (const, override));
@@ -40,6 +54,13 @@ class MockWindowInspector : public IWindowInspector {
 
 class MockCaptureService : public ICaptureService {
   public:
+    MockCaptureService() = default;
+    MockCaptureService(MockCaptureService const &) = delete;
+    MockCaptureService &operator=(MockCaptureService const &) = delete;
+    MockCaptureService(MockCaptureService &&) = delete;
+    MockCaptureService &operator=(MockCaptureService &&) = delete;
+    ~MockCaptureService() override = default;
+
     MOCK_METHOD(bool, Copy_rect_to_clipboard, (core::RectPx), (override));
     MOCK_METHOD(bool, Save_rect_to_file,
                 (core::RectPx, std::wstring_view, core::ImageSaveFormat), (override));
@@ -47,6 +68,13 @@ class MockCaptureService : public ICaptureService {
 
 class MockFileSystemService : public IFileSystemService {
   public:
+    MockFileSystemService() = default;
+    MockFileSystemService(MockFileSystemService const &) = delete;
+    MockFileSystemService &operator=(MockFileSystemService const &) = delete;
+    MockFileSystemService(MockFileSystemService &&) = delete;
+    MockFileSystemService &operator=(MockFileSystemService &&) = delete;
+    ~MockFileSystemService() override = default;
+
     MOCK_METHOD(std::vector<std::wstring>, List_directory_filenames,
                 (std::wstring_view), (const, override));
     MOCK_METHOD(std::wstring, Reserve_unique_file_path, (std::wstring_view),
@@ -70,6 +98,11 @@ struct ControllerFixture {
     AppController controller;
 
     ControllerFixture() : controller(config, display, windows, capture, file_system) {}
+    ControllerFixture(ControllerFixture const &) = delete;
+    ControllerFixture &operator=(ControllerFixture const &) = delete;
+    ControllerFixture(ControllerFixture &&) = delete;
+    ControllerFixture &operator=(ControllerFixture &&) = delete;
+    ~ControllerFixture() = default;
 };
 
 } // namespace

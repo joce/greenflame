@@ -25,12 +25,12 @@ enum class CliOutputFormat : uint8_t {
 }
 
 struct CliOptions final {
-    CliCaptureMode capture_mode = CliCaptureMode::None;
-    std::optional<RectPx> region_px = std::nullopt;
     std::wstring window_name = {};
-    int32_t monitor_id = 0; // 1-based.
     std::wstring output_path = {};
+    std::optional<RectPx> region_px = std::nullopt;
+    int32_t monitor_id = 0; // 1-based.
     std::optional<CliOutputFormat> output_format = std::nullopt;
+    CliCaptureMode capture_mode = CliCaptureMode::None;
     bool overwrite_output = false;
 #ifdef DEBUG
     bool testing_1_2 = false;
@@ -38,9 +38,9 @@ struct CliOptions final {
 };
 
 struct CliParseResult final {
-    bool ok = false;
-    CliOptions options = {};
     std::wstring error_message = {};
+    CliOptions options = {};
+    bool ok = false;
 };
 
 [[nodiscard]] CliParseResult Parse_cli_arguments(std::vector<std::wstring> const &args,

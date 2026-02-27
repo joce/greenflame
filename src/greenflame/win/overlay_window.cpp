@@ -2,18 +2,18 @@
 
 #include "win/overlay_window.h"
 
-#include "app_config.h"
+#include "greenflame_core/app_config.h"
 #include "greenflame_core/monitor_rules.h"
 #include "greenflame_core/rect_px.h"
 #include "greenflame_core/save_image_policy.h"
 #include "greenflame_core/selection_handles.h"
 #include "greenflame_core/snap_to_edges.h"
+#include "greenflame_core/window_query.h"
 #include "win/display_queries.h"
 #include "win/gdi_capture.h"
 #include "win/overlay_paint.h"
 #include "win/save_image.h"
 #include "win/ui_palette.h"
-#include "win/window_query.h"
 
 namespace {
 
@@ -252,8 +252,9 @@ struct OverlayWindow::OverlayResources {
     }
 };
 
-OverlayWindow::OverlayWindow(IOverlayEvents *events, AppConfig *config)
-    : events_(events), config_(config),
+OverlayWindow::OverlayWindow(IOverlayEvents *events, core::AppConfig *config,
+                             IWindowQuery *window_query)
+    : events_(events), config_(config), window_query_(window_query),
       resources_(std::make_unique<OverlayResources>()) {}
 
 OverlayWindow::~OverlayWindow() { Destroy(); }
@@ -273,6 +274,9 @@ bool OverlayWindow::Register_window_class(HINSTANCE hinstance) {
 bool OverlayWindow::Create_and_show(HINSTANCE hinstance) {
     if (Is_open()) {
         return true;
+    }
+    if (window_query_ == nullptr) {
+        return false;
     }
     hinstance_ = hinstance;
     resources_->Reset();
@@ -362,12 +366,12 @@ void OverlayWindow::Apply_action(core::OverlayAction action) {
 }
 
 LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
-    bool const ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-    bool const shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
-    bool const alt   = (GetKeyState(VK_MENU)    & 0x8000) != 0;
-    bool const eff_ctrl  = ctrl  || (wparam == VK_CONTROL);
+    bool const ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+    bool const shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+    bool const alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
+    bool const eff_ctrl = ctrl || (wparam == VK_CONTROL);
     bool const eff_shift = shift || (wparam == VK_SHIFT);
-    bool const eff_alt   = alt   || (wparam == VK_MENU);
+    bool const eff_alt = alt || (wparam == VK_MENU);
 
     if (wparam == VK_ESCAPE) {
         Apply_action(controller_.On_cancel());
@@ -400,14 +404,15 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
             ox = wr.left;
             oy = wr.top;
             if (eff_ctrl && !eff_shift) {
-                win_rect = Get_window_rect_under_cursor(To_point(cursor_screen), hwnd_);
+                win_rect = window_query_->Get_window_rect_under_cursor(
+                    To_point(cursor_screen), hwnd_);
             }
             if (eff_shift && eff_ctrl) {
                 vdesk = Get_virtual_desktop_bounds_px();
             }
             if (eff_shift && !eff_ctrl) {
-                monitor_idx = core::Index_of_monitor_containing(
-                    cursor_screen, s.cached_monitors);
+                monitor_idx =
+                    core::Index_of_monitor_containing(cursor_screen, s.cached_monitors);
             }
         }
         Apply_action(controller_.On_modifier_changed(new_mods, cursor_screen, win_rect,
@@ -422,11 +427,10 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
 LRESULT OverlayWindow::On_key_up(WPARAM wparam, LPARAM lparam) {
     // Force-clear the released key from the effective modifier state.
     bool const eff_shift =
-        (wparam != VK_SHIFT)   && (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
-    bool const eff_ctrl  =
+        (wparam != VK_SHIFT) && (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+    bool const eff_ctrl =
         (wparam != VK_CONTROL) && (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-    bool const eff_alt   =
-        (wparam != VK_MENU)    && (GetKeyState(VK_MENU)    & 0x8000) != 0;
+    bool const eff_alt = (wparam != VK_MENU) && (GetKeyState(VK_MENU) & 0x8000) != 0;
     if (wparam == VK_SHIFT || wparam == VK_CONTROL || wparam == VK_MENU) {
         core::OverlayModifierState new_mods{eff_shift, eff_ctrl, eff_alt};
         // On key-up, no preview hints: preview is being cleared, not set.
@@ -442,10 +446,10 @@ LRESULT OverlayWindow::On_l_button_down() {
     if (!resources_->capture.Is_valid()) {
         return 0;
     }
-    bool const shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
-    bool const ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-    bool const alt   = (GetKeyState(VK_MENU)    & 0x8000) != 0;
-    bool const tab   = (GetKeyState(VK_TAB)     & 0x8000) != 0;
+    bool const shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+    bool const ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+    bool const alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
+    bool const tab = (GetKeyState(VK_TAB) & 0x8000) != 0;
     core::OverlayModifierState mods{shift, ctrl, alt, tab};
     core::PointPx const cursor_client = Get_client_cursor_pos_px(hwnd_);
     core::PointPx const cursor_screen = Get_cursor_pos_px();
@@ -458,7 +462,8 @@ LRESULT OverlayWindow::On_l_button_down() {
     core::RectPx vdesk{};
     bool const in_preview = controller_.State().modifier_preview;
     if (ctrl && !shift && in_preview) {
-        win_handle = Get_window_under_cursor(To_point(cursor_screen), hwnd_);
+        win_handle =
+            window_query_->Get_window_under_cursor(To_point(cursor_screen), hwnd_);
     }
     if (shift && !ctrl && in_preview) {
         monitor_idx = core::Index_of_monitor_containing(
@@ -470,22 +475,21 @@ LRESULT OverlayWindow::On_l_button_down() {
 
     // Collect all rects for snap-edge rebuild (window rects + monitor bounds).
     std::vector<core::RectPx> vis_rects;
-    Get_visible_top_level_window_rects(hwnd_, vis_rects);
+    window_query_->Get_visible_top_level_window_rects(hwnd_, vis_rects);
     for (auto const &m : controller_.State().cached_monitors) {
         vis_rects.push_back(m.bounds);
     }
 
-    Apply_action(controller_.On_primary_press(mods, cursor_client, cursor_screen,
-                                              win_handle, monitor_idx,
-                                              std::optional<core::RectPx>{}, vdesk,
-                                              std::move(vis_rects), wr.left, wr.top));
+    Apply_action(controller_.On_primary_press(
+        mods, cursor_client, cursor_screen, win_handle, monitor_idx,
+        std::optional<core::RectPx>{}, vdesk, std::move(vis_rects), wr.left, wr.top));
     return 0;
 }
 
 LRESULT OverlayWindow::On_mouse_move() {
-    bool const shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
-    bool const ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-    bool const alt   = (GetKeyState(VK_MENU)    & 0x8000) != 0;
+    bool const shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+    bool const ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+    bool const alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
     core::OverlayModifierState mods{shift, ctrl, alt};
     core::PointPx const cursor_client = Get_client_cursor_pos_px(hwnd_);
 
@@ -505,18 +509,19 @@ LRESULT OverlayWindow::On_mouse_move() {
         ox = wr.left;
         oy = wr.top;
         if (ctrl && !shift) {
-            win_rect = Get_window_rect_under_cursor(To_point(cursor_screen), hwnd_);
+            win_rect = window_query_->Get_window_rect_under_cursor(
+                To_point(cursor_screen), hwnd_);
         }
         if (shift && ctrl) {
             vdesk = Get_virtual_desktop_bounds_px();
         }
         if (shift && !ctrl) {
-            monitor_idx = core::Index_of_monitor_containing(
-                cursor_screen, s.cached_monitors);
+            monitor_idx =
+                core::Index_of_monitor_containing(cursor_screen, s.cached_monitors);
         }
     }
-    Apply_action(controller_.On_pointer_move(mods, cursor_client, cursor_screen, win_rect,
-                                             vdesk, monitor_idx, ox, oy,
+    Apply_action(controller_.On_pointer_move(mods, cursor_client, cursor_screen,
+                                             win_rect, vdesk, monitor_idx, ox, oy,
                                              static_cast<uint64_t>(GetTickCount64())));
     return 0;
 }
@@ -531,18 +536,29 @@ LRESULT OverlayWindow::On_l_button_up() {
 LRESULT OverlayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
     switch (msg) {
     case WM_KEYDOWN:
-    case WM_SYSKEYDOWN:  return On_key_down(wparam, lparam);
+    case WM_SYSKEYDOWN:
+        return On_key_down(wparam, lparam);
     case WM_KEYUP:
-    case WM_SYSKEYUP:    return On_key_up(wparam, lparam);
-    case WM_LBUTTONDOWN: return On_l_button_down();
-    case WM_MOUSEMOVE:   return On_mouse_move();
-    case WM_LBUTTONUP:   return On_l_button_up();
-    case WM_PAINT:       return On_paint();
-    case WM_SETCURSOR:   return On_set_cursor(wparam, lparam);
-    case WM_ERASEBKGND:  return 1;
-    case WM_DESTROY:     return On_destroy();
-    case WM_CLOSE:       return On_close();
-    default:             return DefWindowProcW(hwnd_, msg, wparam, lparam);
+    case WM_SYSKEYUP:
+        return On_key_up(wparam, lparam);
+    case WM_LBUTTONDOWN:
+        return On_l_button_down();
+    case WM_MOUSEMOVE:
+        return On_mouse_move();
+    case WM_LBUTTONUP:
+        return On_l_button_up();
+    case WM_PAINT:
+        return On_paint();
+    case WM_SETCURSOR:
+        return On_set_cursor(wparam, lparam);
+    case WM_ERASEBKGND:
+        return 1;
+    case WM_DESTROY:
+        return On_destroy();
+    case WM_CLOSE:
+        return On_close();
+    default:
+        return DefWindowProcW(hwnd_, msg, wparam, lparam);
     }
 }
 
@@ -863,7 +879,7 @@ LRESULT OverlayWindow::On_paint() {
             // Monitor right/bottom snap edges are exclusive boundaries
             // (e.g. x == width) but pixel indices are zero-based, so clamp
             // to the last valid pixel to keep crosshair/magnifier visible.
-            if (cursor.x >= rect.right)  cursor.x = rect.right - 1;
+            if (cursor.x >= rect.right) cursor.x = rect.right - 1;
             if (cursor.y >= rect.bottom) cursor.y = rect.bottom - 1;
         }
         input.cursor_client_px = cursor;

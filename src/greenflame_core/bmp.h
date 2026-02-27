@@ -1,9 +1,5 @@
 #pragma once
 
-#include <cstdint>
-#include <span>
-#include <vector>
-
 namespace greenflame::core {
 
 // Builds a BMP file (with headers) from a 32bpp BGRA pixel buffer.

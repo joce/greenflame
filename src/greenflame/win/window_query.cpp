@@ -1,7 +1,5 @@
 #include "win/window_query.h"
 
-#include <utility>
-
 namespace greenflame {
 
 namespace {
@@ -66,7 +64,8 @@ namespace {
 
 } // namespace
 
-std::optional<HWND> Get_window_under_cursor(POINT screen_pt, HWND exclude_hwnd) {
+std::optional<HWND> Win32WindowQuery::Get_window_under_cursor(POINT screen_pt,
+                                                              HWND exclude_hwnd) const {
     HWND hwnd = nullptr;
     if (exclude_hwnd != nullptr) {
         hwnd = GetWindow(exclude_hwnd, GW_HWNDNEXT);
@@ -91,7 +90,8 @@ std::optional<HWND> Get_window_under_cursor(POINT screen_pt, HWND exclude_hwnd) 
     return std::nullopt;
 }
 
-std::optional<greenflame::core::RectPx> Get_window_rect(HWND hwnd) {
+std::optional<greenflame::core::RectPx>
+Win32WindowQuery::Get_window_rect(HWND hwnd) const {
     if (hwnd == nullptr) {
         return std::nullopt;
     }
@@ -107,7 +107,8 @@ std::optional<greenflame::core::RectPx> Get_window_rect(HWND hwnd) {
         static_cast<int32_t>(rect.right), static_cast<int32_t>(rect.bottom));
 }
 
-std::optional<greenflame::core::RectPx> Get_foreground_window_rect(HWND exclude_hwnd) {
+std::optional<greenflame::core::RectPx>
+Win32WindowQuery::Get_foreground_window_rect(HWND exclude_hwnd) const {
     HWND const window = GetForegroundWindow();
     if (window == nullptr || window == exclude_hwnd) {
         return std::nullopt;
@@ -126,7 +127,8 @@ std::optional<greenflame::core::RectPx> Get_foreground_window_rect(HWND exclude_
 }
 
 std::optional<greenflame::core::RectPx>
-Get_window_rect_under_cursor(POINT screen_pt, HWND exclude_hwnd) {
+Win32WindowQuery::Get_window_rect_under_cursor(POINT screen_pt,
+                                               HWND exclude_hwnd) const {
     std::optional<HWND> window = Get_window_under_cursor(screen_pt, exclude_hwnd);
     if (!window.has_value()) {
         return std::nullopt;
@@ -140,8 +142,8 @@ Get_window_rect_under_cursor(POINT screen_pt, HWND exclude_hwnd) {
         static_cast<int32_t>(rect.right), static_cast<int32_t>(rect.bottom));
 }
 
-void Get_visible_top_level_window_rects(HWND exclude_hwnd,
-                                        std::vector<greenflame::core::RectPx> &out) {
+void Win32WindowQuery::Get_visible_top_level_window_rects(
+    HWND exclude_hwnd, std::vector<greenflame::core::RectPx> &out) const {
     HWND hwnd = GetWindow(exclude_hwnd, GW_HWNDNEXT);
     std::vector<RECT> occluders;
     while (hwnd != nullptr) {
@@ -169,7 +171,7 @@ void Get_visible_top_level_window_rects(HWND exclude_hwnd,
     }
 }
 
-WindowObscuration Get_window_obscuration(HWND hwnd) {
+WindowObscuration Win32WindowQuery::Get_window_obscuration(HWND hwnd) const {
     if (hwnd == nullptr) {
         return WindowObscuration::None;
     }

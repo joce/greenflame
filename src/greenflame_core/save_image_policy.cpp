@@ -1,5 +1,7 @@
 #include "greenflame_core/save_image_policy.h"
 
+#include "greenflame_core/cli_options.h"
+
 namespace greenflame::core {
 
 namespace {
@@ -196,6 +198,42 @@ std::wstring Ensure_image_save_extension(std::wstring_view path,
         out += L".png";
     }
     return out;
+}
+
+ImageSaveFormat Image_save_format_from_cli_format(CliOutputFormat format) noexcept {
+    switch (format) {
+    case CliOutputFormat::Jpeg:
+        return ImageSaveFormat::Jpeg;
+    case CliOutputFormat::Bmp:
+        return ImageSaveFormat::Bmp;
+    case CliOutputFormat::Png:
+        return ImageSaveFormat::Png;
+    }
+    return ImageSaveFormat::Png;
+}
+
+std::wstring_view Extension_for_image_save_format(ImageSaveFormat format) noexcept {
+    switch (format) {
+    case ImageSaveFormat::Jpeg:
+        return L".jpg";
+    case ImageSaveFormat::Bmp:
+        return L".bmp";
+    case ImageSaveFormat::Png:
+        return L".png";
+    }
+    return L".png";
+}
+
+std::wstring_view Name_for_image_save_format(ImageSaveFormat format) noexcept {
+    switch (format) {
+    case ImageSaveFormat::Jpeg:
+        return L"jpg";
+    case ImageSaveFormat::Bmp:
+        return L"bmp";
+    case ImageSaveFormat::Png:
+        return L"png";
+    }
+    return L"png";
 }
 
 ImageSaveFormat Detect_image_save_format_from_path(std::wstring_view path) noexcept {

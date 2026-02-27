@@ -1,8 +1,5 @@
 #pragma once
 
-#include <cstdint>
-#include <optional>
-
 namespace greenflame::core {
 // Physical pixels (the only internal truth).
 

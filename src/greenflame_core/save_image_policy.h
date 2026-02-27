@@ -2,6 +2,8 @@
 
 namespace greenflame::core {
 
+enum class CliOutputFormat : uint8_t;
+
 enum class SaveSelectionSource : uint8_t {
     Region = 0,
     Window = 1,
@@ -67,6 +69,15 @@ enum class ImageSaveFormat : uint8_t {
     Jpeg = 1,
     Bmp = 2,
 };
+
+[[nodiscard]] ImageSaveFormat
+Image_save_format_from_cli_format(CliOutputFormat format) noexcept;
+
+[[nodiscard]] std::wstring_view
+Extension_for_image_save_format(ImageSaveFormat format) noexcept;
+
+[[nodiscard]] std::wstring_view
+Name_for_image_save_format(ImageSaveFormat format) noexcept;
 
 [[nodiscard]] ImageSaveFormat
 Detect_image_save_format_from_path(std::wstring_view path) noexcept;

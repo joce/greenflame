@@ -5,7 +5,10 @@
 
 namespace greenflame {
 
-class AppConfig;
+namespace core {
+struct AppConfig;
+}
+class IWindowQuery;
 
 class IOverlayEvents {
   public:
@@ -22,7 +25,8 @@ class IOverlayEvents {
 
 class OverlayWindow final {
   public:
-    OverlayWindow(IOverlayEvents *events, AppConfig *config);
+    OverlayWindow(IOverlayEvents *events, core::AppConfig *config,
+                  IWindowQuery *window_query);
     ~OverlayWindow();
 
     OverlayWindow(OverlayWindow const &) = delete;
@@ -62,7 +66,8 @@ class OverlayWindow final {
     LRESULT On_set_cursor(WPARAM wparam, LPARAM lparam);
 
     IOverlayEvents *events_ = nullptr;
-    AppConfig *config_ = nullptr;
+    core::AppConfig *config_ = nullptr;
+    IWindowQuery *window_query_ = nullptr;
     HWND hwnd_ = nullptr;
     HINSTANCE hinstance_ = nullptr;
     core::OverlayController controller_;

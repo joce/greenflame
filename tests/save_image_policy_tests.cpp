@@ -1,3 +1,4 @@
+#include "greenflame_core/cli_options.h"
 #include "greenflame_core/save_image_policy.h"
 
 using namespace greenflame::core;
@@ -231,4 +232,25 @@ TEST(save_image_policy, Detect_image_save_format_from_path_DetectsByExtension) {
     EXPECT_EQ(Detect_image_save_format_from_path(L"a.bmp"), ImageSaveFormat::Bmp);
     EXPECT_EQ(Detect_image_save_format_from_path(L"a.png"), ImageSaveFormat::Png);
     EXPECT_EQ(Detect_image_save_format_from_path(L"a"), ImageSaveFormat::Png);
+}
+
+TEST(save_image_policy, Image_save_format_from_cli_format_MapsFormats) {
+    EXPECT_EQ(Image_save_format_from_cli_format(CliOutputFormat::Png),
+              ImageSaveFormat::Png);
+    EXPECT_EQ(Image_save_format_from_cli_format(CliOutputFormat::Jpeg),
+              ImageSaveFormat::Jpeg);
+    EXPECT_EQ(Image_save_format_from_cli_format(CliOutputFormat::Bmp),
+              ImageSaveFormat::Bmp);
+}
+
+TEST(save_image_policy, Extension_for_image_save_format_ReturnsCanonicalExtension) {
+    EXPECT_EQ(Extension_for_image_save_format(ImageSaveFormat::Png), L".png");
+    EXPECT_EQ(Extension_for_image_save_format(ImageSaveFormat::Jpeg), L".jpg");
+    EXPECT_EQ(Extension_for_image_save_format(ImageSaveFormat::Bmp), L".bmp");
+}
+
+TEST(save_image_policy, Name_for_image_save_format_ReturnsFormatName) {
+    EXPECT_EQ(Name_for_image_save_format(ImageSaveFormat::Png), L"png");
+    EXPECT_EQ(Name_for_image_save_format(ImageSaveFormat::Jpeg), L"jpg");
+    EXPECT_EQ(Name_for_image_save_format(ImageSaveFormat::Bmp), L"bmp");
 }

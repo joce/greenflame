@@ -7,8 +7,6 @@
 
 #include "greenflame_core/rect_px.h"
 
-#include <span>
-
 namespace greenflame {
 
 struct GdiCaptureResult;

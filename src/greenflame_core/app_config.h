@@ -1,9 +1,8 @@
 #pragma once
 
-namespace greenflame {
+namespace greenflame::core {
 
-class AppConfig final {
-  public:
+struct AppConfig final {
     bool show_balloons = true;
     std::wstring default_save_dir = {};
     std::wstring last_save_as_dir = {};
@@ -13,10 +12,7 @@ class AppConfig final {
     std::wstring filename_pattern_window = {};
     std::wstring default_save_format = {}; // "png" (default), "jpg"/"jpeg", or "bmp".
 
-    [[nodiscard]] static AppConfig Load();
-    [[nodiscard]] bool Save() const;
     void Normalize();
-    [[nodiscard]] static std::filesystem::path Get_config_dir();
 };
 
-} // namespace greenflame
+} // namespace greenflame::core

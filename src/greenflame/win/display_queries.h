@@ -3,8 +3,6 @@
 #include "greenflame_core/monitor_rules.h"
 #include "greenflame_core/rect_px.h"
 
-#include <vector>
-
 namespace greenflame {
 
 [[nodiscard]] core::PointPx Get_cursor_pos_px();

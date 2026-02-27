@@ -2,12 +2,6 @@
 
 #include "greenflame_core/rect_px.h"
 
-#include <cstddef>
-#include <cstdint>
-#include <optional>
-#include <span>
-#include <vector>
-
 namespace greenflame::core {
 constexpr int32_t kDefaultMonitorScalePercent = 100;
 constexpr int32_t kMinMonitorScalePercent = 50;

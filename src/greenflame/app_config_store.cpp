@@ -1,10 +1,10 @@
-#include "app_config.h"
+#include "app_config_store.h"
 
 namespace greenflame {
 
 namespace {
 
-std::filesystem::path Get_config_path() {
+[[nodiscard]] std::filesystem::path Get_config_path() {
     wchar_t home[MAX_PATH];
     if (FAILED(SHGetFolderPathW(nullptr, CSIDL_PROFILE, nullptr, 0, home))) {
         return {};
@@ -16,20 +16,7 @@ std::filesystem::path Get_config_path() {
     return path;
 }
 
-} // namespace
-
-// static
-std::filesystem::path AppConfig::Get_config_dir() {
-    std::filesystem::path const p = Get_config_path();
-    if (p.empty()) {
-        return {};
-    }
-    return p.parent_path();
-}
-
-namespace {
-
-std::wstring To_wide(std::string const &value) {
+[[nodiscard]] std::wstring To_wide(std::string const &value) {
     if (value.empty()) {
         return {};
     }
@@ -43,7 +30,7 @@ std::wstring To_wide(std::string const &value) {
     return out;
 }
 
-std::string To_utf8(std::wstring const &value) {
+[[nodiscard]] std::string To_utf8(std::wstring const &value) {
     if (value.empty()) {
         return {};
     }
@@ -58,27 +45,35 @@ std::string To_utf8(std::wstring const &value) {
     return out;
 }
 
-std::string_view Trim(std::string_view s) {
+[[nodiscard]] std::string_view Trim(std::string_view value) {
     size_t begin = 0;
-    while (begin < s.size() &&
-           (s[begin] == ' ' || s[begin] == '\t' || s[begin] == '\r')) {
+    while (begin < value.size() &&
+           (value[begin] == ' ' || value[begin] == '\t' || value[begin] == '\r')) {
         ++begin;
     }
-    size_t end = s.size();
-    while (end > begin &&
-           (s[end - 1] == ' ' || s[end - 1] == '\t' || s[end - 1] == '\r')) {
+    size_t end = value.size();
+    while (end > begin && (value[end - 1] == ' ' || value[end - 1] == '\t' ||
+                           value[end - 1] == '\r')) {
         --end;
     }
-    return s.substr(begin, end - begin);
+    return value.substr(begin, end - begin);
 }
 
 } // namespace
 
-AppConfig AppConfig::Load() {
-    AppConfig config;
+std::filesystem::path Get_app_config_dir() {
+    std::filesystem::path const path = Get_config_path();
+    if (path.empty()) {
+        return {};
+    }
+    return path.parent_path();
+}
+
+core::AppConfig Load_app_config() {
+    core::AppConfig config;
     std::filesystem::path const path = Get_config_path();
     if (path.empty() || !std::filesystem::exists(path)) {
-        (void)config.Save();   // creates dir + empty file on first run
+        (void)Save_app_config(config); // creates dir + empty file on first run
         return config;
     }
     try {
@@ -133,7 +128,7 @@ AppConfig AppConfig::Load() {
     return config;
 }
 
-bool AppConfig::Save() const {
+bool Save_app_config(core::AppConfig const &config) {
     std::filesystem::path const path = Get_config_path();
     if (path.empty()) {
         return false;
@@ -146,7 +141,7 @@ bool AppConfig::Save() const {
         }
 
         // UI section: only write non-default values.
-        if (!show_balloons) { // default: true
+        if (!config.show_balloons) { // default: true
             file << "[ui]\n";
             file << "show_balloons=false\n";
         }
@@ -162,60 +157,17 @@ bool AppConfig::Save() const {
                 file << key << "=" << To_utf8(value) << "\n";
             }
         };
-        write_string("default_save_dir", default_save_dir);
-        write_string("last_save_as_dir", last_save_as_dir);
-        write_string("filename_pattern_region", filename_pattern_region);
-        write_string("filename_pattern_desktop", filename_pattern_desktop);
-        write_string("filename_pattern_monitor", filename_pattern_monitor);
-        write_string("filename_pattern_window", filename_pattern_window);
-        write_string("default_save_format", default_save_format);
+        write_string("default_save_dir", config.default_save_dir);
+        write_string("last_save_as_dir", config.last_save_as_dir);
+        write_string("filename_pattern_region", config.filename_pattern_region);
+        write_string("filename_pattern_desktop", config.filename_pattern_desktop);
+        write_string("filename_pattern_monitor", config.filename_pattern_monitor);
+        write_string("filename_pattern_window", config.filename_pattern_window);
+        write_string("default_save_format", config.default_save_format);
 
         return file.good();
     } catch (...) {
         return false;
-    }
-}
-
-void AppConfig::Normalize() {
-    if (default_save_dir.size() >= MAX_PATH) {
-        default_save_dir.resize(MAX_PATH - 1);
-    }
-    if (last_save_as_dir.size() >= MAX_PATH) {
-        last_save_as_dir.resize(MAX_PATH - 1);
-    }
-    auto clamp_pattern = [](std::wstring &s) {
-        if (s.size() > 256) s.resize(256);
-    };
-    clamp_pattern(filename_pattern_region);
-    clamp_pattern(filename_pattern_desktop);
-    clamp_pattern(filename_pattern_monitor);
-    clamp_pattern(filename_pattern_window);
-
-    if (!default_save_format.empty()) {
-        std::wstring normalized;
-        normalized.reserve(default_save_format.size());
-        for (wchar_t const ch : default_save_format) {
-            normalized.push_back(static_cast<wchar_t>(std::towlower(ch)));
-        }
-
-        size_t begin = 0;
-        size_t end = normalized.size();
-        while (begin < end && std::iswspace(normalized[begin]) != 0) {
-            ++begin;
-        }
-        while (end > begin && std::iswspace(normalized[end - 1]) != 0) {
-            --end;
-        }
-        normalized = normalized.substr(begin, end - begin);
-
-        if (normalized == L"jpeg") {
-            normalized = L"jpg";
-        }
-        if (normalized == L"png" || normalized == L"jpg" || normalized == L"bmp") {
-            default_save_format = normalized;
-        } else {
-            default_save_format.clear();
-        }
     }
 }
 

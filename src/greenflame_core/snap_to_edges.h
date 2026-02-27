@@ -2,9 +2,6 @@
 
 #include "greenflame_core/rect_px.h"
 
-#include <cstdint>
-#include <span>
-
 namespace greenflame::core {
 
 // Snap rect edges to the nearest line in the given sets within threshold.

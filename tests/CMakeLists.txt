@@ -24,8 +24,12 @@ add_executable(greenflame_tests
     snap_to_edges_tests.cpp
     snap_edge_builder_tests.cpp
     save_image_policy_tests.cpp
+    string_utils_tests.cpp
+    window_filter_tests.cpp
+    output_path_tests.cpp
     cli_options_tests.cpp
     overlay_controller_tests.cpp
+    app_controller_tests.cpp
 )
 target_compile_definitions(greenflame_tests PRIVATE
     NOMINMAX
@@ -43,6 +47,7 @@ target_precompile_headers(greenflame_tests PRIVATE
 target_link_libraries(greenflame_tests PRIVATE
     greenflame_core
     GTest::gtest_main
+    GTest::gmock
 )
 include(GoogleTest)
 gtest_discover_tests(greenflame_tests

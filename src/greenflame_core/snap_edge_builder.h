@@ -2,10 +2,6 @@
 
 #include "greenflame_core/rect_px.h"
 
-#include <cstdint>
-#include <span>
-#include <vector>
-
 namespace greenflame::core {
 
 struct SnapEdges {

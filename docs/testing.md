@@ -1,6 +1,6 @@
 ---
 title: Testing Guide
-summary: Build and run unit tests for greenflame_core with GoogleTest.
+summary: Test philosophy, framework, and execution for Greenflame unit tests.
 audience: contributors
 status: authoritative
 owners:
@@ -18,14 +18,20 @@ This document is authoritative for building and running tests in Greenflame.
 
 ## Unit test philosophy
 
-- **All testable logic lives in `greenflame_core`**
-- The GUI executable (`greenflame`) must remain thin
+The test suite serves as **behavioral documentation**: it captures what the system is designed
+to do so that future refactors have a solid, verifiable foundation. Tests are written for
+behaviors that have been manually verified and consciously decided to be correct.
+
+- The GUI executable (`greenflame`) must remain a thin Win32 shell — testable logic must not live there
 - Tests MUST NOT depend on Win32 UI, GDI capture, or WGC
+- Win32 service calls must be abstracted behind mockable service interfaces; mocking is the
+  approved way to test orchestration logic that would otherwise require real Win32 APIs
 - Tests are required for:
   - geometry and math
   - DPI and coordinate conversions
   - cross-monitor selection rules
-  - annotation model logic
+  - string utilities, window filtering, output path logic
+  - app-level orchestration: capture flows, last-capture state, CLI mode, output path resolution
 
 ## Build tests
 
@@ -62,24 +68,43 @@ Test must be run and must pass before any task is considered complete. This is a
 - Integration method: **CMake FetchContent** in `tests/CMakeLists.txt` (tag v1.14.0). First configure (or when the FetchContent cache is missing) **requires network**; request network permission for that configure step in sandboxed/CI environments.
 - No global install and no vcpkg requirement
 - The test binary is: `greenflame_tests`
-- Link target: `GTest::gtest_main`
+- Link targets: `GTest::gtest_main`, `GTest::gmock` (gmock ships with the same FetchContent pull)
 
 ## Where to add tests
 
 - Add new test files under `tests/`
 - Register them in `tests/CMakeLists.txt` as sources of `greenflame_tests`
-- Tests must only link against `greenflame_core` (never `greenflame`)
+- Tests must only link against `greenflame_core` and the testable logic library — never against `greenflame` directly
 
 ## Writing a test
 
-Use GoogleTest macros.
+Use GoogleTest macros for plain logic tests:
 
 ```cpp
-#include <gtest/gtest.h>
-
 TEST(Suite, Name)
 {
     EXPECT_EQ(1 + 1, 2);
+}
+```
+
+Use GoogleMock for tests that require injected service dependencies.
+`gmock/gmock.h` must be added to `tests/pch.h` (not included directly in source files):
+
+```cpp
+// In tests/pch.h: #include <gmock/gmock.h>
+
+class MockDisplayQueries : public IDisplayQueries {
+  public:
+    MOCK_METHOD(core::RectPx, Get_virtual_desktop_bounds_px, (), (const, override));
+    // ...
+};
+
+TEST(AppControllerTest, CopiesDesktopBounds)
+{
+    MockDisplayQueries display;
+    EXPECT_CALL(display, Get_virtual_desktop_bounds_px())
+        .WillOnce(testing::Return(core::RectPx::From_ltrb(0, 0, 1920, 1080)));
+    // ...
 }
 ```
 

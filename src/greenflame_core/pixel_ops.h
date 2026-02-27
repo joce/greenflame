@@ -2,9 +2,6 @@
 
 #include "greenflame_core/rect_px.h"
 
-#include <cstdint>
-#include <span>
-
 namespace greenflame::core {
 
 // Dims pixels outside the selection rect (halves R,G,B; leaves alpha unchanged).

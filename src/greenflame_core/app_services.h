@@ -1,0 +1,67 @@
+#pragma once
+
+#include "greenflame_core/monitor_rules.h"
+#include "greenflame_core/rect_px.h"
+#include "greenflame_core/save_image_policy.h"
+#include "greenflame_core/window_filter.h"
+#include "greenflame_core/window_query.h"
+
+namespace greenflame {
+
+struct WindowMatch final {
+    core::WindowCandidateInfo info = {};
+    HWND hwnd = nullptr;
+};
+
+class IDisplayQueries {
+  public:
+    virtual ~IDisplayQueries() = default;
+    [[nodiscard]] virtual core::PointPx Get_cursor_pos_px() const = 0;
+    [[nodiscard]] virtual core::RectPx Get_virtual_desktop_bounds_px() const = 0;
+    [[nodiscard]] virtual std::vector<core::MonitorWithBounds>
+    Get_monitors_with_bounds() const = 0;
+};
+
+class IWindowInspector {
+  public:
+    virtual ~IWindowInspector() = default;
+    [[nodiscard]] virtual std::optional<core::RectPx>
+    Get_window_rect(HWND hwnd) const = 0;
+    [[nodiscard]] virtual bool Is_window_valid(HWND hwnd) const = 0;
+    [[nodiscard]] virtual bool Is_window_minimized(HWND hwnd) const = 0;
+    [[nodiscard]] virtual WindowObscuration Get_window_obscuration(HWND hwnd) const = 0;
+    [[nodiscard]] virtual std::optional<core::RectPx>
+    Get_foreground_window_rect(HWND exclude_hwnd) const = 0;
+    [[nodiscard]] virtual std::optional<core::RectPx>
+    Get_window_rect_under_cursor(POINT screen_pt, HWND exclude_hwnd) const = 0;
+    [[nodiscard]] virtual std::vector<WindowMatch>
+    Find_windows_by_title(std::wstring_view needle) const = 0;
+};
+
+class ICaptureService {
+  public:
+    virtual ~ICaptureService() = default;
+    [[nodiscard]] virtual bool Copy_rect_to_clipboard(core::RectPx screen_rect) = 0;
+    [[nodiscard]] virtual bool Save_rect_to_file(core::RectPx screen_rect,
+                                                 std::wstring_view path,
+                                                 core::ImageSaveFormat format) = 0;
+};
+
+class IFileSystemService {
+  public:
+    virtual ~IFileSystemService() = default;
+    [[nodiscard]] virtual std::vector<std::wstring>
+    List_directory_filenames(std::wstring_view dir) const = 0;
+    [[nodiscard]] virtual std::wstring
+    Reserve_unique_file_path(std::wstring_view desired) const = 0;
+    [[nodiscard]] virtual bool
+    Try_reserve_exact_file_path(std::wstring_view path, bool &already_exists) const = 0;
+    [[nodiscard]] virtual std::wstring
+    Resolve_save_directory(std::wstring const &configured_dir) const = 0;
+    [[nodiscard]] virtual std::wstring
+    Resolve_absolute_path(std::wstring_view path) const = 0;
+    virtual void Delete_file_if_exists(std::wstring_view path) const = 0;
+    [[nodiscard]] virtual core::SaveTimestamp Get_current_timestamp() const = 0;
+};
+
+} // namespace greenflame

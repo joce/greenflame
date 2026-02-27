@@ -2,8 +2,6 @@
 
 #include "greenflame_core/rect_px.h"
 
-#include <optional>
-
 namespace greenflame::core {
 
 // Eight contour handles: four corners and four edge midpoints.

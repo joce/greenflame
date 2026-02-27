@@ -1,53 +1,10 @@
 #include "greenflame_app.h"
-
-#include "greenflame_core/monitor_rules.h"
-#include "greenflame_core/rect_px.h"
-#include "greenflame_core/save_image_policy.h"
-#include "win/display_queries.h"
-#include "win/gdi_capture.h"
-#include "win/save_image.h"
-#include "win/window_query.h"
+#include "app_config_store.h"
 
 namespace {
 
-constexpr wchar_t kClipboardCopiedBalloonMessage[] = L"Selection copied to clipboard.";
-constexpr wchar_t kNoLastRegionMessage[] = L"No previously captured region.";
-constexpr wchar_t kNoLastWindowMessage[] = L"No previously captured window.";
-constexpr wchar_t kLastWindowClosedMessage[] =
-    L"Previously captured window is no longer available.";
-constexpr wchar_t kLastWindowMinimizedMessage[] =
-    L"Previously captured window is minimized.";
-constexpr wchar_t kSavedPrefix[] = L"Saved: ";
-constexpr wchar_t kSavedFallbackFilename[] = L"file";
-constexpr wchar_t kSavedCopiedSuffix[] = L" (file copied to clipboard).";
 constexpr int kThumbnailMaxWidth = 320;
 constexpr int kThumbnailMaxHeight = 120;
-
-[[nodiscard]] std::wstring Filename_from_path(std::wstring_view path) {
-    size_t const slash = path.find_last_of(L"\\/");
-    if (slash == std::wstring_view::npos || slash + 1 >= path.size()) {
-        return std::wstring(path);
-    }
-    return std::wstring(path.substr(slash + 1));
-}
-
-[[nodiscard]] std::wstring
-Build_saved_selection_balloon_message(std::wstring_view saved_path,
-                                      bool file_copied_to_clipboard) {
-    std::wstring message = kSavedPrefix;
-    std::wstring const filename = Filename_from_path(saved_path);
-    if (!filename.empty()) {
-        message += filename;
-    } else {
-        message += kSavedFallbackFilename;
-    }
-    if (file_copied_to_clipboard) {
-        message += kSavedCopiedSuffix;
-    } else {
-        message += L".";
-    }
-    return message;
-}
 
 [[nodiscard]] HBITMAP Create_thumbnail_from_clipboard() {
     if (OpenClipboard(nullptr) == 0) {
@@ -196,648 +153,40 @@ void Write_console_line(std::wstring_view text, bool to_stderr) {
     Write_console_text(L"\n", to_stderr);
 }
 
-[[nodiscard]] std::wstring
-Resolve_save_directory_from_config(greenflame::AppConfig const &config) {
-    std::wstring dir;
-    if (!config.default_save_dir.empty()) {
-        dir = config.default_save_dir;
-    } else {
-        wchar_t pictures_dir[MAX_PATH] = {};
-        SHGetFolderPathW(nullptr, CSIDL_MYPICTURES, nullptr, 0, pictures_dir);
-        dir = pictures_dir;
-        dir += L"\\greenflame";
-    }
-    CreateDirectoryW(dir.c_str(), nullptr);
-    return dir;
-}
-
-[[nodiscard]] std::vector<std::wstring>
-List_directory_filenames(std::wstring_view dir) {
-    std::vector<std::wstring> result;
-    std::wstring search_path(dir);
-    if (!search_path.empty() && search_path.back() != L'\\') {
-        search_path += L'\\';
-    }
-    search_path += L'*';
-    WIN32_FIND_DATAW fd{};
-    HANDLE const handle = FindFirstFileW(search_path.c_str(), &fd);
-    if (handle == INVALID_HANDLE_VALUE) {
-        return result;
-    }
-    do {
-        if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0) {
-            result.emplace_back(fd.cFileName);
-        }
-    } while (FindNextFileW(handle, &fd));
-    FindClose(handle);
-    return result;
-}
-
-[[nodiscard]] std::wstring_view
-Pattern_for_source(greenflame::AppConfig const &config,
-                   greenflame::core::SaveSelectionSource source) {
-    switch (source) {
-    case greenflame::core::SaveSelectionSource::Region:
-        return config.filename_pattern_region;
-    case greenflame::core::SaveSelectionSource::Window:
-        return config.filename_pattern_window;
-    case greenflame::core::SaveSelectionSource::Monitor:
-        return config.filename_pattern_monitor;
-    case greenflame::core::SaveSelectionSource::Desktop:
-        return config.filename_pattern_desktop;
-    }
-    return {};
-}
-
-[[nodiscard]] greenflame::core::ImageSaveFormat
-Default_image_save_format_from_config(greenflame::AppConfig const &config) noexcept {
-    if (config.default_save_format == L"jpg" || config.default_save_format == L"jpeg") {
-        return greenflame::core::ImageSaveFormat::Jpeg;
-    }
-    if (config.default_save_format == L"bmp") {
-        return greenflame::core::ImageSaveFormat::Bmp;
-    }
-    return greenflame::core::ImageSaveFormat::Png;
-}
-
-[[nodiscard]] std::wstring_view
-Extension_for_image_save_format(greenflame::core::ImageSaveFormat format) noexcept {
-    switch (format) {
-    case greenflame::core::ImageSaveFormat::Jpeg:
-        return L".jpg";
-    case greenflame::core::ImageSaveFormat::Bmp:
-        return L".bmp";
-    case greenflame::core::ImageSaveFormat::Png:
-        return L".png";
-    }
-    return L".png";
-}
-
-[[nodiscard]] std::wstring_view
-Name_for_image_save_format(greenflame::core::ImageSaveFormat format) noexcept {
-    switch (format) {
-    case greenflame::core::ImageSaveFormat::Jpeg:
-        return L"jpg";
-    case greenflame::core::ImageSaveFormat::Bmp:
-        return L"bmp";
-    case greenflame::core::ImageSaveFormat::Png:
-        return L"png";
-    }
-    return L"png";
-}
-
-[[nodiscard]] greenflame::core::ImageSaveFormat
-Image_save_format_from_cli_format(greenflame::core::CliOutputFormat format) noexcept {
-    switch (format) {
-    case greenflame::core::CliOutputFormat::Jpeg:
-        return greenflame::core::ImageSaveFormat::Jpeg;
-    case greenflame::core::CliOutputFormat::Bmp:
-        return greenflame::core::ImageSaveFormat::Bmp;
-    case greenflame::core::CliOutputFormat::Png:
-        return greenflame::core::ImageSaveFormat::Png;
-    }
-    return greenflame::core::ImageSaveFormat::Png;
-}
-
-enum class OutputPathExtensionKind : uint8_t {
-    None = 0,
-    Supported = 1,
-    Unsupported = 2,
-};
-
-struct OutputPathExtensionResult {
-    OutputPathExtensionKind kind = OutputPathExtensionKind::None;
-    greenflame::core::ImageSaveFormat format = greenflame::core::ImageSaveFormat::Png;
-    std::wstring extension = {};
-};
-
-[[nodiscard]] OutputPathExtensionResult
-Inspect_output_path_extension(std::wstring_view path) {
-    OutputPathExtensionResult result{};
-    size_t const slash = path.find_last_of(L"\\/");
-    size_t const dot = path.find_last_of(L'.');
-    if (dot == std::wstring_view::npos ||
-        (slash != std::wstring_view::npos && dot < slash)) {
-        result.kind = OutputPathExtensionKind::None;
-        return result;
-    }
-
-    std::wstring ext(path.substr(dot));
-    for (wchar_t &ch : ext) {
-        ch = static_cast<wchar_t>(std::towlower(ch));
-    }
-    result.extension = ext;
-
-    if (ext == L".png") {
-        result.kind = OutputPathExtensionKind::Supported;
-        result.format = greenflame::core::ImageSaveFormat::Png;
-        return result;
-    }
-    if (ext == L".jpg" || ext == L".jpeg") {
-        result.kind = OutputPathExtensionKind::Supported;
-        result.format = greenflame::core::ImageSaveFormat::Jpeg;
-        return result;
-    }
-    if (ext == L".bmp") {
-        result.kind = OutputPathExtensionKind::Supported;
-        result.format = greenflame::core::ImageSaveFormat::Bmp;
-        return result;
-    }
-
-    result.kind = OutputPathExtensionKind::Unsupported;
-    return result;
-}
-
-[[nodiscard]] std::wstring Build_default_output_path(
-    greenflame::AppConfig const &config, greenflame::core::SaveSelectionSource source,
-    std::optional<size_t> monitor_index_zero_based, std::wstring_view window_title,
-    greenflame::core::ImageSaveFormat format) {
-    std::wstring const save_dir = Resolve_save_directory_from_config(config);
-
-    SYSTEMTIME st{};
-    GetLocalTime(&st);
-    greenflame::core::FilenamePatternContext context{};
-    context.timestamp.day = st.wDay;
-    context.timestamp.month = st.wMonth;
-    context.timestamp.year = st.wYear;
-    context.timestamp.hour = st.wHour;
-    context.timestamp.minute = st.wMinute;
-    context.timestamp.second = st.wSecond;
-    context.monitor_index_zero_based = monitor_index_zero_based;
-    context.window_title = window_title;
-
-    std::wstring_view const configured_pattern = Pattern_for_source(config, source);
-    std::wstring_view const effective_pattern =
-        configured_pattern.empty() ? greenflame::core::Default_filename_pattern(source)
-                                   : configured_pattern;
-    if (greenflame::core::Pattern_uses_num(effective_pattern)) {
-        std::vector<std::wstring> const files = List_directory_filenames(save_dir);
-        context.incrementing_number = greenflame::core::Find_next_num_for_pattern(
-            effective_pattern, context, files);
-    }
-
-    std::wstring const base_name =
-        greenflame::core::Build_default_save_name(source, context, configured_pattern);
-    std::wstring output_path = save_dir;
-    if (!output_path.empty() && output_path.back() != L'\\') {
-        output_path += L'\\';
-    }
-    output_path += base_name;
-    output_path += Extension_for_image_save_format(format);
-    return output_path;
-}
-
-struct ResolveOutputPathResult {
-    bool ok = false;
-    std::wstring path = {};
-    std::wstring error_message = {};
-};
-
-[[nodiscard]] ResolveOutputPathResult
-Resolve_output_path(greenflame::AppConfig const &config,
-                    greenflame::core::SaveSelectionSource source,
-                    std::optional<size_t> monitor_index_zero_based,
-                    std::wstring_view window_title, std::wstring_view explicit_path,
-                    std::optional<greenflame::core::CliOutputFormat> cli_format) {
-    greenflame::core::ImageSaveFormat const default_format =
-        cli_format.has_value() ? Image_save_format_from_cli_format(*cli_format)
-                               : Default_image_save_format_from_config(config);
-
-    if (explicit_path.empty()) {
-        return ResolveOutputPathResult{
-            true,
-            Build_default_output_path(config, source, monitor_index_zero_based,
-                                      window_title, default_format),
-            {}};
-    }
-
-    OutputPathExtensionResult const ext = Inspect_output_path_extension(explicit_path);
-    if (ext.kind == OutputPathExtensionKind::Unsupported) {
-        std::wstring message = L"Error: --output has unsupported extension ";
-        message += ext.extension;
-        message += L". Supported extensions are .png, .jpg/.jpeg, and .bmp.";
-        return ResolveOutputPathResult{false, {}, message};
-    }
-
-    if (ext.kind == OutputPathExtensionKind::Supported) {
-        if (cli_format.has_value()) {
-            greenflame::core::ImageSaveFormat const requested_format =
-                Image_save_format_from_cli_format(*cli_format);
-            if (requested_format != ext.format) {
-                std::wstring message = L"Error: --output extension ";
-                message += ext.extension;
-                message += L" conflicts with --format ";
-                message += Name_for_image_save_format(requested_format);
-                message += L".";
-                return ResolveOutputPathResult{false, {}, message};
-            }
-        }
-        return ResolveOutputPathResult{true, std::wstring(explicit_path), {}};
-    }
-
-    std::wstring path(explicit_path);
-    path += Extension_for_image_save_format(default_format);
-    return ResolveOutputPathResult{true, path, {}};
-}
-
-[[nodiscard]] std::wstring Resolve_absolute_path(std::wstring_view path) {
-    if (path.empty()) {
-        return {};
-    }
-
-    std::wstring input(path);
-    DWORD const required = GetFullPathNameW(input.c_str(), 0, nullptr, nullptr);
-    if (required == 0) {
-        return input;
-    }
-
-    std::wstring result;
-    result.resize(required);
-    DWORD const written =
-        GetFullPathNameW(input.c_str(), required, result.data(), nullptr);
-    if (written == 0) {
-        return input;
-    }
-    if (written < result.size()) {
-        result.resize(written);
-    }
-    return result;
-}
-
-[[nodiscard]] bool Try_reserve_exact_file_path(std::wstring_view path,
-                                               bool &already_exists) noexcept {
-    already_exists = false;
-    if (path.empty()) {
-        return false;
-    }
-    std::wstring path_string(path);
-    HANDLE const handle =
-        CreateFileW(path_string.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ,
-                    nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (handle != INVALID_HANDLE_VALUE) {
-        CloseHandle(handle);
-        return true;
-    }
-    DWORD const error = GetLastError();
-    already_exists = error == ERROR_FILE_EXISTS || error == ERROR_ALREADY_EXISTS;
-    return false;
-}
-
-void Update_default_save_dir_from_path(greenflame::AppConfig &config,
-                                       std::wstring_view full_path) {
-    size_t const slash = full_path.find_last_of(L"\\/");
-    if (slash == std::wstring::npos) {
+void Write_console_block(std::wstring_view text, bool to_stderr) {
+    if (text.empty()) {
         return;
     }
-    config.default_save_dir = std::wstring(full_path.substr(0, slash));
-    config.Normalize();
-}
-
-enum class SaveScreenRectFailure : uint8_t {
-    None = 0,
-    EmptyRect = 1,
-    EmptyOutputPath = 2,
-    OutsideVirtualDesktop = 3,
-    CaptureFailed = 4,
-    CropFailed = 5,
-    EncodeFailed = 6,
-};
-
-struct SaveScreenRectResult {
-    bool ok = false;
-    SaveScreenRectFailure failure = SaveScreenRectFailure::None;
-};
-
-[[nodiscard]] SaveScreenRectResult
-Save_screen_rect_to_file(greenflame::core::RectPx screen_rect,
-                         std::wstring_view output_path) {
-    if (screen_rect.Is_empty() || output_path.empty()) {
-        return SaveScreenRectResult{
-            false, screen_rect.Is_empty() ? SaveScreenRectFailure::EmptyRect
-                                          : SaveScreenRectFailure::EmptyOutputPath};
-    }
-
-    greenflame::core::RectPx const virtual_bounds =
-        greenflame::Get_virtual_desktop_bounds_px();
-    std::optional<greenflame::core::RectPx> const clipped_screen =
-        greenflame::core::RectPx::Clip(screen_rect, virtual_bounds);
-    if (!clipped_screen.has_value()) {
-        return SaveScreenRectResult{false,
-                                    SaveScreenRectFailure::OutsideVirtualDesktop};
-    }
-
-    greenflame::GdiCaptureResult capture{};
-    if (!greenflame::Capture_virtual_desktop(capture)) {
-        return SaveScreenRectResult{false, SaveScreenRectFailure::CaptureFailed};
-    }
-
-    greenflame::core::RectPx const capture_rect = greenflame::core::RectPx::From_ltrb(
-        clipped_screen->left - virtual_bounds.left,
-        clipped_screen->top - virtual_bounds.top,
-        clipped_screen->right - virtual_bounds.left,
-        clipped_screen->bottom - virtual_bounds.top);
-
-    greenflame::GdiCaptureResult cropped{};
-    bool const cropped_ok =
-        greenflame::Crop_capture(capture, capture_rect.left, capture_rect.top,
-                                 capture_rect.Width(), capture_rect.Height(), cropped);
-    capture.Free();
-    if (!cropped_ok) {
-        return SaveScreenRectResult{false, SaveScreenRectFailure::CropFailed};
-    }
-
-    std::wstring const output_path_string(output_path);
-    bool saved = false;
-    greenflame::core::ImageSaveFormat const format =
-        greenflame::core::Detect_image_save_format_from_path(output_path_string);
-    if (format == greenflame::core::ImageSaveFormat::Jpeg) {
-        saved = greenflame::Save_capture_to_jpeg(cropped, output_path_string.c_str());
-    } else if (format == greenflame::core::ImageSaveFormat::Bmp) {
-        saved = greenflame::Save_capture_to_bmp(cropped, output_path_string.c_str());
-    } else {
-        saved = greenflame::Save_capture_to_png(cropped, output_path_string.c_str());
-    }
-    cropped.Free();
-    if (!saved) {
-        return SaveScreenRectResult{false, SaveScreenRectFailure::EncodeFailed};
-    }
-    return SaveScreenRectResult{true, SaveScreenRectFailure::None};
-}
-
-[[nodiscard]] bool Contains_no_case(std::wstring_view text,
-                                    std::wstring_view needle) noexcept {
-    if (needle.empty()) {
-        return false;
-    }
-    if (needle.size() > text.size()) {
-        return false;
-    }
-    for (size_t start = 0; start + needle.size() <= text.size(); ++start) {
-        bool match = true;
-        for (size_t i = 0; i < needle.size(); ++i) {
-            wchar_t const a = static_cast<wchar_t>(std::towlower(text[start + i]));
-            wchar_t const b = static_cast<wchar_t>(std::towlower(needle[i]));
-            if (a != b) {
-                match = false;
-                break;
-            }
+    size_t line_start = 0;
+    while (line_start <= text.size()) {
+        size_t const line_end = text.find(L'\n', line_start);
+        if (line_end == std::wstring_view::npos) {
+            Write_console_line(text.substr(line_start), to_stderr);
+            break;
         }
-        if (match) {
-            return true;
+        Write_console_line(text.substr(line_start, line_end - line_start), to_stderr);
+        line_start = line_end + 1;
+        if (line_start == text.size()) {
+            break;
         }
     }
-    return false;
 }
 
-[[nodiscard]] bool Equals_no_case(std::wstring_view a, std::wstring_view b) noexcept {
-    if (a.size() != b.size()) {
-        return false;
-    }
-    for (size_t i = 0; i < a.size(); ++i) {
-        wchar_t const x = static_cast<wchar_t>(std::towlower(a[i]));
-        wchar_t const y = static_cast<wchar_t>(std::towlower(b[i]));
-        if (x != y) {
-            return false;
+void Show_clipboard_result(greenflame::ClipboardCopyResult const &result,
+                           greenflame::core::AppConfig const &config,
+                           greenflame::TrayWindow &tray_window) {
+    if (result.success) {
+        if (config.show_balloons && !result.balloon_message.empty()) {
+            tray_window.Show_balloon(greenflame::TrayBalloonIcon::Info,
+                                     result.balloon_message.c_str(),
+                                     Create_thumbnail_from_clipboard());
         }
+        return;
     }
-    return true;
-}
-
-[[nodiscard]] bool Is_terminal_window_class(std::wstring_view class_name) noexcept {
-    return Equals_no_case(class_name, L"ConsoleWindowClass") ||
-           Equals_no_case(class_name, L"CASCADIA_HOSTING_WINDOW_CLASS");
-}
-
-struct WindowTitleMatch {
-    HWND hwnd = nullptr;
-    greenflame::core::RectPx rect = {};
-    std::wstring title = {};
-    std::wstring class_name = {};
-};
-
-struct WindowSearchState {
-    std::wstring_view needle = {};
-    std::vector<WindowTitleMatch> matches = {};
-};
-
-BOOL CALLBACK Enum_windows_by_title_proc(HWND hwnd, LPARAM lparam) {
-    auto *state = reinterpret_cast<WindowSearchState *>(lparam);
-    if (state == nullptr) {
-        return FALSE;
+    if (!result.balloon_message.empty()) {
+        tray_window.Show_balloon(greenflame::TrayBalloonIcon::Warning,
+                                 result.balloon_message.c_str());
     }
-    if (!IsWindowVisible(hwnd) || GetParent(hwnd) != nullptr) {
-        return TRUE;
-    }
-    int const title_len = GetWindowTextLengthW(hwnd);
-    if (title_len <= 0) {
-        return TRUE;
-    }
-    std::wstring title(static_cast<size_t>(title_len) + 1, L'\0');
-    int const copied =
-        GetWindowTextW(hwnd, title.data(), static_cast<int>(title.size()));
-    if (copied <= 0) {
-        return TRUE;
-    }
-    title.resize(static_cast<size_t>(copied));
-    if (!Contains_no_case(title, state->needle)) {
-        return TRUE;
-    }
-    wchar_t class_name_buf[256] = {};
-    int const class_name_len = GetClassNameW(
-        hwnd, class_name_buf, static_cast<int>(std::size(class_name_buf)));
-    std::wstring class_name;
-    if (class_name_len > 0) {
-        class_name.assign(class_name_buf, static_cast<size_t>(class_name_len));
-    }
-    std::optional<greenflame::core::RectPx> const rect =
-        greenflame::Get_window_rect(hwnd);
-    if (!rect.has_value()) {
-        return TRUE;
-    }
-    state->matches.push_back(WindowTitleMatch{hwnd, *rect, title, class_name});
-    return TRUE;
-}
-
-[[nodiscard]] std::vector<WindowTitleMatch>
-Find_windows_by_title_contains(std::wstring_view needle) {
-    WindowSearchState state{};
-    state.needle = needle;
-    EnumWindows(Enum_windows_by_title_proc, reinterpret_cast<LPARAM>(&state));
-    return state.matches;
-}
-
-[[nodiscard]] bool Is_cli_invocation_window(WindowTitleMatch const &match,
-                                            std::wstring_view query) noexcept {
-    if (!Contains_no_case(match.title, L"greenflame.exe")) {
-        return false;
-    }
-    if (!Contains_no_case(match.title, query)) {
-        return false;
-    }
-
-    // Typical terminal case: class is a known console/terminal window class.
-    if (Is_terminal_window_class(match.class_name)) {
-        return true;
-    }
-
-    // Fallback: any window title that visibly includes our `-w/--window`
-    // invocation command line is treated as the invocation shell window.
-    return Contains_no_case(match.title, L"--window") ||
-           Contains_no_case(match.title, L"-w ");
-}
-
-[[nodiscard]] std::vector<WindowTitleMatch>
-Filter_cli_invocation_window(std::vector<WindowTitleMatch> const &matches,
-                             std::wstring_view query) {
-    std::vector<WindowTitleMatch> filtered;
-    filtered.reserve(matches.size());
-    for (WindowTitleMatch const &match : matches) {
-        if (Is_cli_invocation_window(match, query)) {
-            continue;
-        }
-        filtered.push_back(match);
-    }
-    return filtered;
-}
-
-[[nodiscard]] std::wstring Format_window_candidate_line(WindowTitleMatch const &match,
-                                                        size_t index) {
-    greenflame::core::RectPx const normalized = match.rect.Normalized();
-    wchar_t hwnd_buffer[32] = {};
-    swprintf_s(hwnd_buffer, L"%p", static_cast<void *>(match.hwnd));
-
-    std::wstring line = L"  [";
-    line += std::to_wstring(index + 1);
-    line += L"] \"";
-    line += match.title;
-    line += L"\" (hwnd=";
-    line += hwnd_buffer;
-    line += L", x=";
-    line += std::to_wstring(normalized.left);
-    line += L", y=";
-    line += std::to_wstring(normalized.top);
-    line += L", w=";
-    line += std::to_wstring(normalized.Width());
-    line += L", h=";
-    line += std::to_wstring(normalized.Height());
-    line += L")";
-    return line;
-}
-
-[[nodiscard]] bool Copy_screen_rect_to_clipboard(greenflame::core::RectPx screen_rect) {
-    if (screen_rect.Is_empty()) {
-        return false;
-    }
-
-    greenflame::core::RectPx const virtual_bounds =
-        greenflame::Get_virtual_desktop_bounds_px();
-    std::optional<greenflame::core::RectPx> const clipped_screen =
-        greenflame::core::RectPx::Clip(screen_rect, virtual_bounds);
-    if (!clipped_screen.has_value()) {
-        return false;
-    }
-
-    greenflame::GdiCaptureResult capture{};
-    if (!greenflame::Capture_virtual_desktop(capture)) {
-        return false;
-    }
-
-    greenflame::core::RectPx const capture_rect = greenflame::core::RectPx::From_ltrb(
-        clipped_screen->left - virtual_bounds.left,
-        clipped_screen->top - virtual_bounds.top,
-        clipped_screen->right - virtual_bounds.left,
-        clipped_screen->bottom - virtual_bounds.top);
-    greenflame::GdiCaptureResult cropped{};
-    bool const cropped_ok =
-        greenflame::Crop_capture(capture, capture_rect.left, capture_rect.top,
-                                 capture_rect.Width(), capture_rect.Height(), cropped);
-    capture.Free();
-    if (!cropped_ok) {
-        return false;
-    }
-
-    bool const copied = greenflame::Copy_capture_to_clipboard(cropped, nullptr);
-    cropped.Free();
-    return copied;
-}
-
-struct WindowCaptureResult {
-    HWND hwnd;
-    greenflame::core::RectPx screen_rect;
-};
-
-[[nodiscard]] std::optional<WindowCaptureResult>
-Find_and_capture_current_window(HWND target_window) {
-    if (target_window != nullptr) {
-        std::optional<greenflame::core::RectPx> const target_rect =
-            greenflame::Get_window_rect(target_window);
-        if (target_rect.has_value()) {
-            if (Copy_screen_rect_to_clipboard(*target_rect)) {
-                return WindowCaptureResult{target_window, *target_rect};
-            }
-            return std::nullopt;
-        }
-    }
-
-    HWND fg = GetForegroundWindow();
-    if (fg != nullptr) {
-        std::optional<greenflame::core::RectPx> const fg_rect =
-            greenflame::Get_window_rect(fg);
-        if (fg_rect.has_value()) {
-            if (Copy_screen_rect_to_clipboard(*fg_rect)) {
-                return WindowCaptureResult{fg, *fg_rect};
-            }
-            return std::nullopt;
-        }
-    }
-
-    POINT cursor{};
-    if (!GetCursorPos(&cursor)) {
-        return std::nullopt;
-    }
-    std::optional<HWND> const under_cursor =
-        greenflame::Get_window_under_cursor(cursor, nullptr);
-    if (!under_cursor.has_value()) {
-        return std::nullopt;
-    }
-    std::optional<greenflame::core::RectPx> const fallback_rect =
-        greenflame::Get_window_rect(*under_cursor);
-    if (!fallback_rect.has_value()) {
-        return std::nullopt;
-    }
-    if (Copy_screen_rect_to_clipboard(*fallback_rect)) {
-        return WindowCaptureResult{*under_cursor, *fallback_rect};
-    }
-    return std::nullopt;
-}
-
-[[nodiscard]] std::optional<greenflame::core::RectPx>
-Copy_current_monitor_to_clipboard() {
-    std::vector<greenflame::core::MonitorWithBounds> const monitors =
-        greenflame::Get_monitors_with_bounds();
-    if (monitors.empty()) {
-        return std::nullopt;
-    }
-
-    greenflame::core::PointPx const cursor = greenflame::Get_cursor_pos_px();
-    std::optional<size_t> const index =
-        greenflame::core::Index_of_monitor_containing(cursor, monitors);
-    if (!index.has_value()) {
-        return std::nullopt;
-    }
-    greenflame::core::RectPx const rect = monitors[*index].bounds;
-    if (Copy_screen_rect_to_clipboard(rect)) {
-        return rect;
-    }
-    return std::nullopt;
-}
-
-[[nodiscard]] std::optional<greenflame::core::RectPx> Copy_desktop_to_clipboard() {
-    greenflame::core::RectPx const rect = greenflame::Get_virtual_desktop_bounds_px();
-    if (Copy_screen_rect_to_clipboard(rect)) {
-        return rect;
-    }
-    return std::nullopt;
 }
 
 struct ChangeNotificationGuard {
@@ -855,14 +204,16 @@ namespace greenflame {
 
 GreenflameApp::GreenflameApp(HINSTANCE hinstance, core::CliOptions const &cli_options)
     : hinstance_(hinstance), cli_options_(cli_options), tray_window_(this),
-      overlay_window_(this, &config_) {}
+      overlay_window_(this, &config_, &window_query_),
+      app_controller_(config_, display_queries_, window_inspector_, capture_service_,
+                      file_system_service_) {}
 
 int GreenflameApp::Run() {
     Enable_per_monitor_dpi_awareness_v2();
-    config_ = AppConfig::Load();
+    config_ = Load_app_config();
     if (core::Is_capture_mode(cli_options_.capture_mode)) {
         ProcessExitCode const cli_result = Run_cli_capture_mode();
-        (void)config_.Save();
+        (void)Save_app_config(config_);
         return To_exit_code(cli_result);
     }
 
@@ -876,21 +227,17 @@ int GreenflameApp::Run() {
         return To_exit_code(ProcessExitCode::TrayWindowCreateFailed);
     }
 
-    // Set up directory change notification (watches parent dir of greenflame.ini).
     ChangeNotificationGuard watcher;
     {
-        std::filesystem::path const cfg_dir = AppConfig::Get_config_dir();
+        std::filesystem::path const cfg_dir = Get_app_config_dir();
         if (!cfg_dir.empty()) {
             watcher.handle = FindFirstChangeNotificationW(
-                cfg_dir.c_str(),
-                FALSE,
+                cfg_dir.c_str(), FALSE,
                 FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_FILE_NAME);
         }
     }
-    // If watcher.handle == INVALID_HANDLE_VALUE, watch_count = 0 and the loop
-    // degrades gracefully to a plain MsgWaitForMultipleObjects message pump.
 
-    constexpr DWORD kDebounceMs = 400;
+    constexpr DWORD k_debounce_ms = 400;
     bool debouncing = false;
     ULONGLONG debounce_deadline = 0;
 
@@ -907,25 +254,19 @@ int GreenflameApp::Run() {
 
         DWORD const watch_count = (watcher.handle != INVALID_HANDLE_VALUE) ? 1u : 0u;
         DWORD const result = MsgWaitForMultipleObjects(
-            watch_count,
-            (watch_count > 0) ? &watcher.handle : nullptr,
-            FALSE,
-            timeout,
+            watch_count, (watch_count > 0) ? &watcher.handle : nullptr, FALSE, timeout,
             QS_ALLINPUT);
 
         if (result == WAIT_OBJECT_0 && watch_count > 0) {
-            // Directory changed. Re-arm immediately, then start/extend debounce.
             FindNextChangeNotification(watcher.handle);
             debouncing = true;
-            debounce_deadline = GetTickCount64() + kDebounceMs;
+            debounce_deadline = GetTickCount64() + k_debounce_ms;
         } else if (result == WAIT_TIMEOUT) {
-            // Debounce window elapsed — reload.
             debouncing = false;
-            config_ = AppConfig::Load();
+            config_ = Load_app_config();
             continue;
         }
 
-        // Drain all pending messages.
         while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
             if (message.message == WM_QUIT) {
                 quit = true;
@@ -936,221 +277,19 @@ int GreenflameApp::Run() {
         }
     }
 
-    (void)config_.Save();
+    (void)Save_app_config(config_);
     return static_cast<int>(message.wParam);
 }
 
 ProcessExitCode GreenflameApp::Run_cli_capture_mode() {
-    core::RectPx target_rect = {};
-    core::SaveSelectionSource source = core::SaveSelectionSource::Region;
-    std::optional<size_t> monitor_index_zero_based = std::nullopt;
-    std::wstring window_title = {};
-    std::optional<HWND> captured_window = std::nullopt;
-    WindowObscuration window_obscuration = WindowObscuration::None;
-    bool window_partially_out_of_bounds = false;
-
-    switch (cli_options_.capture_mode) {
-    case core::CliCaptureMode::Region:
-        if (!cli_options_.region_px.has_value()) {
-            Write_console_line(L"Error: --region is required.", true);
-            return ProcessExitCode::CliRegionMissing;
-        }
-        target_rect = *cli_options_.region_px;
-        source = core::SaveSelectionSource::Region;
-        break;
-    case core::CliCaptureMode::Window: {
-        std::vector<WindowTitleMatch> const raw_matches =
-            Find_windows_by_title_contains(cli_options_.window_name);
-        std::vector<WindowTitleMatch> const matches =
-            Filter_cli_invocation_window(raw_matches, cli_options_.window_name);
-        if (matches.empty()) {
-            std::wstring message = L"Error: No visible window matches: ";
-            message += cli_options_.window_name;
-            Write_console_line(message, true);
-            return ProcessExitCode::CliWindowNotFound;
-        }
-        if (matches.size() > 1) {
-            std::wstring message = L"Error: Window name is ambiguous (";
-            message += std::to_wstring(matches.size());
-            message += L" matches): ";
-            message += cli_options_.window_name;
-            Write_console_line(message, true);
-            Write_console_line(L"Matching windows:", true);
-            for (size_t i = 0; i < matches.size(); ++i) {
-                Write_console_line(Format_window_candidate_line(matches[i], i), true);
-            }
-            return ProcessExitCode::CliWindowAmbiguous;
-        }
-        captured_window = matches.front().hwnd;
-        if (IsWindow(*captured_window) == 0) {
-            Write_console_line(
-                L"Error: Matched window is no longer available. Try again.", true);
-            return ProcessExitCode::CliWindowUnavailable;
-        }
-        if (IsIconic(*captured_window) != 0) {
-            Write_console_line(
-                L"Error: Matched window is minimized. Restore it and try again.", true);
-            return ProcessExitCode::CliWindowMinimized;
-        }
-        std::optional<core::RectPx> const current_rect =
-            Get_window_rect(*captured_window);
-        if (!current_rect.has_value()) {
-            Write_console_line(
-                L"Error: Matched window is no longer capturable. Try again.", true);
-            return ProcessExitCode::CliWindowUnavailable;
-        }
-        target_rect = *current_rect;
-        window_title = matches.front().title;
-        source = core::SaveSelectionSource::Window;
-        window_obscuration = Get_window_obscuration(*captured_window);
-        core::RectPx const virtual_bounds = Get_virtual_desktop_bounds_px();
-        std::optional<core::RectPx> const clipped_to_virtual =
-            core::RectPx::Clip(target_rect, virtual_bounds);
-        window_partially_out_of_bounds =
-            clipped_to_virtual.has_value() && *clipped_to_virtual != target_rect;
-        break;
+    CliResult const cli_result = app_controller_.Run_cli_capture_mode(cli_options_);
+    if (!cli_result.stderr_message.empty()) {
+        Write_console_block(cli_result.stderr_message, true);
     }
-    case core::CliCaptureMode::Monitor: {
-        std::vector<core::MonitorWithBounds> const monitors =
-            Get_monitors_with_bounds();
-        if (monitors.empty()) {
-            Write_console_line(L"Error: No monitors are available.", true);
-            return ProcessExitCode::CliNoMonitorsAvailable;
-        }
-        if (cli_options_.monitor_id < 1 ||
-            static_cast<size_t>(cli_options_.monitor_id) > monitors.size()) {
-            std::wstring message = L"Error: --monitor id is out of range (1..";
-            message += std::to_wstring(monitors.size());
-            message += L").";
-            Write_console_line(message, true);
-            return ProcessExitCode::CliMonitorOutOfRange;
-        }
-        monitor_index_zero_based = static_cast<size_t>(cli_options_.monitor_id - 1);
-        target_rect = monitors[*monitor_index_zero_based].bounds;
-        source = core::SaveSelectionSource::Monitor;
-        break;
+    if (!cli_result.stdout_message.empty()) {
+        Write_console_block(cli_result.stdout_message, false);
     }
-    case core::CliCaptureMode::Desktop:
-        target_rect = Get_virtual_desktop_bounds_px();
-        source = core::SaveSelectionSource::Desktop;
-        break;
-    case core::CliCaptureMode::Help:
-    case core::CliCaptureMode::None:
-        return ProcessExitCode::Success;
-    }
-
-    bool const has_explicit_output_path = !cli_options_.output_path.empty();
-    ResolveOutputPathResult const resolved_output =
-        Resolve_output_path(config_, source, monitor_index_zero_based, window_title,
-                            cli_options_.output_path, cli_options_.output_format);
-    if (!resolved_output.ok || resolved_output.path.empty()) {
-        if (!resolved_output.error_message.empty()) {
-            Write_console_line(resolved_output.error_message, true);
-        } else {
-            Write_console_line(L"Error: Unable to resolve output path.", true);
-        }
-        return ProcessExitCode::CliOutputPathFailure;
-    }
-    std::wstring output_path = resolved_output.path;
-    output_path = Resolve_absolute_path(output_path);
-    bool delete_output_path_on_failure = false;
-    if (!has_explicit_output_path) {
-        std::wstring const reserved = Reserve_unique_file_path(output_path);
-        if (reserved.empty()) {
-            Write_console_line(L"Error: Unable to reserve an output path.", true);
-            return ProcessExitCode::CliOutputPathFailure;
-        }
-        output_path = reserved;
-        delete_output_path_on_failure = true;
-    } else if (!cli_options_.overwrite_output) {
-        bool already_exists = false;
-        if (!Try_reserve_exact_file_path(output_path, already_exists)) {
-            if (already_exists) {
-                std::wstring message = L"Error: Output file already exists: ";
-                message += output_path;
-                message += L". Use --overwrite (or -f) to replace it.";
-                Write_console_line(message, true);
-            } else {
-                Write_console_line(L"Error: Unable to reserve the output path.", true);
-            }
-            return ProcessExitCode::CliOutputPathFailure;
-        }
-        delete_output_path_on_failure = true;
-    }
-
-    if (window_obscuration == WindowObscuration::Full) {
-        Write_console_line(
-            L"Warning: Matched window is fully obscured by other windows. The "
-            L"saved image may not show that window.",
-            true);
-    } else if (window_obscuration == WindowObscuration::Partial &&
-               window_partially_out_of_bounds) {
-        Write_console_line(
-            L"Warning: Matched window is partially obscured and partially outside "
-            L"visible desktop bounds. The saved image may include other windows "
-            L"and may clip the target window.",
-            true);
-    } else if (window_obscuration == WindowObscuration::Partial) {
-        Write_console_line(
-            L"Warning: Matched window is partially obscured by other windows. The "
-            L"saved image may include those windows.",
-            true);
-    } else if (window_partially_out_of_bounds) {
-        Write_console_line(
-            L"Warning: Matched window is partially outside visible desktop "
-            L"bounds. The saved image may clip the target window.",
-            true);
-    }
-
-    SaveScreenRectResult const save_result =
-        Save_screen_rect_to_file(target_rect, output_path);
-    if (!save_result.ok) {
-        if (delete_output_path_on_failure) {
-            (void)DeleteFileW(output_path.c_str());
-        }
-        switch (save_result.failure) {
-        case SaveScreenRectFailure::OutsideVirtualDesktop:
-            if (cli_options_.capture_mode == core::CliCaptureMode::Window) {
-                Write_console_line(
-                    L"Error: Matched window is completely outside the virtual "
-                    L"desktop. Nothing to capture.",
-                    true);
-            } else {
-                Write_console_line(
-                    L"Error: Requested capture area is outside the virtual desktop.",
-                    true);
-            }
-            break;
-        case SaveScreenRectFailure::CaptureFailed:
-            Write_console_line(L"Error: Failed to capture the virtual desktop image.",
-                               true);
-            break;
-        case SaveScreenRectFailure::CropFailed:
-            Write_console_line(L"Error: Failed to crop the captured image.", true);
-            break;
-        case SaveScreenRectFailure::EncodeFailed: {
-            std::wstring message = L"Error: Failed to encode or write image file: ";
-            message += output_path;
-            Write_console_line(message, true);
-            break;
-        }
-        case SaveScreenRectFailure::EmptyRect:
-        case SaveScreenRectFailure::EmptyOutputPath:
-        case SaveScreenRectFailure::None:
-            Write_console_line(L"Error: Internal capture request was invalid.", true);
-            break;
-        }
-        return ProcessExitCode::CliCaptureSaveFailed;
-    }
-
-    Update_default_save_dir_from_path(config_, output_path);
-    Store_last_capture(target_rect, captured_window);
-    config_.Normalize();
-
-    std::wstring message = L"Saved: ";
-    message += output_path;
-    Write_console_line(message, false);
-    return ProcessExitCode::Success;
+    return cli_result.exit_code;
 }
 
 void GreenflameApp::On_start_capture_requested() {
@@ -1161,100 +300,45 @@ void GreenflameApp::On_copy_window_to_clipboard_requested(HWND target_window) {
     if (overlay_window_.Is_open()) {
         return;
     }
-    std::optional<WindowCaptureResult> const result =
-        Find_and_capture_current_window(target_window);
-    if (result.has_value()) {
-        Store_last_capture(result->screen_rect, result->hwnd);
-        if (config_.show_balloons) {
-            tray_window_.Show_balloon(TrayBalloonIcon::Info,
-                                      kClipboardCopiedBalloonMessage,
-                                      Create_thumbnail_from_clipboard());
-        }
-    }
+    ClipboardCopyResult const result =
+        app_controller_.On_copy_window_to_clipboard_requested(target_window);
+    Show_clipboard_result(result, config_, tray_window_);
 }
 
 void GreenflameApp::On_copy_monitor_to_clipboard_requested() {
     if (overlay_window_.Is_open()) {
         return;
     }
-    std::optional<core::RectPx> const rect = Copy_current_monitor_to_clipboard();
-    if (rect.has_value()) {
-        Store_last_capture(*rect, std::nullopt);
-        if (config_.show_balloons) {
-            tray_window_.Show_balloon(TrayBalloonIcon::Info,
-                                      kClipboardCopiedBalloonMessage,
-                                      Create_thumbnail_from_clipboard());
-        }
-    }
+    ClipboardCopyResult const result =
+        app_controller_.On_copy_monitor_to_clipboard_requested();
+    Show_clipboard_result(result, config_, tray_window_);
 }
 
 void GreenflameApp::On_copy_desktop_to_clipboard_requested() {
     if (overlay_window_.Is_open()) {
         return;
     }
-    std::optional<core::RectPx> const rect = Copy_desktop_to_clipboard();
-    if (rect.has_value()) {
-        Store_last_capture(*rect, std::nullopt);
-        if (config_.show_balloons) {
-            tray_window_.Show_balloon(TrayBalloonIcon::Info,
-                                      kClipboardCopiedBalloonMessage,
-                                      Create_thumbnail_from_clipboard());
-        }
-    }
+    ClipboardCopyResult const result =
+        app_controller_.On_copy_desktop_to_clipboard_requested();
+    Show_clipboard_result(result, config_, tray_window_);
 }
 
 void GreenflameApp::On_copy_last_region_to_clipboard_requested() {
     if (overlay_window_.Is_open()) {
         return;
     }
-    if (!last_capture_screen_rect_.has_value()) {
-        tray_window_.Show_balloon(TrayBalloonIcon::Warning, kNoLastRegionMessage);
-        return;
-    }
-    if (Copy_screen_rect_to_clipboard(*last_capture_screen_rect_)) {
-        if (config_.show_balloons) {
-            tray_window_.Show_balloon(TrayBalloonIcon::Info,
-                                      kClipboardCopiedBalloonMessage,
-                                      Create_thumbnail_from_clipboard());
-        }
-    } else {
-        tray_window_.Show_balloon(TrayBalloonIcon::Warning, kNoLastRegionMessage);
-    }
+    ClipboardCopyResult const result =
+        app_controller_.On_copy_last_region_to_clipboard_requested();
+    Show_clipboard_result(result, config_, tray_window_);
 }
 
 void GreenflameApp::On_copy_last_window_to_clipboard_requested() {
     if (overlay_window_.Is_open()) {
         return;
     }
-    if (!last_capture_window_.has_value()) {
-        tray_window_.Show_balloon(TrayBalloonIcon::Warning, kNoLastWindowMessage);
-        return;
-    }
-    HWND const hwnd = *last_capture_window_;
-    if (!IsWindow(hwnd)) {
-        tray_window_.Show_balloon(TrayBalloonIcon::Warning, kLastWindowClosedMessage);
-        last_capture_window_ = std::nullopt;
-        return;
-    }
-    if (IsIconic(hwnd) != 0) {
-        tray_window_.Show_balloon(TrayBalloonIcon::Warning,
-                                  kLastWindowMinimizedMessage);
-        return;
-    }
-    std::optional<core::RectPx> const rect = Get_window_rect(hwnd);
-    if (!rect.has_value()) {
-        tray_window_.Show_balloon(TrayBalloonIcon::Warning, kLastWindowClosedMessage);
-        last_capture_window_ = std::nullopt;
-        return;
-    }
-    if (Copy_screen_rect_to_clipboard(*rect)) {
-        Store_last_capture(*rect, hwnd);
-        if (config_.show_balloons) {
-            tray_window_.Show_balloon(TrayBalloonIcon::Info,
-                                      kClipboardCopiedBalloonMessage,
-                                      Create_thumbnail_from_clipboard());
-        }
-    }
+    ClipboardCopyResult const result =
+        app_controller_.On_copy_last_window_to_clipboard_requested();
+    Show_clipboard_result(result, config_, tray_window_);
 }
 
 void GreenflameApp::On_exit_requested() {
@@ -1268,9 +352,10 @@ void GreenflameApp::On_overlay_closed() {
 
 void GreenflameApp::On_selection_copied_to_clipboard(core::RectPx screen_rect,
                                                      std::optional<HWND> window) {
-    Store_last_capture(screen_rect, window);
-    if (config_.show_balloons) {
-        tray_window_.Show_balloon(TrayBalloonIcon::Info, kClipboardCopiedBalloonMessage,
+    ClipboardCopyResult const result =
+        app_controller_.On_selection_copied_to_clipboard(screen_rect, window);
+    if (config_.show_balloons && result.success && !result.balloon_message.empty()) {
+        tray_window_.Show_balloon(TrayBalloonIcon::Info, result.balloon_message.c_str(),
                                   Create_thumbnail_from_clipboard());
     }
 }
@@ -1280,22 +365,13 @@ void GreenflameApp::On_selection_saved_to_file(core::RectPx screen_rect,
                                                HBITMAP thumbnail,
                                                std::wstring_view saved_path,
                                                bool file_copied_to_clipboard) {
-    Store_last_capture(screen_rect, window);
+    SelectionSavedResult const result = app_controller_.On_selection_saved_to_file(
+        screen_rect, window, saved_path, file_copied_to_clipboard);
     if (config_.show_balloons) {
-        std::wstring const message =
-            Build_saved_selection_balloon_message(saved_path, file_copied_to_clipboard);
-        tray_window_.Show_balloon(TrayBalloonIcon::Info, message.c_str(), thumbnail);
+        tray_window_.Show_balloon(TrayBalloonIcon::Info, result.balloon_message.c_str(),
+                                  thumbnail);
     } else if (thumbnail != nullptr) {
         DeleteObject(thumbnail);
-    }
-}
-
-void GreenflameApp::Store_last_capture(core::RectPx screen_rect,
-                                       std::optional<HWND> window) {
-    core::RectPx const normalized = screen_rect.Normalized();
-    last_capture_screen_rect_ = normalized;
-    if (window.has_value()) {
-        last_capture_window_ = *window;
     }
 }
 

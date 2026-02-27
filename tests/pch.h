@@ -1,9 +1,12 @@
 #pragma once
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <array>
+#include <filesystem>
 #include <optional>
+#include <span>
 #include <string>
 #include <tuple>
 #include <vector>

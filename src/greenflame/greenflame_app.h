@@ -1,11 +1,13 @@
 #pragma once
 
-#include "app_config.h"
+#include "greenflame_core/app_config.h"
+#include "greenflame_core/app_controller.h"
 #include "greenflame_core/cli_options.h"
-#include "greenflame_core/rect_px.h"
-#include "process_exit_code.h"
+#include "greenflame_core/process_exit_code.h"
 #include "win/overlay_window.h"
 #include "win/tray_window.h"
+#include "win/win32_services.h"
+#include "win/window_query.h"
 
 namespace greenflame {
 
@@ -33,15 +35,17 @@ class GreenflameApp final : public ITrayEvents, public IOverlayEvents {
                                     std::wstring_view saved_path,
                                     bool file_copied_to_clipboard) override;
 
-    void Store_last_capture(core::RectPx screen_rect, std::optional<HWND> window);
-
     HINSTANCE hinstance_ = nullptr;
     core::CliOptions cli_options_ = {};
-    AppConfig config_ = {};
+    core::AppConfig config_ = {};
     TrayWindow tray_window_;
+    Win32WindowQuery window_query_;
     OverlayWindow overlay_window_;
-    std::optional<core::RectPx> last_capture_screen_rect_;
-    std::optional<HWND> last_capture_window_;
+    Win32DisplayQueries display_queries_;
+    Win32WindowInspector window_inspector_;
+    Win32CaptureService capture_service_;
+    Win32FileSystemService file_system_service_;
+    AppController app_controller_;
 };
 
 } // namespace greenflame

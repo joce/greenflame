@@ -142,22 +142,35 @@ void Fill_magnifier_checkerboard(HDC dc, int left, int top, int src_x,
         return;
     }
 
-    // Offset the checkerboard phase by the source coordinates so the pattern
-    // scrolls with the mouse, giving visual motion feedback near edges.
-    int const phase_x = ((src_x % 2) + 2) % 2;
-    int const phase_y = ((src_y % 2) + 2) % 2;
+    // Anchor the checker tiles to source-pixel coordinates so that any given
+    // tile always maps to the same pair of source pixels, regardless of where
+    // the magnifier is positioned. Each tile is 2 source pixels wide/tall =
+    // kMagnifierCheckerTile magnifier pixels at kMagnifierZoom zoom.
+    //
+    // Round src down to the nearest even source pixel (tile boundary). This
+    // boundary maps to magnifier offset 0 (even src) or -kMagnifierZoom (odd
+    // src, so the first partial tile is half-width).
+    int const tile_sx0 = src_x & ~1; // even source pixel at or before src_x
+    int const tile_sy0 = src_y & ~1;
+    int const mx0 = (tile_sx0 - src_x) * kMagnifierZoom; // 0 or -kMagnifierZoom
+    int const my0 = (tile_sy0 - src_y) * kMagnifierZoom;
+    int const base_tx = tile_sx0 / 2; // tile index of the first tile
+    int const base_ty = tile_sy0 / 2;
 
-    for (int y = 0; y < kMagnifierSize; y += kMagnifierCheckerTile) {
-        int const cell_top = top + y;
-        int const cell_bottom =
-            std::min(top + y + kMagnifierCheckerTile, top + kMagnifierSize);
-        for (int x = 0; x < kMagnifierSize; x += kMagnifierCheckerTile) {
-            int const cell_left = left + x;
+    for (int ty = 0; ; ++ty) {
+        int const my = my0 + ty * kMagnifierCheckerTile;
+        if (my >= kMagnifierSize) break;
+        int const cell_top = top + std::max(0, my);
+        int const cell_bottom = top + std::min(kMagnifierSize, my + kMagnifierCheckerTile);
+        if (cell_bottom <= cell_top) continue;
+        for (int tx = 0; ; ++tx) {
+            int const mx = mx0 + tx * kMagnifierCheckerTile;
+            if (mx >= kMagnifierSize) break;
+            int const cell_left = left + std::max(0, mx);
             int const cell_right =
-                std::min(left + x + kMagnifierCheckerTile, left + kMagnifierSize);
-            bool const dark = (((x / kMagnifierCheckerTile) + phase_x +
-                                (y / kMagnifierCheckerTile) + phase_y) &
-                               1) != 0;
+                left + std::min(kMagnifierSize, mx + kMagnifierCheckerTile);
+            if (cell_right <= cell_left) continue;
+            bool const dark = ((base_tx + tx + base_ty + ty) & 1) != 0;
             SetDCBrushColor(dc, dark ? kMagnifierCheckerDark : kMagnifierCheckerLight);
             RECT cell = {cell_left, cell_top, cell_right, cell_bottom};
             FillRect(dc, &cell, dc_brush);

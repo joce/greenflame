@@ -13,11 +13,13 @@
     "dictionaryDefinitions": [],
     "dictionaries": ["cpp"],
     "words": [
-        "greenflame",
-        "gdiplus",
         "Greenshot",
         "Flameshot",
+        "Jocelyn",
+        "Legault",
         "Segoe",
+        "gdiplus",
+        "greenflame",
         "negotiables"
     ],
     "ignoreWords": [

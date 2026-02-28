@@ -1,0 +1,37 @@
+#include <winver.h>
+
+// Application icon (Explorer, taskbar, window)
+1 ICON "@GREENFLAME_ICON_PATH@"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION @GREENFLAME_FILE_VERSION_COMMA@
+ PRODUCTVERSION @GREENFLAME_FILE_VERSION_COMMA@
+ FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+#ifdef _DEBUG
+ FILEFLAGS VS_FF_DEBUG
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "@GREENFLAME_COMPANY_NAME@\0"
+            VALUE "FileDescription", "@GREENFLAME_FILE_DESCRIPTION@\0"
+            VALUE "FileVersion", "@GREENFLAME_FILE_VERSION_DOTTED@\0"
+            VALUE "InternalName", "@GREENFLAME_INTERNAL_NAME@\0"
+            VALUE "LegalCopyright", "@GREENFLAME_COPYRIGHT@\0"
+            VALUE "OriginalFilename", "@GREENFLAME_ORIGINAL_FILENAME@\0"
+            VALUE "ProductName", "@GREENFLAME_PRODUCT_NAME@\0"
+            VALUE "ProductVersion", "@GREENFLAME_FILE_VERSION_DOTTED@\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END

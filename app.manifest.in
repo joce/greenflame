@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
-    <assemblyIdentity version="1.0.0.0" processorArchitecture="amd64" name="greenflame" type="win32" />
+    <assemblyIdentity
+        version="@GREENFLAME_FILE_VERSION_DOTTED@"
+        processorArchitecture="amd64"
+        name="@GREENFLAME_MANIFEST_NAME@"
+        type="win32" />
 
     <application xmlns="urn:schemas-microsoft-com:asm.v3">
         <windowsSettings>

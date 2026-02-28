@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.26)
-project(greenflame LANGUAGES CXX)
+project(greenflame VERSION 0.1.0 LANGUAGES CXX)
 
 # So the IDE (and clangd) can find includes for all targets, including tests.
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -14,6 +14,38 @@ set(CMAKE_COMPILE_WARNING_AS_ERROR OFF)
 
 # Keep the app as a GUI subsystem executable on Windows.
 set(CMAKE_WIN32_EXECUTABLE ON)
+
+# -----------------------------
+# Version and metadata (single source of truth)
+# -----------------------------
+set(GREENFLAME_VERSION_TWEAK 0 CACHE STRING "Fourth version component for Windows resources")
+set(GREENFLAME_FILE_VERSION_COMMA
+    "${PROJECT_VERSION_MAJOR},${PROJECT_VERSION_MINOR},${PROJECT_VERSION_PATCH},${GREENFLAME_VERSION_TWEAK}"
+)
+set(GREENFLAME_FILE_VERSION_DOTTED
+    "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}.${GREENFLAME_VERSION_TWEAK}"
+)
+
+set(GREENFLAME_COMPANY_NAME "Jocelyn Legault" CACHE STRING "Company name in VERSIONINFO")
+set(GREENFLAME_PRODUCT_NAME "Greenflame" CACHE STRING "Product name in VERSIONINFO")
+set(GREENFLAME_FILE_DESCRIPTION "Greenflame Screenshot Tool" CACHE STRING "File description in VERSIONINFO")
+set(GREENFLAME_COPYRIGHT "Copyright (C) 2026 Jocelyn Legault" CACHE STRING "Copyright in VERSIONINFO")
+set(GREENFLAME_INTERNAL_NAME "greenflame.exe" CACHE STRING "InternalName in VERSIONINFO")
+set(GREENFLAME_ORIGINAL_FILENAME "greenflame.exe" CACHE STRING "OriginalFilename in VERSIONINFO")
+set(GREENFLAME_MANIFEST_NAME "greenflame" CACHE STRING "Manifest assemblyIdentity name")
+set(GREENFLAME_ICON_PATH "${CMAKE_CURRENT_SOURCE_DIR}/greenflame.ico")
+file(TO_CMAKE_PATH "${GREENFLAME_ICON_PATH}" GREENFLAME_ICON_PATH)
+
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/app.manifest.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/app.manifest"
+    @ONLY
+)
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/greenflame.rc.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/greenflame.rc"
+    @ONLY
+)
 
 # -----------------------------
 # greenflame_core (testable library)
@@ -135,8 +167,8 @@ add_executable(greenflame WIN32
     src/greenflame/win/window_query.h
     src/greenflame/win/win32_services.cpp
     src/greenflame/win/win32_services.h
-    app.manifest
-    greenflame.rc
+    ${CMAKE_CURRENT_BINARY_DIR}/app.manifest
+    ${CMAKE_CURRENT_BINARY_DIR}/greenflame.rc
 )
 
 target_include_directories(greenflame PRIVATE

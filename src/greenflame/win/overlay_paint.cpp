@@ -11,7 +11,7 @@
 
 namespace {
 
-constexpr unsigned char kCoordTooltipAlpha = 200;
+constexpr unsigned char kCoordTooltipAlpha = 150;
 constexpr unsigned char kCoordTooltipBgR = 217, kCoordTooltipBgG = 240,
                         kCoordTooltipBgB = 227;
 constexpr COLORREF kCoordTooltipBorderText = RGB(15, 60, 35); // dark SeaGreen
@@ -298,7 +298,6 @@ void Draw_dimension_labels(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
                            greenflame::PaintResources const *res) {
     constexpr int k_dim_margin = 4;
     constexpr int k_dim_gap = 4;
-    constexpr int k_center_margin_v = 5;
     int const row_bytes = greenflame::Row_bytes32(w);
     size_t const pix_size = static_cast<size_t>(row_bytes) * static_cast<size_t>(h);
     if (pixels.size() < pix_size) return;
@@ -334,7 +333,7 @@ void Draw_dimension_labels(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
             int const height_box_w = height_size.cx + 2 * k_dim_margin;
             int const height_box_h = height_size.cy + 2 * k_dim_margin;
             int const center_box_w = center_size.cx + 2 * k_dim_margin;
-            int const center_box_h = center_size.cy + 2 * k_center_margin_v;
+            int const center_box_h = center_size.cy + 2 * k_dim_margin;
 
             int const center_x = (sel.left + sel.right) / 2;
             int const center_y = (sel.top + sel.bottom) / 2;
@@ -395,8 +394,8 @@ void Draw_dimension_labels(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
                                                     center_box_left + center_box_w,
                                                     center_box_top + center_box_h);
 
-            constexpr unsigned char side_box_alpha = 150;
-            constexpr unsigned char center_box_alpha = kCoordTooltipAlpha / 2;
+            constexpr unsigned char side_box_alpha = kCoordTooltipAlpha;
+            constexpr unsigned char center_box_alpha = kCoordTooltipAlpha;
             greenflame::core::Blend_rect_onto_pixels(
                 pixels, w, h, row_bytes, width_box_rect, kCoordTooltipBgR,
                 kCoordTooltipBgG, kCoordTooltipBgB, side_box_alpha);
@@ -439,9 +438,9 @@ void Draw_dimension_labels(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
                                    height_box_left + height_box_w - k_dim_margin,
                                    height_box_top + height_box_h - k_dim_margin};
             RECT center_text_rc = {center_box_left + k_dim_margin,
-                                   center_box_top + k_center_margin_v,
+                                   center_box_top + k_dim_margin,
                                    center_box_left + center_box_w - k_dim_margin,
-                                   center_box_top + center_box_h - k_center_margin_v};
+                                   center_box_top + center_box_h - k_dim_margin};
             DrawTextW(buf_dc, width_str.c_str(), -1, &width_text_rc,
                       DT_CENTER | DT_VCENTER | DT_SINGLELINE);
             DrawTextW(buf_dc, height_str.c_str(), -1, &height_text_rc,

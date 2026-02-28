@@ -19,7 +19,6 @@ struct PaintResources {
     HPEN border_pen = nullptr;         // SeaGreen for label/tooltip borders
     HBRUSH handle_brush = nullptr;     // Teal for contour handles
     HPEN handle_pen = nullptr;         // Teal for contour handles
-    HBRUSH sel_border_brush = nullptr; // Teal for selection frame
 };
 
 struct PaintOverlayInput {

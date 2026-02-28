@@ -32,6 +32,37 @@ constexpr COLORREF kMagnifierCheckerDark = RGB(168, 168, 168);
 constexpr int kColorChannelMax = 255;
 constexpr float kColorChannelMaxF = static_cast<float>(kColorChannelMax);
 
+constexpr int kSelDashPx = 4;
+constexpr int kSelGapPx = 3;
+
+// Draws a 1-pixel dashed rectangle border using explicit MoveToEx/LineTo
+// segments so that dash and gap lengths are exact physical pixels regardless
+// of DPI scaling in the DC.
+void Draw_dashed_rect_border(HDC dc, HPEN pen, int left, int top, int right,
+                             int bottom) {
+    HGDIOBJ old = SelectObject(dc, pen);
+    constexpr int dash = kSelDashPx;
+    constexpr int gap = kSelGapPx;
+    constexpr int period = dash + gap;
+    // Top and bottom rows
+    for (int x = left; x < right; x += period) {
+        int x2 = std::min(x + dash, right);
+        MoveToEx(dc, x, top, nullptr);
+        LineTo(dc, x2, top);
+        MoveToEx(dc, x, bottom - 1, nullptr);
+        LineTo(dc, x2, bottom - 1);
+    }
+    // Left and right columns (full height, independent segments from top corner)
+    for (int y = top; y < bottom; y += period) {
+        int y2 = std::min(y + dash, bottom);
+        MoveToEx(dc, left, y, nullptr);
+        LineTo(dc, left, y2);
+        MoveToEx(dc, right - 1, y, nullptr);
+        LineTo(dc, right - 1, y2);
+    }
+    SelectObject(dc, old);
+}
+
 void Blend_magnifier_crosshair_onto_pixels(std::span<uint8_t> pixels, int width,
                                            int height, int row_bytes, int mag_left,
                                            int mag_top) noexcept {
@@ -175,7 +206,8 @@ void Draw_contour_handles(HDC buf_dc, greenflame::core::RectPx const &sel,
 void Draw_selection_dim_and_border(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
                                    greenflame::core::RectPx const &sel,
                                    std::span<uint8_t> pixels,
-                                   greenflame::PaintResources const *res) {
+                                   greenflame::PaintResources const *res,
+                                   bool dashed) {
     if (sel.Is_empty()) return;
     int const row_bytes = greenflame::Row_bytes32(w);
     size_t const size = static_cast<size_t>(row_bytes) * static_cast<size_t>(h);
@@ -188,9 +220,17 @@ void Draw_selection_dim_and_border(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
         SetDIBits(buf_dc, buf_bmp, 0, static_cast<UINT>(h), pixels.data(),
                   reinterpret_cast<BITMAPINFO *>(&bmi), DIB_RGB_COLORS);
     }
-    if (res && res->sel_border_brush) {
-        RECT sel_rc = {sel.left, sel.top, sel.right, sel.bottom};
-        FrameRect(buf_dc, &sel_rc, res->sel_border_brush);
+    if (res && res->handle_pen) {
+        if (dashed) {
+            Draw_dashed_rect_border(buf_dc, res->handle_pen,
+                                    sel.left, sel.top, sel.right, sel.bottom);
+        } else {
+            HGDIOBJ old_pen = SelectObject(buf_dc, res->handle_pen);
+            HGDIOBJ old_brush = SelectObject(buf_dc, GetStockObject(NULL_BRUSH));
+            Rectangle(buf_dc, sel.left, sel.top, sel.right, sel.bottom);
+            SelectObject(buf_dc, old_brush);
+            SelectObject(buf_dc, old_pen);
+        }
     }
 }
 
@@ -584,7 +624,7 @@ void Paint_overlay(HDC hdc, HWND hwnd, const RECT &rc, const PaintOverlayInput &
             ? in.live_rect
             : in.final_selection;
     Draw_selection_dim_and_border(buf_dc, buf_bmp, w, h, sel, in.paint_buffer,
-                                  in.resources);
+                                  in.resources, in.dragging);
 
     if ((in.dragging || in.handle_dragging || in.move_dragging ||
          in.modifier_preview) &&

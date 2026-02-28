@@ -222,7 +222,6 @@ struct OverlayWindow::OverlayResources {
         paint.border_pen = CreatePen(PS_SOLID, 1, winui::kOverlayBorder);
         paint.handle_brush = CreateSolidBrush(winui::kOverlayHandle);
         paint.handle_pen = CreatePen(PS_SOLID, 1, winui::kOverlayHandle);
-        paint.sel_border_brush = CreateSolidBrush(winui::kOverlayHandle);
         return true;
     }
 
@@ -252,10 +251,6 @@ struct OverlayWindow::OverlayResources {
         if (paint.handle_pen) {
             DeleteObject(paint.handle_pen);
             paint.handle_pen = nullptr;
-        }
-        if (paint.sel_border_brush) {
-            DeleteObject(paint.sel_border_brush);
-            paint.sel_border_brush = nullptr;
         }
     }
 };

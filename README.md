@@ -1,5 +1,7 @@
 # greenflame
 
+[![CI](https://github.com/joce/greenflame/actions/workflows/ci.yml/badge.svg)](https://github.com/joce/greenflame/actions/workflows/ci.yml)
+
 <img src="images/greenflame_256.png" alt="Greenflame" width="128" align="left" />
 
 Yet another Windows screenshot tool, with very opinionated set of behaviors.  `¯\_(ツ)_/¯`

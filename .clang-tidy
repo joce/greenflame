@@ -27,7 +27,7 @@ Checks: >
   -performance-no-int-to-ptr,
   -modernize-use-trailing-return-type,
   -clang-analyzer-optin.core.EnumCastOutOfRange
-WarningsAsErrors: ""
+WarningsAsErrors: "*"
 HeaderFilterRegex: '^.*greenflame[/\\](src|tests)[/\\].*'
 SystemHeaders: false
 

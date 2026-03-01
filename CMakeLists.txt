@@ -234,3 +234,18 @@ target_link_libraries(greenflame PRIVATE
         ole32
         gdiplus
 )
+
+# -----------------------------
+# Link-Time Optimization (release builds only)
+# -----------------------------
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    # Full LTO: TUs emit LLVM bitcode; lld-link merges and optimises at link time.
+    foreach(_lto_tgt greenflame_core greenflame)
+        target_compile_options(${_lto_tgt} PRIVATE $<$<CONFIG:Release>:-flto=full>)
+    endforeach()
+    target_link_options(greenflame PRIVATE $<$<CONFIG:Release>:-flto=full>)
+elseif(MSVC)
+    # Whole Program Optimisation: /GL at compile time, /LTCG at link time.
+    set_property(TARGET greenflame_core PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+    set_property(TARGET greenflame      PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+endif()

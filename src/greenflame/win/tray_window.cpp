@@ -252,13 +252,17 @@ class TrayWindow::ToastPopup final {
                GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
     }
 
-    void Show(TrayBalloonIcon icon, wchar_t const *message, HBITMAP thumbnail) {
+    void Show(TrayBalloonIcon icon, wchar_t const *message, HBITMAP thumbnail,
+              std::wstring_view file_path) {
         if (!message || message[0] == L'\0') {
             return;
         }
 
         icon_ = icon;
         message_ = message;
+        file_path_ = std::wstring(file_path);
+        link_rect_ = {};
+        mouse_over_link_ = false;
 
         if (thumbnail_ != nullptr) {
             DeleteObject(thumbnail_);
@@ -314,6 +318,7 @@ class TrayWindow::ToastPopup final {
 
         int title_height = title_app_icon_size;
         int body_height = Scale_for_dpi(kFallbackTextHeightDip, dpi);
+        int link_height = 0;
 
         HDC const hdc = GetDC(hwnd_);
         if (hdc != nullptr) {
@@ -341,12 +346,27 @@ class TrayWindow::ToastPopup final {
                 body_height = measured_body;
             }
 
+            if (!file_path_.empty()) {
+                RECT link_measure{};
+                link_measure.right = text_width;
+                DrawTextW(hdc, file_path_.c_str(), -1, &link_measure,
+                          DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX | DT_CALCRECT);
+                link_height = link_measure.bottom - link_measure.top;
+                if (link_height <= 0) {
+                    link_height = Scale_for_dpi(kBodyFontDip, dpi);
+                }
+            }
+
             SelectObject(hdc, old_font);
             ReleaseDC(hwnd_, hdc);
         }
 
         int const body_row_height = std::max(icon_size, body_height);
-        int height = padding + title_height + header_gap + body_row_height + padding;
+        int height = padding + title_height + header_gap + body_row_height;
+        if (!file_path_.empty()) {
+            height += Scale_for_dpi(kLinkGapDip, dpi) + link_height;
+        }
+        height += padding;
 
         if (thumbnail_ != nullptr && thumbnail_width_ > 0 && thumbnail_height_ > 0) {
             float const scale_w = static_cast<float>(content_width) /
@@ -384,7 +404,9 @@ class TrayWindow::ToastPopup final {
                      SWP_SHOWWINDOW | SWP_NOACTIVATE);
         InvalidateRect(hwnd_, nullptr, TRUE);
         KillTimer(hwnd_, kTimerId);
-        SetTimer(hwnd_, kTimerId, kDurationMs, nullptr);
+        if (!mouse_inside_) {
+            SetTimer(hwnd_, kTimerId, kDurationMs, nullptr);
+        }
     }
 
     void Destroy() {
@@ -413,6 +435,7 @@ class TrayWindow::ToastPopup final {
     static constexpr int kFallbackTextHeightDip = 18;
     static constexpr int kThumbnailMaxHeightDip = 80;
     static constexpr int kThumbnailGapDip = 8;
+    static constexpr int kLinkGapDip = 6;
     static constexpr wchar_t kTitleText[] = L"Greenflame";
 
     [[nodiscard]] bool Is_open() const {
@@ -497,14 +520,70 @@ class TrayWindow::ToastPopup final {
         switch (msg) {
         case WM_MOUSEACTIVATE:
             return MA_NOACTIVATE;
-        case WM_LBUTTONDOWN:
-        case WM_RBUTTONDOWN:
-        case WM_MBUTTONDOWN:
-        case WM_NCLBUTTONDOWN:
-        case WM_NCRBUTTONDOWN:
-            KillTimer(hwnd_, kTimerId);
-            Hide();
+        case WM_MOUSEMOVE: {
+            if (!mouse_inside_) {
+                mouse_inside_ = true;
+                KillTimer(hwnd_, kTimerId);
+                TRACKMOUSEEVENT tme{};
+                tme.cbSize = sizeof(tme);
+                tme.dwFlags = TME_LEAVE;
+                tme.hwndTrack = hwnd_;
+                TrackMouseEvent(&tme);
+            }
+            if (!file_path_.empty() && !IsRectEmpty(&link_rect_)) {
+                POINT const pt{static_cast<int>(static_cast<short>(LOWORD(lparam))),
+                               static_cast<int>(static_cast<short>(HIWORD(lparam)))};
+                bool const over_link = PtInRect(&link_rect_, pt) != 0;
+                if (over_link != mouse_over_link_) {
+                    mouse_over_link_ = over_link;
+                    InvalidateRect(hwnd_, &link_rect_, FALSE);
+                }
+            }
             return 0;
+        }
+        case WM_MOUSELEAVE:
+            mouse_inside_ = false;
+            if (mouse_over_link_) {
+                mouse_over_link_ = false;
+                InvalidateRect(hwnd_, &link_rect_, FALSE);
+            }
+            SetTimer(hwnd_, kTimerId, kDurationMs, nullptr);
+            return 0;
+        case WM_LBUTTONUP: {
+            if (!file_path_.empty() && !IsRectEmpty(&link_rect_)) {
+                POINT const pt{static_cast<int>(static_cast<short>(LOWORD(lparam))),
+                               static_cast<int>(static_cast<short>(HIWORD(lparam)))};
+                if (PtInRect(&link_rect_, pt)) {
+                    KillTimer(hwnd_, kTimerId);
+                    Hide();
+                    PIDLIST_ABSOLUTE const pidl = ILCreateFromPathW(file_path_.c_str());
+                    if (pidl != nullptr) {
+                        LPCITEMIDLIST const child = ILFindLastID(pidl);
+                        PIDLIST_ABSOLUTE const parent = ILClone(pidl);
+                        if (parent != nullptr) {
+                            ILRemoveLastID(parent);
+                            LPCITEMIDLIST child_items[] = {child};
+                            SHOpenFolderAndSelectItems(parent, 1, child_items, 0);
+                            ILFree(parent);
+                        }
+                        ILFree(pidl);
+                    }
+                }
+            }
+            return 0;
+        }
+        case WM_SETCURSOR:
+            if (LOWORD(lparam) == HTCLIENT && !file_path_.empty() &&
+                !IsRectEmpty(&link_rect_)) {
+                POINT pt{};
+                GetCursorPos(&pt);
+                ScreenToClient(hwnd_, &pt);
+                if (PtInRect(&link_rect_, pt)) {
+                    SetCursor(LoadCursorW(nullptr, IDC_HAND));
+                    return TRUE;
+                }
+            }
+            return DefWindowProcW(hwnd_, msg, wparam, lparam);
         case WM_TIMER:
             if (wparam == kTimerId) {
                 KillTimer(hwnd_, kTimerId);
@@ -627,6 +706,58 @@ class TrayWindow::ToastPopup final {
                 DrawTextW(hdc, message_.c_str(), -1, &body_rect,
                           DT_LEFT | DT_TOP | DT_WORDBREAK | DT_NOPREFIX);
 
+                // Compute bottom of body content (text or icon, whichever is taller).
+                int anchor_bottom = std::max(body_text_bottom, body_top + icon_size);
+
+                // Draw the file path as a clickable link when present.
+                if (!file_path_.empty()) {
+                    int const link_gap = Scale_for_dpi(kLinkGapDip, dpi);
+                    int const link_top = anchor_bottom + link_gap;
+
+                    // Measure link text height (single line).
+                    RECT link_measure{text_left, link_top, content_right,
+                                      link_top + Scale_for_dpi(kBodyFontDip, dpi) * 2};
+                    DrawTextW(hdc, file_path_.c_str(), -1, &link_measure,
+                              DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX |
+                                  DT_CALCRECT);
+                    int const link_line_h = (link_measure.bottom > link_top)
+                                                ? (link_measure.bottom - link_top)
+                                                : Scale_for_dpi(kBodyFontDip, dpi);
+
+                    RECT link_draw_rect{text_left, link_top, content_right,
+                                        link_top + link_line_h};
+                    link_rect_ = link_draw_rect;
+
+                    SetTextColor(hdc, kToastLinkText);
+                    DrawTextW(hdc, file_path_.c_str(), -1, &link_draw_rect,
+                              DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX |
+                                  DT_END_ELLIPSIS);
+
+                    if (mouse_over_link_) {
+                        SIZE text_sz{};
+                        GetTextExtentPoint32W(hdc, file_path_.c_str(),
+                                              static_cast<int>(file_path_.size()),
+                                              &text_sz);
+                        int const underline_right =
+                            link_draw_rect.left +
+                            std::min(text_sz.cx,
+                                     link_draw_rect.right - link_draw_rect.left);
+                        HPEN const link_pen = CreatePen(PS_SOLID, 1, kToastLinkText);
+                        if (link_pen != nullptr) {
+                            HGDIOBJ const old_pen = SelectObject(hdc, link_pen);
+                            MoveToEx(hdc, link_draw_rect.left,
+                                     link_draw_rect.bottom - 1, nullptr);
+                            LineTo(hdc, underline_right, link_draw_rect.bottom - 1);
+                            SelectObject(hdc, old_pen);
+                            DeleteObject(link_pen);
+                        }
+                    }
+
+                    anchor_bottom = link_draw_rect.bottom;
+                }
+
+                SelectObject(hdc, old_font);
+
                 if (thumbnail_ != nullptr && thumbnail_width_ > 0 &&
                     thumbnail_height_ > 0) {
 
@@ -642,9 +773,7 @@ class TrayWindow::ToastPopup final {
                         static_cast<int>(static_cast<float>(thumbnail_width_) * scale);
                     int const thumb_h =
                         static_cast<int>(static_cast<float>(thumbnail_height_) * scale);
-                    int const thumb_top =
-                        std::max(body_text_bottom, body_top + icon_size) +
-                        thumbnail_gap;
+                    int const thumb_top = anchor_bottom + thumbnail_gap;
                     int const thumb_left = content_left;
 
                     RECT thumb_border_rect{};
@@ -670,8 +799,6 @@ class TrayWindow::ToastPopup final {
                         DeleteDC(thumb_dc);
                     }
                 }
-
-                SelectObject(hdc, old_font);
             }
             EndPaint(hwnd_, &paint);
             return 0;
@@ -688,10 +815,14 @@ class TrayWindow::ToastPopup final {
     UINT title_font_dpi_ = 0;
     UINT body_font_dpi_ = 0;
     std::wstring message_ = {};
+    std::wstring file_path_ = {};
     HBITMAP thumbnail_ = nullptr;
     TrayBalloonIcon icon_ = TrayBalloonIcon::Info;
     int thumbnail_width_ = 0;
     int thumbnail_height_ = 0;
+    RECT link_rect_ = {};
+    bool mouse_inside_ = false;
+    bool mouse_over_link_ = false;
 };
 
 TrayWindow::TrayWindow(ITrayEvents *events) : events_(events) {}
@@ -813,7 +944,7 @@ void TrayWindow::Destroy() {
 bool TrayWindow::Is_open() const { return hwnd_ != nullptr && IsWindow(hwnd_) != 0; }
 
 void TrayWindow::Show_balloon(TrayBalloonIcon icon, wchar_t const *message,
-                              HBITMAP thumbnail) {
+                              HBITMAP thumbnail, std::wstring_view file_path) {
     if (!Is_open() || !message || message[0] == L'\0') {
         if (thumbnail != nullptr) {
             DeleteObject(thumbnail);
@@ -823,7 +954,7 @@ void TrayWindow::Show_balloon(TrayBalloonIcon icon, wchar_t const *message,
     if (!toast_popup_) {
         toast_popup_ = std::make_unique<ToastPopup>(hinstance_);
     }
-    toast_popup_->Show(icon, message, thumbnail);
+    toast_popup_->Show(icon, message, thumbnail, file_path);
 }
 
 LRESULT CALLBACK TrayWindow::Static_wnd_proc(HWND hwnd, UINT msg, WPARAM wparam,

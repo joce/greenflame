@@ -32,7 +32,7 @@ class TrayWindow final {
     [[nodiscard]] bool Create(HINSTANCE hinstance, bool enable_testing_hotkeys = false);
     void Destroy();
     void Show_balloon(TrayBalloonIcon icon, wchar_t const *message,
-                      HBITMAP thumbnail = nullptr);
+                      HBITMAP thumbnail = nullptr, std::wstring_view file_path = {});
 
     [[nodiscard]] bool Is_open() const;
 

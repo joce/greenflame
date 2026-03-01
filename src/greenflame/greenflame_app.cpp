@@ -363,7 +363,7 @@ void GreenflameApp::On_selection_saved_to_file(core::RectPx screen_rect,
         screen_rect, window, saved_path, file_copied_to_clipboard);
     if (config_.show_balloons) {
         tray_window_.Show_balloon(TrayBalloonIcon::Info, result.balloon_message.c_str(),
-                                  thumbnail);
+                                  thumbnail, result.file_path);
     } else if (thumbnail != nullptr) {
         DeleteObject(thumbnail);
     }

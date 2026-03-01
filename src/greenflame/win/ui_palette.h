@@ -21,5 +21,6 @@ inline constexpr COLORREF kToastAccentWarning = RGB(240, 173, 78);
 inline constexpr COLORREF kToastAccentError = RGB(217, 83, 79);
 inline constexpr COLORREF kToastIconGlyphLight = RGB(255, 255, 255);
 inline constexpr COLORREF kToastIconGlyphWarning = RGB(64, 48, 0);
+inline constexpr COLORREF kToastLinkText = RGB(0, 102, 204);
 
 } // namespace greenflame

@@ -189,7 +189,8 @@ SelectionSavedResult AppController::On_selection_saved_to_file(
     bool file_copied) {
     Store_last_capture(screen_rect, window);
     return SelectionSavedResult{
-        core::Build_saved_selection_balloon_message(saved_path, file_copied)};
+        core::Build_saved_selection_balloon_message(saved_path, file_copied),
+        std::wstring(saved_path)};
 }
 
 CliResult AppController::Run_cli_capture_mode(core::CliOptions const &cli_options) {

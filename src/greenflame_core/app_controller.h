@@ -12,6 +12,7 @@ struct AppConfig;
 
 struct SelectionSavedResult final {
     std::wstring balloon_message = {};
+    std::wstring file_path = {};
 };
 
 struct ClipboardCopyResult final {

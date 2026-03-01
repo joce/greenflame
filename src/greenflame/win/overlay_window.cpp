@@ -399,17 +399,15 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
             GetWindowRect(hwnd_, &wr);
             ox = wr.left;
             oy = wr.top;
-            if (eff_ctrl && !eff_shift) {
-                win_rect = window_query_->Get_window_rect_under_cursor(
-                    To_point(cursor_screen), hwnd_);
-            }
-            if (eff_shift && eff_ctrl) {
-                vdesk = Get_virtual_desktop_bounds_px();
-            }
-            if (eff_shift && !eff_ctrl) {
-                monitor_idx =
-                    core::Index_of_monitor_containing(cursor_screen, s.cached_monitors);
-            }
+            win_rect = (eff_ctrl && !eff_shift)
+                           ? window_query_->Get_window_rect_under_cursor(
+                                 To_point(cursor_screen), hwnd_)
+                           : std::nullopt;
+            if (eff_shift && eff_ctrl) vdesk = Get_virtual_desktop_bounds_px();
+            monitor_idx = (eff_shift && !eff_ctrl)
+                              ? core::Index_of_monitor_containing(cursor_screen,
+                                                                  s.cached_monitors)
+                              : std::nullopt;
         }
         Apply_action(controller_.On_modifier_changed(new_mods, cursor_screen, win_rect,
                                                      vdesk, monitor_idx, ox, oy));
@@ -504,17 +502,14 @@ LRESULT OverlayWindow::On_mouse_move() {
         GetWindowRect(hwnd_, &wr);
         ox = wr.left;
         oy = wr.top;
-        if (ctrl && !shift) {
-            win_rect = window_query_->Get_window_rect_under_cursor(
-                To_point(cursor_screen), hwnd_);
-        }
-        if (shift && ctrl) {
-            vdesk = Get_virtual_desktop_bounds_px();
-        }
-        if (shift && !ctrl) {
-            monitor_idx =
-                core::Index_of_monitor_containing(cursor_screen, s.cached_monitors);
-        }
+        win_rect = (ctrl && !shift) ? window_query_->Get_window_rect_under_cursor(
+                                          To_point(cursor_screen), hwnd_)
+                                    : std::nullopt;
+        if (shift && ctrl) vdesk = Get_virtual_desktop_bounds_px();
+        monitor_idx =
+            (shift && !ctrl)
+                ? core::Index_of_monitor_containing(cursor_screen, s.cached_monitors)
+                : std::nullopt;
     }
     Apply_action(controller_.On_pointer_move(mods, cursor_client, cursor_screen,
                                              win_rect, vdesk, monitor_idx, ox, oy,
@@ -733,31 +728,19 @@ void OverlayWindow::Save_directly_and_close(bool copy_saved_file_to_clipboard) {
     }
     if (!saved) {
         (void)DeleteFileW(reserved_path.c_str());
+        cropped.Free();
+        Destroy();
+        return;
     }
-
-    HBITMAP thumb = saved ? Create_thumbnail_from_capture(cropped) : nullptr;
-    cropped.Free();
-    if (saved) {
-        bool file_copied_to_clipboard = false;
-        if (copy_saved_file_to_clipboard) {
-            file_copied_to_clipboard =
-                Copy_file_path_to_clipboard(reserved_path, hwnd_);
-        }
-        if (config_) {
-            config_->default_save_dir = save_dir;
-            config_->Normalize();
-        }
-        if (events_) {
-            events_->On_selection_saved_to_file(
-                Selection_screen_rect(), controller_.State().selection_window, thumb,
-                reserved_path, file_copied_to_clipboard);
-            thumb = nullptr;
-        }
-        if (thumb != nullptr) {
-            DeleteObject(thumb);
-        }
+    bool file_copied_to_clipboard = false;
+    if (copy_saved_file_to_clipboard) {
+        file_copied_to_clipboard = Copy_file_path_to_clipboard(reserved_path, hwnd_);
     }
-    Destroy();
+    if (config_) {
+        config_->default_save_dir = save_dir;
+        config_->Normalize();
+    }
+    Notify_save_and_close(cropped, reserved_path, file_copied_to_clipboard);
 }
 
 void OverlayWindow::Save_as_and_close(bool copy_saved_file_to_clipboard) {
@@ -824,34 +807,42 @@ void OverlayWindow::Save_as_and_close(bool copy_saved_file_to_clipboard) {
         saved = Save_capture_to_png(cropped, path_buffer.data());
     }
 
-    HBITMAP thumb = saved ? Create_thumbnail_from_capture(cropped) : nullptr;
-    cropped.Free();
-    if (saved) {
-        bool file_copied_to_clipboard = false;
-        if (copy_saved_file_to_clipboard) {
-            file_copied_to_clipboard = Copy_file_path_to_clipboard(
-                std::wstring_view(path_buffer.data()), hwnd_);
-        }
-        std::wstring_view const path_view(path_buffer.data());
-        size_t const last_slash_pos = path_view.rfind(L'\\');
-        if (last_slash_pos != std::wstring_view::npos && config_) {
-            size_t const dir_len = last_slash_pos;
-            if (dir_len < path_span.size()) {
-                config_->last_save_as_dir.assign(path_buffer.data(), dir_len);
-                config_->Normalize();
-            }
-        }
-        if (events_) {
-            events_->On_selection_saved_to_file(
-                Selection_screen_rect(), controller_.State().selection_window, thumb,
-                path_view, file_copied_to_clipboard);
-            thumb = nullptr;
-        }
-        if (thumb != nullptr) {
-            DeleteObject(thumb);
-        }
-        Destroy();
+    if (!saved) {
+        cropped.Free();
+        return;
     }
+    bool file_copied_to_clipboard = false;
+    if (copy_saved_file_to_clipboard) {
+        file_copied_to_clipboard =
+            Copy_file_path_to_clipboard(std::wstring_view(path_buffer.data()), hwnd_);
+    }
+    std::wstring_view const path_view(path_buffer.data());
+    size_t const last_slash_pos = path_view.rfind(L'\\');
+    if (last_slash_pos != std::wstring_view::npos && config_) {
+        size_t const dir_len = last_slash_pos;
+        if (dir_len < path_span.size()) {
+            config_->last_save_as_dir.assign(path_buffer.data(), dir_len);
+            config_->Normalize();
+        }
+    }
+    Notify_save_and_close(cropped, path_view, file_copied_to_clipboard);
+}
+
+void OverlayWindow::Notify_save_and_close(GdiCaptureResult &cropped,
+                                          std::wstring_view saved_path,
+                                          bool file_copied_to_clipboard) {
+    HBITMAP thumb = Create_thumbnail_from_capture(cropped);
+    cropped.Free();
+    if (events_) {
+        events_->On_selection_saved_to_file(Selection_screen_rect(),
+                                            controller_.State().selection_window, thumb,
+                                            saved_path, file_copied_to_clipboard);
+        thumb = nullptr;
+    }
+    if (thumb != nullptr) {
+        DeleteObject(thumb);
+    }
+    Destroy();
 }
 
 void OverlayWindow::Copy_to_clipboard_and_close() {

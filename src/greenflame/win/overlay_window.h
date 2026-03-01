@@ -9,6 +9,7 @@ namespace core {
 struct AppConfig;
 }
 class IWindowQuery;
+struct GdiCaptureResult;
 
 class IOverlayEvents {
   public:
@@ -59,6 +60,8 @@ class OverlayWindow final {
     void Save_directly_and_close(bool copy_saved_file_to_clipboard);
     void Save_as_and_close(bool copy_saved_file_to_clipboard);
     void Copy_to_clipboard_and_close();
+    void Notify_save_and_close(GdiCaptureResult &cropped, std::wstring_view saved_path,
+                               bool file_copied_to_clipboard);
 
     LRESULT On_paint();
     LRESULT On_destroy();

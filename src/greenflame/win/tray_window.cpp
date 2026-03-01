@@ -290,98 +290,17 @@ class TrayWindow::ToastPopup final {
         Ensure_title_font(dpi);
         Ensure_body_font(dpi);
 
-        int const width = Scale_for_dpi(kWidthDip, dpi);
         int const margin = Scale_for_dpi(kMarginDip, dpi);
-        int const padding = Scale_for_dpi(kPaddingDip, dpi);
-        int const accent_bar_width = Scale_for_dpi(kAccentBarWidthDip, dpi);
-        int const header_gap = Scale_for_dpi(kHeaderGapDip, dpi);
-        int const icon_size = Scale_for_dpi(kIconDip, dpi);
-        int const icon_gap = Scale_for_dpi(kIconGapDip, dpi);
-        int const title_app_icon_size = Scale_for_dpi(kTitleAppIconDip, dpi);
-        int const min_height = Scale_for_dpi(kMinHeightDip, dpi);
-        int const max_height = Scale_for_dpi(kMaxHeightDip, dpi);
-        int const thumbnail_max_height = Scale_for_dpi(kThumbnailMaxHeightDip, dpi);
-        int const thumbnail_gap = Scale_for_dpi(kThumbnailGapDip, dpi);
-
-        int const content_left = accent_bar_width + padding;
-        int const content_right = width - padding;
-        int const content_width = content_right - content_left;
-        int const title_left = content_left;
-        int const title_text_left =
-            title_left + title_app_icon_size + title_app_icon_size;
-        int title_right = content_right;
-        if (title_right <= title_text_left) {
-            title_right = title_text_left + 1;
-        }
-        int const text_left = content_left + icon_size + icon_gap;
-        int const text_width = std::max(1, content_right - text_left);
-
-        int title_height = title_app_icon_size;
-        int body_height = Scale_for_dpi(kFallbackTextHeightDip, dpi);
-        int link_height = 0;
 
         HDC const hdc = GetDC(hwnd_);
+        HDC const measure_dc = hdc ? hdc : GetDC(nullptr);
+        ToastLayout const layout = Compute_layout(dpi, measure_dc);
         if (hdc != nullptr) {
-            HGDIOBJ const old_font = SelectObject(
-                hdc, title_font_ ? title_font_ : GetStockObject(DEFAULT_GUI_FONT));
-
-            RECT title_measure{};
-            title_measure.right = title_right - title_text_left;
-            DrawTextW(hdc, kTitleText, -1, &title_measure,
-                      DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS |
-                          DT_CALCRECT);
-            int const measured_title = title_measure.bottom - title_measure.top;
-            if (measured_title > title_height) {
-                title_height = measured_title;
-            }
-
-            SelectObject(hdc,
-                         body_font_ ? body_font_ : GetStockObject(DEFAULT_GUI_FONT));
-            RECT body_measure{};
-            body_measure.right = text_width;
-            DrawTextW(hdc, message_.c_str(), -1, &body_measure,
-                      DT_LEFT | DT_TOP | DT_WORDBREAK | DT_NOPREFIX | DT_CALCRECT);
-            int const measured_body = body_measure.bottom - body_measure.top;
-            if (measured_body > 0) {
-                body_height = measured_body;
-            }
-
-            if (!file_path_.empty()) {
-                RECT link_measure{};
-                link_measure.right = text_width;
-                DrawTextW(hdc, file_path_.c_str(), -1, &link_measure,
-                          DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX | DT_CALCRECT);
-                link_height = link_measure.bottom - link_measure.top;
-                if (link_height <= 0) {
-                    link_height = Scale_for_dpi(kBodyFontDip, dpi);
-                }
-            }
-
-            SelectObject(hdc, old_font);
             ReleaseDC(hwnd_, hdc);
+        } else if (measure_dc != nullptr) {
+            ReleaseDC(nullptr, measure_dc);
         }
-
-        int const body_row_height = std::max(icon_size, body_height);
-        int height = padding + title_height + header_gap + body_row_height;
-        if (!file_path_.empty()) {
-            height += Scale_for_dpi(kLinkGapDip, dpi) + link_height;
-        }
-        height += padding;
-
-        if (thumbnail_ != nullptr && thumbnail_width_ > 0 && thumbnail_height_ > 0) {
-            float const scale_w = static_cast<float>(content_width) /
-                                  static_cast<float>(thumbnail_width_);
-            float const scale_h = static_cast<float>(thumbnail_max_height) /
-                                  static_cast<float>(thumbnail_height_);
-            float scale = (std::min)(scale_w, scale_h);
-            if (scale > 1.0f) {
-                scale = 1.0f;
-            }
-            height += thumbnail_gap +
-                      static_cast<int>(static_cast<float>(thumbnail_height_) * scale);
-        }
-
-        height = std::clamp(height, min_height, max_height);
+        link_rect_ = layout.link_rect;
 
         POINT cursor{};
         GetCursorPos(&cursor);
@@ -398,9 +317,9 @@ class TrayWindow::ToastPopup final {
             work_area.bottom = GetSystemMetrics(SM_CYSCREEN);
         }
 
-        int const x = work_area.right - width - margin;
-        int const y = work_area.bottom - height - margin;
-        SetWindowPos(hwnd_, HWND_TOPMOST, x, y, width, height,
+        int const x = work_area.right - layout.width - margin;
+        int const y = work_area.bottom - layout.total_height - margin;
+        SetWindowPos(hwnd_, HWND_TOPMOST, x, y, layout.width, layout.total_height,
                      SWP_SHOWWINDOW | SWP_NOACTIVATE);
         InvalidateRect(hwnd_, nullptr, TRUE);
         KillTimer(hwnd_, kTimerId);
@@ -418,6 +337,34 @@ class TrayWindow::ToastPopup final {
     }
 
   private:
+    struct ToastLayout {
+        int padding;
+        int accent_bar_width;
+        int header_gap;
+        int icon_size;
+        int icon_gap;
+        int title_app_icon_size;
+        int title_icon_text_gap;
+        int thumbnail_max_height;
+        int thumbnail_gap;
+        int link_gap;
+        int width;
+        int content_left;
+        int content_right;
+        int content_width;
+        int title_left;
+        int title_text_left;
+        int title_right;
+        int text_left;
+        int text_width;
+        int body_top;
+        int body_row_height;
+        int total_height;
+        RECT link_rect; // zeroed when file_path_ is empty
+    };
+
+    [[nodiscard]] ToastLayout Compute_layout(UINT dpi, HDC hdc) const;
+
     static constexpr UINT_PTR kTimerId = 1;
     static constexpr UINT kDurationMs = 5000;
     static constexpr int kWidthDip = 340;
@@ -428,6 +375,8 @@ class TrayWindow::ToastPopup final {
     static constexpr int kIconDip = 20;
     static constexpr int kIconGapDip = 10;
     static constexpr int kTitleAppIconDip = 14;
+    static constexpr int kTitleIconTextGapDip =
+        kTitleAppIconDip; // gap intentionally matches icon width
     static constexpr int kTitleFontDip = 12;
     static constexpr int kBodyFontDip = 13;
     static constexpr int kMinHeightDip = 56;
@@ -606,25 +555,14 @@ class TrayWindow::ToastPopup final {
                 Ensure_title_font(dpi);
                 Ensure_body_font(dpi);
 
-                int const padding = Scale_for_dpi(kPaddingDip, dpi);
-                int const accent_bar_width = Scale_for_dpi(kAccentBarWidthDip, dpi);
-                int const header_gap = Scale_for_dpi(kHeaderGapDip, dpi);
-                int const icon_size = Scale_for_dpi(kIconDip, dpi);
-                int const icon_gap = Scale_for_dpi(kIconGapDip, dpi);
-                int const title_app_icon_size = Scale_for_dpi(kTitleAppIconDip, dpi);
-                int const thumbnail_max_height =
-                    Scale_for_dpi(kThumbnailMaxHeightDip, dpi);
-                int const thumbnail_gap = Scale_for_dpi(kThumbnailGapDip, dpi);
+                ToastLayout const layout = Compute_layout(dpi, hdc);
+                link_rect_ = layout.link_rect;
 
                 COLORREF const background_color = kToastBackground;
                 COLORREF const border_color = kToastBorder;
                 COLORREF const title_color = kToastTitleText;
                 COLORREF const text_color = kToastBodyText;
                 COLORREF const accent_color = Toast_accent_color(icon_);
-
-                int const content_left = accent_bar_width + padding;
-                int const content_right = client.right - padding;
-                int const content_width = content_right - content_left;
 
                 HBRUSH const bg_brush = CreateSolidBrush(background_color);
                 if (bg_brush != nullptr) {
@@ -633,7 +571,7 @@ class TrayWindow::ToastPopup final {
                 }
 
                 RECT accent_bar = client;
-                accent_bar.right = accent_bar.left + accent_bar_width;
+                accent_bar.right = accent_bar.left + layout.accent_bar_width;
                 HBRUSH const accent_brush = CreateSolidBrush(accent_color);
                 if (accent_brush != nullptr) {
                     FillRect(hdc, &accent_bar, accent_brush);
@@ -646,32 +584,25 @@ class TrayWindow::ToastPopup final {
                     DeleteObject(border_brush);
                 }
 
-                int const title_left = content_left;
-                int const title_text_left =
-                    title_left + title_app_icon_size + title_app_icon_size;
-                int title_right = content_right;
-                if (title_right <= title_text_left) {
-                    title_right = title_text_left + 1;
-                }
-
                 RECT title_rect{};
-                title_rect.left = title_text_left;
-                title_rect.top = padding;
-                title_rect.right = title_right;
-                title_rect.bottom = title_rect.top + title_app_icon_size;
+                title_rect.left = layout.title_text_left;
+                title_rect.top = layout.padding;
+                title_rect.right = layout.title_right;
+                title_rect.bottom = title_rect.top + layout.title_app_icon_size;
 
-                HICON loaded_app_icon = static_cast<HICON>(LoadImageW(
-                    hinstance_, MAKEINTRESOURCEW(kAppIconResourceId), IMAGE_ICON,
-                    title_app_icon_size, title_app_icon_size, LR_DEFAULTCOLOR));
+                HICON loaded_app_icon = static_cast<HICON>(
+                    LoadImageW(hinstance_, MAKEINTRESOURCEW(kAppIconResourceId),
+                               IMAGE_ICON, layout.title_app_icon_size,
+                               layout.title_app_icon_size, LR_DEFAULTCOLOR));
                 if (loaded_app_icon != nullptr) {
-                    int const app_icon_x = title_left;
+                    int const app_icon_x = layout.title_left;
                     int const app_icon_y =
-                        title_rect.top +
-                        ((title_rect.bottom - title_rect.top - title_app_icon_size) /
-                         2);
+                        title_rect.top + ((title_rect.bottom - title_rect.top -
+                                           layout.title_app_icon_size) /
+                                          2);
                     DrawIconEx(hdc, app_icon_x, app_icon_y, loaded_app_icon,
-                               title_app_icon_size, title_app_icon_size, 0, nullptr,
-                               DI_NORMAL);
+                               layout.title_app_icon_size, layout.title_app_icon_size,
+                               0, nullptr, DI_NORMAL);
                     DestroyIcon(loaded_app_icon);
                 }
 
@@ -683,16 +614,14 @@ class TrayWindow::ToastPopup final {
                           DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX |
                               DT_END_ELLIPSIS);
 
-                int const body_top = title_rect.bottom + header_gap;
+                Draw_severity_icon(hdc, layout.content_left, layout.body_top,
+                                   layout.icon_size, icon_);
 
-                Draw_severity_icon(hdc, content_left, body_top, icon_size, icon_);
-
-                int const text_left = content_left + icon_size + icon_gap;
                 RECT body_rect{};
-                body_rect.left = text_left;
-                body_rect.top = body_top;
-                body_rect.right = content_right;
-                body_rect.bottom = client.bottom - padding;
+                body_rect.left = layout.text_left;
+                body_rect.top = layout.body_top;
+                body_rect.right = layout.content_right;
+                body_rect.bottom = client.bottom - layout.padding;
 
                 SetTextColor(hdc, text_color);
                 SelectObject(hdc, body_font_ ? body_font_
@@ -706,27 +635,13 @@ class TrayWindow::ToastPopup final {
                 DrawTextW(hdc, message_.c_str(), -1, &body_rect,
                           DT_LEFT | DT_TOP | DT_WORDBREAK | DT_NOPREFIX);
 
-                // Compute bottom of body content (text or icon, whichever is taller).
-                int anchor_bottom = std::max(body_text_bottom, body_top + icon_size);
+                // Bottom of body content (text or icon, whichever is taller).
+                int anchor_bottom =
+                    std::max(body_text_bottom, layout.body_top + layout.icon_size);
 
                 // Draw the file path as a clickable link when present.
                 if (!file_path_.empty()) {
-                    int const link_gap = Scale_for_dpi(kLinkGapDip, dpi);
-                    int const link_top = anchor_bottom + link_gap;
-
-                    // Measure link text height (single line).
-                    RECT link_measure{text_left, link_top, content_right,
-                                      link_top + Scale_for_dpi(kBodyFontDip, dpi) * 2};
-                    DrawTextW(hdc, file_path_.c_str(), -1, &link_measure,
-                              DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX |
-                                  DT_CALCRECT);
-                    int const link_line_h = (link_measure.bottom > link_top)
-                                                ? (link_measure.bottom - link_top)
-                                                : Scale_for_dpi(kBodyFontDip, dpi);
-
-                    RECT link_draw_rect{text_left, link_top, content_right,
-                                        link_top + link_line_h};
-                    link_rect_ = link_draw_rect;
+                    RECT link_draw_rect = layout.link_rect;
 
                     SetTextColor(hdc, kToastLinkText);
                     DrawTextW(hdc, file_path_.c_str(), -1, &link_draw_rect,
@@ -761,10 +676,11 @@ class TrayWindow::ToastPopup final {
                 if (thumbnail_ != nullptr && thumbnail_width_ > 0 &&
                     thumbnail_height_ > 0) {
 
-                    float const scale_w = static_cast<float>(content_width) /
+                    float const scale_w = static_cast<float>(layout.content_width) /
                                           static_cast<float>(thumbnail_width_);
-                    float const scale_h = static_cast<float>(thumbnail_max_height) /
-                                          static_cast<float>(thumbnail_height_);
+                    float const scale_h =
+                        static_cast<float>(layout.thumbnail_max_height) /
+                        static_cast<float>(thumbnail_height_);
                     float scale = (std::min)(scale_w, scale_h);
                     if (scale > 1.0f) {
                         scale = 1.0f;
@@ -773,8 +689,8 @@ class TrayWindow::ToastPopup final {
                         static_cast<int>(static_cast<float>(thumbnail_width_) * scale);
                     int const thumb_h =
                         static_cast<int>(static_cast<float>(thumbnail_height_) * scale);
-                    int const thumb_top = anchor_bottom + thumbnail_gap;
-                    int const thumb_left = content_left;
+                    int const thumb_top = anchor_bottom + layout.thumbnail_gap;
+                    int const thumb_left = layout.content_left;
 
                     RECT thumb_border_rect{};
                     thumb_border_rect.left = thumb_left - 1;
@@ -824,6 +740,112 @@ class TrayWindow::ToastPopup final {
     bool mouse_inside_ = false;
     bool mouse_over_link_ = false;
 };
+
+TrayWindow::ToastPopup::ToastLayout
+TrayWindow::ToastPopup::Compute_layout(UINT dpi, HDC hdc) const {
+    ToastLayout l{};
+    l.padding = Scale_for_dpi(kPaddingDip, dpi);
+    l.accent_bar_width = Scale_for_dpi(kAccentBarWidthDip, dpi);
+    l.header_gap = Scale_for_dpi(kHeaderGapDip, dpi);
+    l.icon_size = Scale_for_dpi(kIconDip, dpi);
+    l.icon_gap = Scale_for_dpi(kIconGapDip, dpi);
+    l.title_app_icon_size = Scale_for_dpi(kTitleAppIconDip, dpi);
+    l.title_icon_text_gap = Scale_for_dpi(kTitleIconTextGapDip, dpi);
+    l.thumbnail_max_height = Scale_for_dpi(kThumbnailMaxHeightDip, dpi);
+    l.thumbnail_gap = Scale_for_dpi(kThumbnailGapDip, dpi);
+    l.link_gap = Scale_for_dpi(kLinkGapDip, dpi);
+    l.width = Scale_for_dpi(kWidthDip, dpi);
+
+    l.content_left = l.accent_bar_width + l.padding;
+    l.content_right = l.width - l.padding;
+    l.content_width = l.content_right - l.content_left;
+    l.title_left = l.content_left;
+    l.title_text_left = l.title_left + l.title_app_icon_size + l.title_icon_text_gap;
+    l.title_right = l.content_right;
+    if (l.title_right <= l.title_text_left) {
+        l.title_right = l.title_text_left + 1;
+    }
+    l.text_left = l.content_left + l.icon_size + l.icon_gap;
+    l.text_width = std::max(1, l.content_right - l.text_left);
+
+    // Text measurements.
+    int title_height = l.title_app_icon_size;
+    int body_height = Scale_for_dpi(kFallbackTextHeightDip, dpi);
+    int link_height = 0;
+
+    HGDIOBJ const old_font =
+        SelectObject(hdc, title_font_ ? title_font_ : GetStockObject(DEFAULT_GUI_FONT));
+
+    RECT title_measure{};
+    title_measure.right = l.title_right - l.title_text_left;
+    DrawTextW(hdc, kTitleText, -1, &title_measure,
+              DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS |
+                  DT_CALCRECT);
+    int const measured_title = title_measure.bottom - title_measure.top;
+    if (measured_title > title_height) {
+        title_height = measured_title;
+    }
+
+    SelectObject(hdc, body_font_ ? body_font_ : GetStockObject(DEFAULT_GUI_FONT));
+    RECT body_measure{};
+    body_measure.right = l.text_width;
+    DrawTextW(hdc, message_.c_str(), -1, &body_measure,
+              DT_LEFT | DT_TOP | DT_WORDBREAK | DT_NOPREFIX | DT_CALCRECT);
+    int const measured_body = body_measure.bottom - body_measure.top;
+    if (measured_body > 0) {
+        body_height = measured_body;
+    }
+
+    if (!file_path_.empty()) {
+        RECT link_measure{};
+        link_measure.right = l.text_width;
+        DrawTextW(hdc, file_path_.c_str(), -1, &link_measure,
+                  DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX | DT_CALCRECT);
+        link_height = link_measure.bottom - link_measure.top;
+        if (link_height <= 0) {
+            link_height = Scale_for_dpi(kBodyFontDip, dpi);
+        }
+    }
+
+    SelectObject(hdc, old_font);
+
+    l.body_row_height = std::max(l.icon_size, body_height);
+    l.body_top = l.padding + l.title_app_icon_size + l.header_gap;
+
+    // Compute link_rect when a file path is present.
+    l.link_rect = {};
+    if (!file_path_.empty()) {
+        int const body_text_bottom = l.body_top + body_measure.bottom;
+        int const anchor_bottom = std::max(body_text_bottom, l.body_top + l.icon_size);
+        int const link_top = anchor_bottom + l.link_gap;
+        l.link_rect = {l.text_left, link_top, l.content_right, link_top + link_height};
+    }
+
+    // Total height.
+    int height = l.padding + title_height + l.header_gap + l.body_row_height;
+    if (!file_path_.empty()) {
+        height += l.link_gap + link_height;
+    }
+    height += l.padding;
+
+    if (thumbnail_ != nullptr && thumbnail_width_ > 0 && thumbnail_height_ > 0) {
+        float const scale_w =
+            static_cast<float>(l.content_width) / static_cast<float>(thumbnail_width_);
+        float const scale_h = static_cast<float>(l.thumbnail_max_height) /
+                              static_cast<float>(thumbnail_height_);
+        float scale = (std::min)(scale_w, scale_h);
+        if (scale > 1.0f) {
+            scale = 1.0f;
+        }
+        height += l.thumbnail_gap +
+                  static_cast<int>(static_cast<float>(thumbnail_height_) * scale);
+    }
+
+    int const min_height = Scale_for_dpi(kMinHeightDip, dpi);
+    int const max_height = Scale_for_dpi(kMaxHeightDip, dpi);
+    l.total_height = std::clamp(height, min_height, max_height);
+    return l;
+}
 
 TrayWindow::TrayWindow(ITrayEvents *events) : events_(events) {}
 
@@ -987,47 +1009,66 @@ LRESULT CALLBACK TrayWindow::Static_wnd_proc(HWND hwnd, UINT msg, WPARAM wparam,
 LRESULT TrayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
     switch (msg) {
     case WM_COMMAND: {
-        int const command = LOWORD(wparam);
-        if (command == StartCapture) {
+        switch (static_cast<CommandId>(LOWORD(wparam))) {
+        case StartCapture:
             Notify_start_capture();
-        } else if (command == CopyWindow) {
+            break;
+        case CopyWindow:
             PostMessage(hwnd_, kDeferredCopyWindowMessage, 0, 0);
-        } else if (command == CopyMonitor) {
+            break;
+        case CopyMonitor:
             Notify_copy_monitor_to_clipboard();
-        } else if (command == CopyDesktop) {
+            break;
+        case CopyDesktop:
             Notify_copy_desktop_to_clipboard();
-        } else if (command == CopyLastRegion) {
+            break;
+        case CopyLastRegion:
             Notify_copy_last_region_to_clipboard();
-        } else if (command == CopyLastWindow) {
+            break;
+        case CopyLastWindow:
             Notify_copy_last_window_to_clipboard();
-        } else if (command == Exit) {
-            if (events_) {
-                events_->On_exit_requested();
-            }
+            break;
+        case Exit:
+            if (events_) events_->On_exit_requested();
+            break;
         }
         return 0;
     }
     case WM_HOTKEY:
-        if (wparam == HotkeyStartCapture) {
+        switch (static_cast<HotkeyId>(wparam)) {
+        case HotkeyStartCapture:
             Notify_start_capture();
-        } else if (wparam == HotkeyCopyWindow) {
+            break;
+        case HotkeyCopyWindow:
             Notify_copy_window_to_clipboard();
-        } else if (wparam == HotkeyCopyMonitor) {
+            break;
+        case HotkeyCopyMonitor:
             Notify_copy_monitor_to_clipboard();
-        } else if (wparam == HotkeyCopyDesktop) {
+            break;
+        case HotkeyCopyDesktop:
             Notify_copy_desktop_to_clipboard();
-        } else if (wparam == HotkeyCopyLastRegion) {
+            break;
+        case HotkeyCopyLastRegion:
             Notify_copy_last_region_to_clipboard();
-        } else if (wparam == HotkeyCopyLastWindow) {
+            break;
+        case HotkeyCopyLastWindow:
             Notify_copy_last_window_to_clipboard();
-        }
+            break;
 #ifdef DEBUG
-        else if (testing_hotkeys_enabled_ && wparam == HotkeyTestingError) {
-            Show_balloon(TrayBalloonIcon::Error, kTestingErrorBalloonMessage);
-        } else if (testing_hotkeys_enabled_ && wparam == HotkeyTestingWarning) {
-            Show_balloon(TrayBalloonIcon::Warning, kTestingWarningBalloonMessage);
-        }
+        case HotkeyTestingError:
+            if (testing_hotkeys_enabled_)
+                Show_balloon(TrayBalloonIcon::Error, kTestingErrorBalloonMessage);
+            break;
+        case HotkeyTestingWarning:
+            if (testing_hotkeys_enabled_)
+                Show_balloon(TrayBalloonIcon::Warning, kTestingWarningBalloonMessage);
+            break;
+#else
+        case HotkeyTestingError:
+        case HotkeyTestingWarning:
+            break;
 #endif
+        }
         return 0;
     case WM_DESTROY: {
         if (s_foreground_hook) {

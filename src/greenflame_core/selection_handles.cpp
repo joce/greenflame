@@ -24,34 +24,36 @@ std::optional<SelectionHandle> Hit_test_border_zone(RectPx selection,
     int const cy = cursor_client_px.y;
 
     // Is cursor within band of each edge (AND within that edge's lateral extent)?
-    bool const on_top    = (cy >= r.top - band && cy <= r.top + band) &&
-                           cx >= r.left - band && cx <= r.right - 1 + band;
+    bool const on_top = (cy >= r.top - band && cy <= r.top + band) &&
+                        cx >= r.left - band && cx <= r.right - 1 + band;
     bool const on_bottom = (cy >= r.bottom - 1 - band && cy <= r.bottom - 1 + band) &&
                            cx >= r.left - band && cx <= r.right - 1 + band;
-    bool const on_left   = (cx >= r.left - band && cx <= r.left + band) &&
-                           cy >= r.top - band && cy <= r.bottom - 1 + band;
-    bool const on_right  = (cx >= r.right - 1 - band && cx <= r.right - 1 + band) &&
-                           cy >= r.top - band && cy <= r.bottom - 1 + band;
+    bool const on_left = (cx >= r.left - band && cx <= r.left + band) &&
+                         cy >= r.top - band && cy <= r.bottom - 1 + band;
+    bool const on_right = (cx >= r.right - 1 - band && cx <= r.right - 1 + band) &&
+                          cy >= r.top - band && cy <= r.bottom - 1 + band;
 
     if (!on_top && !on_bottom && !on_left && !on_right) return std::nullopt;
 
     // Corner zone membership per axis.
-    bool const in_lc = cx <  r.left  + corner_w;
+    bool const in_lc = cx < r.left + corner_w;
     bool const in_rc = cx >= r.right - corner_w;
-    bool const in_tc = cy <  r.top   + corner_h;
+    bool const in_tc = cy < r.top + corner_h;
     bool const in_bc = cy >= r.bottom - corner_h;
 
     // Corners first (priority over edges).
-    if ((on_top && in_lc) || (on_left && in_tc))    return SelectionHandle::TopLeft;
-    if ((on_top && in_rc) || (on_right && in_tc))   return SelectionHandle::TopRight;
-    if ((on_bottom && in_rc) || (on_right && in_bc)) return SelectionHandle::BottomRight;
+    if ((on_top && in_lc) || (on_left && in_tc)) return SelectionHandle::TopLeft;
+    if ((on_top && in_rc) || (on_right && in_tc)) return SelectionHandle::TopRight;
+    if ((on_bottom && in_rc) || (on_right && in_bc)) {
+        return SelectionHandle::BottomRight;
+    }
     if ((on_bottom && in_lc) || (on_left && in_bc)) return SelectionHandle::BottomLeft;
 
     // Edges (on band but not in any corner zone).
-    if (on_top    && !in_lc && !in_rc) return SelectionHandle::Top;
-    if (on_right  && !in_tc && !in_bc) return SelectionHandle::Right;
+    if (on_top && !in_lc && !in_rc) return SelectionHandle::Top;
+    if (on_right && !in_tc && !in_bc) return SelectionHandle::Right;
     if (on_bottom && !in_lc && !in_rc) return SelectionHandle::Bottom;
-    if (on_left   && !in_tc && !in_bc) return SelectionHandle::Left;
+    if (on_left && !in_tc && !in_bc) return SelectionHandle::Left;
 
     return std::nullopt;
 }

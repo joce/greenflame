@@ -86,16 +86,22 @@ TEST(selection_handles, Hit_test_border_zone_Corners) {
     EXPECT_EQ(Hit_test_border_zone(sel, PointPx{199, 58}), SelectionHandle::TopRight);
 
     // BottomRight: approached from bottom border
-    EXPECT_EQ(Hit_test_border_zone(sel, PointPx{199, 149}), SelectionHandle::BottomRight);
-    EXPECT_EQ(Hit_test_border_zone(sel, PointPx{190, 149}), SelectionHandle::BottomRight);
+    EXPECT_EQ(Hit_test_border_zone(sel, PointPx{199, 149}),
+              SelectionHandle::BottomRight);
+    EXPECT_EQ(Hit_test_border_zone(sel, PointPx{190, 149}),
+              SelectionHandle::BottomRight);
     // BottomRight: approached from right border
-    EXPECT_EQ(Hit_test_border_zone(sel, PointPx{199, 140}), SelectionHandle::BottomRight);
+    EXPECT_EQ(Hit_test_border_zone(sel, PointPx{199, 140}),
+              SelectionHandle::BottomRight);
 
     // BottomLeft: approached from bottom border
-    EXPECT_EQ(Hit_test_border_zone(sel, PointPx{100, 149}), SelectionHandle::BottomLeft);
-    EXPECT_EQ(Hit_test_border_zone(sel, PointPx{108, 149}), SelectionHandle::BottomLeft);
+    EXPECT_EQ(Hit_test_border_zone(sel, PointPx{100, 149}),
+              SelectionHandle::BottomLeft);
+    EXPECT_EQ(Hit_test_border_zone(sel, PointPx{108, 149}),
+              SelectionHandle::BottomLeft);
     // BottomLeft: approached from left border
-    EXPECT_EQ(Hit_test_border_zone(sel, PointPx{100, 140}), SelectionHandle::BottomLeft);
+    EXPECT_EQ(Hit_test_border_zone(sel, PointPx{100, 140}),
+              SelectionHandle::BottomLeft);
 }
 
 TEST(selection_handles, Hit_test_border_zone_TransitionPointCornerToEdge) {

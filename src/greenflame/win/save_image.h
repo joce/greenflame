@@ -18,7 +18,6 @@ bool Save_capture_to_jpeg(GdiCaptureResult const &capture, wchar_t const *path);
 Reserve_unique_file_path(std::wstring_view desired_path) noexcept;
 
 // Returns the filenames (not full paths) of all non-directory entries in dir.
-[[nodiscard]] std::vector<std::wstring>
-List_directory_filenames(std::wstring_view dir);
+[[nodiscard]] std::vector<std::wstring> List_directory_filenames(std::wstring_view dir);
 
 } // namespace greenflame

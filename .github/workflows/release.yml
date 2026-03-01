@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*'
+
+jobs:
+  release:
+    name: Release
+    runs-on: windows-latest
+    permissions:
+      contents: write  # required to create the GitHub Release and upload assets
+
+    steps:
+      # Glob filters in GitHub Actions are not full regex; validate strictly here.
+      - name: Validate tag format
+        shell: bash
+        run: |
+          if ! echo "${{ github.ref_name }}" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Tag '${{ github.ref_name }}' must match v<major>.<minor>.<patch>"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # required to fetch the full annotated tag object
+
+      - name: Set up MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Configure
+        run: cmake --preset x64-release
+
+      - name: Build
+        run: cmake --build --preset x64-release
+
+      - name: Test
+        run: ctest --test-dir build/x64-release --output-on-failure
+
+      - name: Create GitHub Release
+        shell: bash
+        run: |
+          tag_notes=$(git for-each-ref --format='%(contents)' "refs/tags/${{ github.ref_name }}")
+          if [ -n "$tag_notes" ]; then
+            printf '%s' "$tag_notes" > .release_notes.tmp
+            notes_flag="--notes-file .release_notes.tmp"
+          else
+            notes_flag="--generate-notes"
+          fi
+          gh release create "${{ github.ref_name }}" \
+            --draft \
+            --title "Greenflame ${{ github.ref_name }}" \
+            $notes_flag \
+            build/x64-release/greenflame.exe
+        env:
+          GH_TOKEN: ${{ github.token }}

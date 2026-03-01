@@ -162,8 +162,9 @@ TEST(overlay_controller, B_SnapOn_NearEdgeSnaps) {
     auto c = Make_controller();
     // Window rect at screen coords 200,200..400,400, overlay origin at 0,0
     std::vector<RectPx> win_rects = {RectPx::From_ltrb(200, 200, 400, 400)};
-    for (auto const &m : c.State().cached_monitors)
+    for (auto const &m : c.State().cached_monitors) {
         win_rects.push_back(m.bounds);
+    }
     // Press near left edge 200 (cursor at 207 — within threshold 10)
     std::ignore = c.On_primary_press(No_mods(), {207, 100}, {207, 100}, std::nullopt,
                                      std::nullopt, std::nullopt, {}, win_rects, 0, 0);
@@ -173,8 +174,9 @@ TEST(overlay_controller, B_SnapOn_NearEdgeSnaps) {
 TEST(overlay_controller, B_SnapOff_AltHeld_NearEdgeDoesNotSnap) {
     auto c = Make_controller();
     std::vector<RectPx> win_rects = {RectPx::From_ltrb(200, 200, 400, 400)};
-    for (auto const &m : c.State().cached_monitors)
+    for (auto const &m : c.State().cached_monitors) {
         win_rects.push_back(m.bounds);
+    }
     std::ignore = c.On_primary_press(Alt_only(), {207, 100}, {207, 100}, std::nullopt,
                                      std::nullopt, std::nullopt, {}, win_rects, 0, 0);
     EXPECT_EQ(c.State().start_px.x, 207); // not snapped
@@ -599,8 +601,9 @@ TEST(overlay_controller, H_Copy_EmptySelection_ReturnsNone) {
 TEST(overlay_controller, I_AfterPress_SnapEdgesPopulated) {
     auto c = Make_controller();
     std::vector<RectPx> win_rects = {RectPx::From_ltrb(200, 200, 400, 400)};
-    for (auto const &m : c.State().cached_monitors)
+    for (auto const &m : c.State().cached_monitors) {
         win_rects.push_back(m.bounds);
+    }
     std::ignore = c.On_primary_press(No_mods(), {50, 50}, {50, 50}, std::nullopt,
                                      std::nullopt, std::nullopt, {}, win_rects, 0, 0);
     EXPECT_FALSE(c.State().vertical_edges.empty());
@@ -610,8 +613,9 @@ TEST(overlay_controller, I_AfterPress_SnapEdgesPopulated) {
 TEST(overlay_controller, I_SnapEdgesIncludeWindowEdges) {
     auto c = Make_controller();
     std::vector<RectPx> win_rects = {RectPx::From_ltrb(200, 100, 400, 300)};
-    for (auto const &m : c.State().cached_monitors)
+    for (auto const &m : c.State().cached_monitors) {
         win_rects.push_back(m.bounds);
+    }
     std::ignore =
         c.On_primary_press(No_mods(), {50, 50}, {50, 50}, std::nullopt, std::nullopt,
                            std::nullopt, {}, win_rects, 0, 0); // origin 0,0
@@ -626,8 +630,9 @@ TEST(overlay_controller, I_SnapEdgesIncludeWindowEdges) {
 TEST(overlay_controller, I_DragSnapsToEdge_WithinThreshold) {
     auto c = Make_controller();
     std::vector<RectPx> win_rects = {RectPx::From_ltrb(200, 0, 400, 1080)};
-    for (auto const &m : c.State().cached_monitors)
+    for (auto const &m : c.State().cached_monitors) {
         win_rects.push_back(m.bounds);
+    }
     // Start drag far from edge
     std::ignore = c.On_primary_press(No_mods(), {50, 50}, {50, 50}, std::nullopt,
                                      std::nullopt, std::nullopt, {}, win_rects, 0, 0);

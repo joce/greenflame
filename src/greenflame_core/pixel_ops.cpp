@@ -5,6 +5,22 @@ namespace greenflame::core {
 namespace {
 constexpr int kColorChannelMax = 255;
 constexpr float kColorChannelMaxF = static_cast<float>(kColorChannelMax);
+
+constexpr uint8_t Colorref_red(COLORREF color) noexcept {
+    return static_cast<uint8_t>(color & static_cast<COLORREF>(kColorChannelMax));
+}
+
+constexpr uint8_t Colorref_green(COLORREF color) noexcept {
+    constexpr int k_color_green_shift = 8;
+    return static_cast<uint8_t>((color >> k_color_green_shift) &
+                                static_cast<COLORREF>(kColorChannelMax));
+}
+
+constexpr uint8_t Colorref_blue(COLORREF color) noexcept {
+    constexpr int k_color_blue_shift = 16;
+    return static_cast<uint8_t>((color >> k_color_blue_shift) &
+                                static_cast<COLORREF>(kColorChannelMax));
+}
 } // namespace
 
 void Dim_pixels_outside_rect(std::span<uint8_t> pixels, int width, int height,
@@ -29,11 +45,14 @@ void Dim_pixels_outside_rect(std::span<uint8_t> pixels, int width, int height,
 }
 
 void Blend_rect_onto_pixels(std::span<uint8_t> pixels, int width, int height,
-                            int row_bytes, RectPx rect, uint8_t r, uint8_t g, uint8_t b,
+                            int row_bytes, RectPx rect, COLORREF color,
                             uint8_t alpha) noexcept {
     if (width <= 0 || height <= 0 || row_bytes <= 0 || alpha == 0) return;
     float const a = static_cast<float>(alpha) / kColorChannelMaxF;
     float const ia = 1.f - a;
+    int const r = Colorref_red(color);
+    int const g = Colorref_green(color);
+    int const b = Colorref_blue(color);
     int const x0 = std::max(0, rect.left);
     int const y0 = std::max(0, rect.top);
     int const x1 = std::min(width, rect.right);

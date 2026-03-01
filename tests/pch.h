@@ -27,3 +27,7 @@
 #define _ARM_
 #endif
 #include <windef.h>
+
+// Define RGB macro for compatibility with Windows SDK.
+#define RGB(r, g, b)                                                                   \
+    ((COLORREF)(((BYTE)(r) | ((WORD)((BYTE)(g)) << 8)) | (((DWORD)(BYTE)(b)) << 16)))

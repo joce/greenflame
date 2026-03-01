@@ -80,7 +80,8 @@ constexpr size_t kMaxWindowTitleChars = 50;
         return std::to_wstring(*ctx.monitor_index_zero_based + 1);
     }
     if (name == L"num") {
-        return Pad_unsigned(ctx.incrementing_number, 6);
+        constexpr size_t k_padding_width = 6;
+        return Pad_unsigned(ctx.incrementing_number, k_padding_width);
     }
     return {};
 }

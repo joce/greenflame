@@ -80,13 +80,13 @@ void CALLBACK Foreground_changed_hook(HWINEVENTHOOK, DWORD, HWND hwnd, LONG id_o
 [[nodiscard]] COLORREF Toast_accent_color(greenflame::TrayBalloonIcon icon) {
     switch (icon) {
     case greenflame::TrayBalloonIcon::Info:
-        return greenflame::winui::kToastAccentInfo;
+        return greenflame::kToastAccentInfo;
     case greenflame::TrayBalloonIcon::Warning:
-        return greenflame::winui::kToastAccentWarning;
+        return greenflame::kToastAccentWarning;
     case greenflame::TrayBalloonIcon::Error:
-        return greenflame::winui::kToastAccentError;
+        return greenflame::kToastAccentError;
     }
-    return greenflame::winui::kToastAccentInfo;
+    return greenflame::kToastAccentInfo;
 }
 
 bool Ensure_gdiplus() {
@@ -119,7 +119,7 @@ void Draw_info_icon(HDC hdc, int x, int y, int size, COLORREF color) {
     g.FillEllipse(&fill, fx, fy, fs, fs);
 
     auto const stroke = static_cast<Gdiplus::REAL>(std::max(2, size / 8));
-    Gdiplus::Pen pen(Gdiplus_color(greenflame::winui::kToastIconGlyphLight), stroke);
+    Gdiplus::Pen pen(Gdiplus_color(greenflame::kToastIconGlyphLight), stroke);
     pen.SetStartCap(Gdiplus::LineCapRound);
     pen.SetEndCap(Gdiplus::LineCapRound);
     pen.SetLineJoin(Gdiplus::LineJoinRound);
@@ -152,8 +152,7 @@ void Draw_warning_icon(HDC hdc, int x, int y, int size, COLORREF color) {
     Gdiplus::SolidBrush fill(Gdiplus_color(color));
     g.FillPolygon(&fill, triangle, 3);
 
-    Gdiplus::Color const bang_color =
-        Gdiplus_color(greenflame::winui::kToastIconGlyphWarning);
+    Gdiplus::Color const bang_color = Gdiplus_color(greenflame::kToastIconGlyphWarning);
     auto const stroke = static_cast<Gdiplus::REAL>(std::max(2, size / 8));
     float const cx = x_f + size_f * 0.5f;
 
@@ -196,7 +195,7 @@ void Draw_error_icon(HDC hdc, int x, int y, int size, COLORREF color) {
 
     auto const stroke = static_cast<Gdiplus::REAL>(std::max(2, size / 8));
     float const m = size_f * 0.30f;
-    Gdiplus::Pen pen(Gdiplus_color(greenflame::winui::kToastIconGlyphLight), stroke);
+    Gdiplus::Pen pen(Gdiplus_color(greenflame::kToastIconGlyphLight), stroke);
     pen.SetStartCap(Gdiplus::LineCapRound);
     pen.SetEndCap(Gdiplus::LineCapRound);
     g.DrawLine(&pen, x_f + m, y_f + m, x_f + size_f - m, y_f + size_f - m);
@@ -304,7 +303,8 @@ class TrayWindow::ToastPopup final {
         int const content_right = width - padding;
         int const content_width = content_right - content_left;
         int const title_left = content_left;
-        int const title_text_left = title_left + title_app_icon_size + title_app_icon_size;
+        int const title_text_left =
+            title_left + title_app_icon_size + title_app_icon_size;
         int title_right = content_right;
         if (title_right <= title_text_left) {
             title_right = title_text_left + 1;
@@ -402,7 +402,7 @@ class TrayWindow::ToastPopup final {
     static constexpr int kMarginDip = 18;
     static constexpr int kPaddingDip = 14;
     static constexpr int kAccentBarWidthDip = 4;
-    static constexpr int kHeaderGapDip = 6;
+    static constexpr int kHeaderGapDip = 11;
     static constexpr int kIconDip = 20;
     static constexpr int kIconGapDip = 10;
     static constexpr int kTitleAppIconDip = 14;
@@ -537,10 +537,10 @@ class TrayWindow::ToastPopup final {
                     Scale_for_dpi(kThumbnailMaxHeightDip, dpi);
                 int const thumbnail_gap = Scale_for_dpi(kThumbnailGapDip, dpi);
 
-                COLORREF const background_color = winui::kToastBackground;
-                COLORREF const border_color = winui::kToastBorder;
-                COLORREF const title_color = winui::kToastTitleText;
-                COLORREF const text_color = winui::kToastBodyText;
+                COLORREF const background_color = kToastBackground;
+                COLORREF const border_color = kToastBorder;
+                COLORREF const title_color = kToastTitleText;
+                COLORREF const text_color = kToastBodyText;
                 COLORREF const accent_color = Toast_accent_color(icon_);
 
                 int const content_left = accent_bar_width + padding;

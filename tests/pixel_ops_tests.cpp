@@ -65,7 +65,7 @@ TEST(pixel_ops, BlendRectOntoPixels_FullOpacityOverwrites) {
 
     // Blend color (r, g, b) = (100, 150, 200) -> BGRA buffer is (B, G, R) = (200, 150,
     // 100)
-    Blend_rect_onto_pixels(pixels, w, h, row_bytes, rect, 100, 150, 200, 255);
+    Blend_rect_onto_pixels(pixels, w, h, row_bytes, rect, RGB(100, 150, 200), 255);
 
     for (size_t i = 0; i < pixels.size(); i += 4) {
         EXPECT_EQ(pixels[i], 200);     // B
@@ -84,7 +84,7 @@ TEST(pixel_ops, BlendRectOntoPixels_HalfAlphaBlends) {
         pixels[i + 3] = 255;
     }
     RectPx rect = RectPx::From_ltrb(0, 0, 2, 2);
-    Blend_rect_onto_pixels(pixels, w, h, row_bytes, rect, 200, 200, 200, 128);
+    Blend_rect_onto_pixels(pixels, w, h, row_bytes, rect, RGB(200, 200, 200), 128);
     // 0.5 * 0 + 0.5 * 200 = 100
     EXPECT_EQ(pixels[0], 100);
     EXPECT_EQ(pixels[1], 100);

@@ -217,9 +217,9 @@ struct OverlayWindow::OverlayResources {
             CreateFontW(kCenterFontHeight, 0, 0, 0, FW_BLACK, FALSE, FALSE, FALSE,
                         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                         DEFAULT_QUALITY, FF_DONTCARE, L"Segoe UI");
-        paint.crosshair_pen = CreatePen(PS_SOLID, 1, winui::kOverlayCrosshair);
-        paint.border_pen = CreatePen(PS_SOLID, 1, winui::kOverlayBorder);
-        paint.handle_pen = CreatePen(PS_SOLID, 1, winui::kOverlayHandle);
+        paint.crosshair_pen = CreatePen(PS_SOLID, 1, kOverlayCrosshair);
+        paint.border_pen = CreatePen(PS_SOLID, 1, kBorderColor);
+        paint.handle_pen = CreatePen(PS_SOLID, 1, kOverlayHandle);
         return true;
     }
 
@@ -521,8 +521,8 @@ LRESULT OverlayWindow::On_mouse_move() {
                                              static_cast<uint64_t>(GetTickCount64())));
 
     auto const &s2 = controller_.State();
-    if (!s2.final_selection.Is_empty() && !s2.dragging &&
-        !s2.handle_dragging && !s2.move_dragging) {
+    if (!s2.final_selection.Is_empty() && !s2.dragging && !s2.handle_dragging &&
+        !s2.move_dragging) {
         core::PointPx const cur = Get_client_cursor_pos_px(hwnd_);
         bool const tab_held = (GetKeyState(VK_TAB) & 0x8000) != 0;
         std::optional<core::SelectionHandle> hover =

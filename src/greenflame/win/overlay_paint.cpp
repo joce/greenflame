@@ -8,13 +8,9 @@
 #include "greenflame_core/pixel_ops.h"
 #include "greenflame_core/rect_px.h"
 #include "greenflame_core/selection_handles.h"
+#include "ui_palette.h"
 
 namespace {
-
-constexpr unsigned char kCoordTooltipAlpha = 150;
-constexpr unsigned char kCoordTooltipBgR = 217, kCoordTooltipBgG = 240,
-                        kCoordTooltipBgB = 227;
-constexpr COLORREF kCoordTooltipBorderText = RGB(15, 60, 35); // dark SeaGreen
 
 constexpr int kMagnifierSize = 256;
 constexpr int kMagnifierZoom = 8; // source size = kMagnifierSize / kMagnifierZoom
@@ -157,13 +153,14 @@ void Fill_magnifier_checkerboard(HDC dc, int left, int top, int src_x,
     int const base_tx = tile_sx0 / 2; // tile index of the first tile
     int const base_ty = tile_sy0 / 2;
 
-    for (int ty = 0; ; ++ty) {
+    for (int ty = 0;; ++ty) {
         int const my = my0 + ty * kMagnifierCheckerTile;
         if (my >= kMagnifierSize) break;
         int const cell_top = top + std::max(0, my);
-        int const cell_bottom = top + std::min(kMagnifierSize, my + kMagnifierCheckerTile);
+        int const cell_bottom =
+            top + std::min(kMagnifierSize, my + kMagnifierCheckerTile);
         if (cell_bottom <= cell_top) continue;
-        for (int tx = 0; ; ++tx) {
+        for (int tx = 0;; ++tx) {
             int const mx = mx0 + tx * kMagnifierCheckerTile;
             if (mx >= kMagnifierSize) break;
             int const cell_left = left + std::max(0, mx);
@@ -264,8 +261,7 @@ void Draw_border_highlight(HDC dc, HPEN pen, greenflame::core::RectPx const &sel
 void Draw_selection_dim_and_border(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
                                    greenflame::core::RectPx const &sel,
                                    std::span<uint8_t> pixels,
-                                   greenflame::PaintResources const *res,
-                                   bool dashed) {
+                                   greenflame::PaintResources const *res, bool dashed) {
     if (sel.Is_empty()) return;
     int const row_bytes = greenflame::Row_bytes32(w);
     size_t const size = static_cast<size_t>(row_bytes) * static_cast<size_t>(h);
@@ -280,8 +276,8 @@ void Draw_selection_dim_and_border(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
     }
     if (res && res->handle_pen) {
         if (dashed) {
-            Draw_dashed_rect_border(buf_dc, res->handle_pen,
-                                    sel.left, sel.top, sel.right, sel.bottom);
+            Draw_dashed_rect_border(buf_dc, res->handle_pen, sel.left, sel.top,
+                                    sel.right, sel.bottom);
         } else {
             HGDIOBJ old_pen = SelectObject(buf_dc, res->handle_pen);
             HGDIOBJ old_brush = SelectObject(buf_dc, GetStockObject(NULL_BRUSH));
@@ -394,23 +390,23 @@ void Draw_dimension_labels(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
                                                     center_box_left + center_box_w,
                                                     center_box_top + center_box_h);
 
-            constexpr unsigned char side_box_alpha = kCoordTooltipAlpha;
-            constexpr unsigned char center_box_alpha = kCoordTooltipAlpha;
+            constexpr unsigned char side_box_alpha = greenflame::kCoordTooltipAlpha;
+            constexpr unsigned char center_box_alpha = greenflame::kCoordTooltipAlpha;
             greenflame::core::Blend_rect_onto_pixels(
-                pixels, w, h, row_bytes, width_box_rect, kCoordTooltipBgR,
-                kCoordTooltipBgG, kCoordTooltipBgB, side_box_alpha);
+                pixels, w, h, row_bytes, width_box_rect, greenflame::kCoordTooltipBg,
+                side_box_alpha);
             greenflame::core::Blend_rect_onto_pixels(
-                pixels, w, h, row_bytes, height_box_rect, kCoordTooltipBgR,
-                kCoordTooltipBgG, kCoordTooltipBgB, side_box_alpha);
+                pixels, w, h, row_bytes, height_box_rect, greenflame::kCoordTooltipBg,
+                side_box_alpha);
             if (center_fits) {
                 greenflame::core::Blend_rect_onto_pixels(
-                    pixels, w, h, row_bytes, center_box_rect, kCoordTooltipBgR,
-                    kCoordTooltipBgG, kCoordTooltipBgB, center_box_alpha);
+                    pixels, w, h, row_bytes, center_box_rect,
+                    greenflame::kCoordTooltipBg, center_box_alpha);
             }
             SetDIBits(buf_dc, buf_bmp, 0, static_cast<UINT>(h), pixels.data(),
                       reinterpret_cast<BITMAPINFO *>(&bmi_dim), DIB_RGB_COLORS);
 
-            HPEN dark_pen = CreatePen(PS_SOLID, 1, kCoordTooltipBorderText);
+            HPEN dark_pen = CreatePen(PS_SOLID, 1, greenflame::kCoordTooltipText);
             if (dark_pen) {
                 HGDIOBJ old_dim_pen = SelectObject(buf_dc, dark_pen);
                 SelectObject(buf_dc, GetStockObject(NULL_BRUSH));
@@ -428,7 +424,7 @@ void Draw_dimension_labels(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
                 DeleteObject(dark_pen);
             }
             SetBkMode(buf_dc, TRANSPARENT);
-            SetTextColor(buf_dc, kCoordTooltipBorderText);
+            SetTextColor(buf_dc, greenflame::kCoordTooltipText);
             RECT width_text_rc = {width_box_left + k_dim_margin,
                                   width_box_top + k_dim_margin,
                                   width_box_left + width_box_w - k_dim_margin,
@@ -618,8 +614,8 @@ void Draw_crosshair_and_coord_tooltip(HDC buf_dc, HBITMAP buf_bmp, HWND hwnd, in
                                                       mag_top);
                 if (tooltip_ready) {
                     greenflame::core::Blend_rect_onto_pixels(
-                        pixels, w, h, row_bytes, box_rect, kCoordTooltipBgR,
-                        kCoordTooltipBgG, kCoordTooltipBgB, kCoordTooltipAlpha);
+                        pixels, w, h, row_bytes, box_rect, greenflame::kCoordTooltipBg,
+                        greenflame::kCoordTooltipAlpha);
                 }
                 SetDIBits(buf_dc, buf_bmp, 0, static_cast<UINT>(h), pixels.data(),
                           reinterpret_cast<BITMAPINFO *>(&bmi), DIB_RGB_COLORS);
@@ -636,7 +632,7 @@ void Draw_crosshair_and_coord_tooltip(HDC buf_dc, HBITMAP buf_bmp, HWND hwnd, in
                 SelectObject(buf_dc, old_pen);
             }
             SetBkMode(buf_dc, TRANSPARENT);
-            SetTextColor(buf_dc, kCoordTooltipBorderText);
+            SetTextColor(buf_dc, greenflame::kCoordTooltipText);
             RECT text_rc = {tt_left + k_coord_margin, tt_top + k_coord_margin,
                             tt_left + box_w - k_coord_margin,
                             tt_top + box_h - k_coord_margin};
@@ -701,12 +697,12 @@ void Paint_overlay(HDC hdc, HWND hwnd, const RECT &rc, const PaintOverlayInput &
     }
 
     if (in.highlight_handle.has_value() && in.resources && in.resources->handle_pen) {
-        core::RectPx const &hl_sel =
-            (in.handle_dragging || in.move_dragging) ? in.live_rect : in.final_selection;
+        core::RectPx const &hl_sel = (in.handle_dragging || in.move_dragging)
+                                         ? in.live_rect
+                                         : in.final_selection;
         if (!hl_sel.Is_empty()) {
-            Draw_border_highlight(buf_dc, in.resources->handle_pen,
-                                  hl_sel, *in.highlight_handle,
-                                  core::kMaxCornerSizePx);
+            Draw_border_highlight(buf_dc, in.resources->handle_pen, hl_sel,
+                                  *in.highlight_handle, core::kMaxCornerSizePx);
         }
     }
 

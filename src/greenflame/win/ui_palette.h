@@ -1,19 +1,25 @@
 #pragma once
 
-namespace greenflame::winui {
+namespace greenflame {
 
-inline constexpr COLORREF kOverlayCrosshair = RGB(0x20, 0xB2, 0xAA);
-inline constexpr COLORREF kOverlayBorder = RGB(46, 139, 87);
-inline constexpr COLORREF kOverlayHandle = RGB(0x00, 0x80, 0x80);
+inline constexpr COLORREF kBorderColor =
+    RGB(135, 223, 0); // Magnifier contour + crosshair position border color
+inline constexpr COLORREF kOverlayCrosshair = kBorderColor; // The Crosshair color
+inline constexpr COLORREF kOverlayHandle = kBorderColor;    // Selection border color
 
-inline constexpr COLORREF kToastBackground = RGB(0xFA, 0xFA, 0xFA);
-inline constexpr COLORREF kToastTitleText = RGB(0x11, 0x11, 0x11);
-inline constexpr COLORREF kToastBodyText = RGB(0x20, 0x20, 0x20);
-inline constexpr COLORREF kToastBorder = RGB(0xD5, 0xD5, 0xD5);
-inline constexpr COLORREF kToastAccentInfo = RGB(0x2E, 0x8B, 0x57);
-inline constexpr COLORREF kToastAccentWarning = RGB(0xF0, 0xAD, 0x4E);
-inline constexpr COLORREF kToastAccentError = RGB(0xD9, 0x53, 0x4F);
-inline constexpr COLORREF kToastIconGlyphLight = RGB(0xFF, 0xFF, 0xFF);
-inline constexpr COLORREF kToastIconGlyphWarning = RGB(0x40, 0x30, 0x00);
+inline constexpr COLORREF kCoordTooltipBg = RGB(217, 240, 227); // light green
+inline constexpr COLORREF kCoordTooltipText =
+    RGB(26, 121, 6); // Text + size border color
+inline constexpr unsigned char kCoordTooltipAlpha = 200;
 
-} // namespace greenflame::winui
+inline constexpr COLORREF kToastBackground = RGB(250, 250, 250);
+inline constexpr COLORREF kToastTitleText = RGB(17, 17, 17);
+inline constexpr COLORREF kToastBodyText = RGB(32, 32, 32);
+inline constexpr COLORREF kToastBorder = RGB(213, 213, 213);
+inline constexpr COLORREF kToastAccentInfo = RGB(46, 139, 87);
+inline constexpr COLORREF kToastAccentWarning = RGB(240, 173, 78);
+inline constexpr COLORREF kToastAccentError = RGB(217, 83, 79);
+inline constexpr COLORREF kToastIconGlyphLight = RGB(255, 255, 255);
+inline constexpr COLORREF kToastIconGlyphWarning = RGB(64, 48, 0);
+
+} // namespace greenflame

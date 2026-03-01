@@ -12,7 +12,7 @@ void Dim_pixels_outside_rect(std::span<uint8_t> pixels, int width, int height,
 // Alpha-blends a solid color onto the given rect in BGRA pixels.
 // alpha 0 = no change, 255 = full overlay color.
 void Blend_rect_onto_pixels(std::span<uint8_t> pixels, int width, int height,
-                            int row_bytes, RectPx rect, uint8_t r, uint8_t g, uint8_t b,
+                            int row_bytes, RectPx rect, COLORREF color,
                             uint8_t alpha) noexcept;
 
 } // namespace greenflame::core

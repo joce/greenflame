@@ -288,118 +288,255 @@ void Draw_selection_dim_and_border(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
     }
 }
 
+[[nodiscard]] bool Rect_fully_covered_by_monitors(
+    greenflame::core::RectPx rect,
+    std::span<const greenflame::core::RectPx> monitor_rects_client) {
+    greenflame::core::RectPx const target = rect.Normalized();
+    if (target.Is_empty() || monitor_rects_client.empty()) {
+        return false;
+    }
+
+    HRGN target_region = CreateRectRgn(target.left, target.top, target.right, target.bottom);
+    if (!target_region) {
+        return false;
+    }
+    HRGN covered_region = CreateRectRgn(0, 0, 0, 0);
+    if (!covered_region) {
+        DeleteObject(target_region);
+        return false;
+    }
+
+    bool any_monitor_region = false;
+    for (greenflame::core::RectPx const &monitor_rect : monitor_rects_client) {
+        greenflame::core::RectPx const mon = monitor_rect.Normalized();
+        if (mon.Is_empty()) {
+            continue;
+        }
+        HRGN mon_region = CreateRectRgn(mon.left, mon.top, mon.right, mon.bottom);
+        if (!mon_region) {
+            continue;
+        }
+        any_monitor_region = true;
+        (void)CombineRgn(covered_region, covered_region, mon_region, RGN_OR);
+        DeleteObject(mon_region);
+    }
+    if (!any_monitor_region) {
+        DeleteObject(covered_region);
+        DeleteObject(target_region);
+        return false;
+    }
+
+    HRGN uncovered_region = CreateRectRgn(0, 0, 0, 0);
+    if (!uncovered_region) {
+        DeleteObject(covered_region);
+        DeleteObject(target_region);
+        return false;
+    }
+    int const diff_type =
+        CombineRgn(uncovered_region, target_region, covered_region, RGN_DIFF);
+
+    DeleteObject(uncovered_region);
+    DeleteObject(covered_region);
+    DeleteObject(target_region);
+    return diff_type == NULLREGION;
+}
+
 struct DimLabelPositions {
     bool draw_side;
     bool draw_center_box;
+    bool draw_help_box;
     int width_box_left, width_box_top, width_box_w, width_box_h;
     int height_box_left, height_box_top, height_box_w, height_box_h;
     int center_box_left, center_box_top, center_box_w, center_box_h;
-    greenflame::core::RectPx width_box_rect, height_box_rect, center_box_rect;
+    int help_box_left, help_box_top, help_box_w, help_box_h;
+    greenflame::core::RectPx width_box_rect, height_box_rect, center_box_rect,
+        help_box_rect;
 };
+
+constexpr int kDimMargin = 4;
+constexpr int kDimGap = 4;
+constexpr int kCenterMinPadding = 24;
+
+void Measure_text_size(HDC dc, HFONT font, std::wstring const &text,
+                       SIZE &text_size) {
+    text_size = {};
+    if (font == nullptr) {
+        return;
+    }
+    HGDIOBJ const old_font = SelectObject(dc, font);
+    (void)GetTextExtentPoint32W(dc, text.c_str(), static_cast<int>(text.size()),
+                                &text_size);
+    SelectObject(dc, old_font);
+}
+
+void Compute_side_label_positions(DimLabelPositions &p, HDC dc,
+                                  greenflame::core::RectPx const &sel, int w, int h,
+                                  int center_x, int center_y,
+                                  std::wstring const &width_str,
+                                  std::wstring const &height_str, HFONT font_dim) {
+    if (font_dim == nullptr) {
+        p.draw_side = false;
+        return;
+    }
+    p.draw_side = true;
+
+    SIZE width_size = {};
+    SIZE height_size = {};
+    Measure_text_size(dc, font_dim, width_str, width_size);
+    Measure_text_size(dc, font_dim, height_str, height_size);
+
+    p.width_box_w = width_size.cx + 2 * kDimMargin;
+    p.width_box_h = width_size.cy + 2 * kDimMargin;
+    p.height_box_w = height_size.cx + 2 * kDimMargin;
+    p.height_box_h = height_size.cy + 2 * kDimMargin;
+
+    p.width_box_left = center_x - p.width_box_w / 2;
+    bool const above_fits = (sel.top - p.width_box_h - kDimGap >= 0);
+    bool const below_fits = (sel.bottom + kDimGap + p.width_box_h <= h);
+    if (above_fits) {
+        p.width_box_top = sel.top - p.width_box_h - kDimGap;
+    } else if (below_fits) {
+        p.width_box_top = sel.bottom + kDimGap;
+    } else {
+        p.width_box_top = (sel.top - p.width_box_h - kDimGap >= h - p.width_box_h)
+                              ? (sel.bottom + kDimGap)
+                              : (sel.top - p.width_box_h - kDimGap);
+    }
+    if (p.width_box_top < 0) p.width_box_top = 0;
+    if (p.width_box_top + p.width_box_h > h) p.width_box_top = h - p.width_box_h;
+
+    p.height_box_top = center_y - p.height_box_h / 2;
+    int const height_box_left_candidate = sel.left - kDimGap - p.height_box_w;
+    int const height_box_right_candidate = sel.right + kDimGap;
+    bool const left_fits = (height_box_left_candidate >= 0);
+    bool const right_fits = (height_box_right_candidate + p.height_box_w <= w);
+    if (left_fits) {
+        p.height_box_left = height_box_left_candidate;
+    } else if (right_fits) {
+        p.height_box_left = height_box_right_candidate;
+    } else {
+        p.height_box_left = (height_box_left_candidate >= w - p.height_box_w)
+                                ? height_box_right_candidate
+                                : height_box_left_candidate;
+    }
+    if (p.height_box_left < 0) p.height_box_left = 0;
+    if (p.height_box_left + p.height_box_w > w) {
+        p.height_box_left = w - p.height_box_w;
+    }
+
+    p.width_box_rect = greenflame::core::RectPx::From_ltrb(
+        p.width_box_left, p.width_box_top, p.width_box_left + p.width_box_w,
+        p.width_box_top + p.width_box_h);
+    p.height_box_rect = greenflame::core::RectPx::From_ltrb(
+        p.height_box_left, p.height_box_top, p.height_box_left + p.height_box_w,
+        p.height_box_top + p.height_box_h);
+}
+
+void Compute_center_label_position(DimLabelPositions &p, HDC dc,
+                                   greenflame::core::RectPx const &sel, int center_x,
+                                   int center_y,
+                                   std::wstring const &center_str,
+                                   HFONT font_center) {
+    if (font_center == nullptr) {
+        p.draw_center_box = false;
+        return;
+    }
+
+    SIZE center_size = {};
+    Measure_text_size(dc, font_center, center_str, center_size);
+    p.center_box_w = center_size.cx + 2 * kDimMargin;
+    p.center_box_h = center_size.cy + 2 * kDimMargin;
+    p.center_box_left = center_x - p.center_box_w / 2;
+    p.center_box_top = center_y - p.center_box_h / 2;
+    p.draw_center_box = (sel.Width() >= p.center_box_w + 2 * kCenterMinPadding &&
+                         sel.Height() >= p.center_box_h + 2 * kCenterMinPadding);
+    if (p.draw_center_box) {
+        p.center_box_rect = greenflame::core::RectPx::From_ltrb(
+            p.center_box_left, p.center_box_top, p.center_box_left + p.center_box_w,
+            p.center_box_top + p.center_box_h);
+    }
+}
+
+void Compute_help_label_position(
+    DimLabelPositions &p, HDC dc, greenflame::core::RectPx const &sel, int w, int h,
+    std::wstring const &help_str, HFONT font_help_hint,
+    std::span<const greenflame::core::RectPx> monitor_rects_client) {
+    if (font_help_hint == nullptr) {
+        p.draw_help_box = false;
+        return;
+    }
+
+    SIZE help_size = {};
+    Measure_text_size(dc, font_help_hint, help_str, help_size);
+    p.help_box_w = help_size.cx + 2 * kDimMargin;
+    p.help_box_h = help_size.cy + 2 * kDimMargin;
+    bool const selection_wide_enough = (sel.Width() >= p.help_box_w);
+    p.help_box_left = sel.right - p.help_box_w;
+    greenflame::core::RectPx const below_candidate = greenflame::core::RectPx::From_ltrb(
+        p.help_box_left, sel.bottom + kDimGap, p.help_box_left + p.help_box_w,
+        sel.bottom + kDimGap + p.help_box_h);
+    greenflame::core::RectPx const above_candidate = greenflame::core::RectPx::From_ltrb(
+        p.help_box_left, sel.top - kDimGap - p.help_box_h, p.help_box_left + p.help_box_w,
+        sel.top - kDimGap);
+
+    auto const box_fits = [&](greenflame::core::RectPx const &candidate) {
+        if (!monitor_rects_client.empty()) {
+            return Rect_fully_covered_by_monitors(candidate, monitor_rects_client);
+        }
+        greenflame::core::RectPx const normalized = candidate.Normalized();
+        return normalized.left >= 0 && normalized.top >= 0 &&
+               normalized.right <= w && normalized.bottom <= h;
+    };
+
+    bool const fits_below = box_fits(below_candidate);
+    bool const fits_above = box_fits(above_candidate);
+
+    p.draw_help_box = selection_wide_enough && (fits_below || fits_above);
+    if (p.draw_help_box && fits_below) {
+        p.help_box_rect = below_candidate;
+        p.help_box_left = p.help_box_rect.left;
+        p.help_box_top = p.help_box_rect.top;
+    } else if (p.draw_help_box) {
+        p.help_box_rect = above_candidate;
+        p.help_box_left = p.help_box_rect.left;
+        p.help_box_top = p.help_box_rect.top;
+    }
+}
 
 static DimLabelPositions Compute_dim_label_positions(
     HDC dc, greenflame::core::RectPx const &sel, int w, int h,
     std::wstring const &width_str, std::wstring const &height_str,
-    std::wstring const &center_str, HFONT font_dim, HFONT font_center) {
-    constexpr int k_dim_margin = 4;
-    constexpr int k_dim_gap = 4;
-    constexpr int k_center_min_padding = 24;
-
+    std::wstring const &center_str, std::wstring const &help_str, HFONT font_dim,
+    HFONT font_center, HFONT font_help_hint,
+    std::span<const greenflame::core::RectPx> monitor_rects_client) {
     DimLabelPositions p{};
-    p.draw_side = (font_dim != nullptr);
-    bool const draw_center = (font_center != nullptr);
-
     int const center_x = (sel.left + sel.right) / 2;
     int const center_y = (sel.top + sel.bottom) / 2;
-    int const sel_w = sel.Width();
-    int const sel_h = sel.Height();
-
-    SIZE width_size = {}, height_size = {}, center_size = {};
-    if (p.draw_side) {
-        SelectObject(dc, font_dim);
-        GetTextExtentPoint32W(dc, width_str.c_str(), static_cast<int>(width_str.size()),
-                              &width_size);
-        GetTextExtentPoint32W(dc, height_str.c_str(),
-                              static_cast<int>(height_str.size()), &height_size);
-    }
-    if (draw_center) {
-        SelectObject(dc, font_center);
-        GetTextExtentPoint32W(dc, center_str.c_str(),
-                              static_cast<int>(center_str.size()), &center_size);
-    }
-
-    if (p.draw_side) {
-        p.width_box_w = width_size.cx + 2 * k_dim_margin;
-        p.width_box_h = width_size.cy + 2 * k_dim_margin;
-        p.height_box_w = height_size.cx + 2 * k_dim_margin;
-        p.height_box_h = height_size.cy + 2 * k_dim_margin;
-
-        p.width_box_left = center_x - p.width_box_w / 2;
-        bool const above_fits = (sel.top - p.width_box_h - k_dim_gap >= 0);
-        bool const below_fits = (sel.bottom + k_dim_gap + p.width_box_h <= h);
-        if (above_fits) {
-            p.width_box_top = sel.top - p.width_box_h - k_dim_gap;
-        } else if (below_fits) {
-            p.width_box_top = sel.bottom + k_dim_gap;
-        } else {
-            p.width_box_top = (sel.top - p.width_box_h - k_dim_gap >= h - p.width_box_h)
-                                  ? (sel.bottom + k_dim_gap)
-                                  : (sel.top - p.width_box_h - k_dim_gap);
-        }
-        if (p.width_box_top < 0) p.width_box_top = 0;
-        if (p.width_box_top + p.width_box_h > h) p.width_box_top = h - p.width_box_h;
-
-        p.height_box_top = center_y - p.height_box_h / 2;
-        int const height_box_left_candidate = sel.left - k_dim_gap - p.height_box_w;
-        int const height_box_right_candidate = sel.right + k_dim_gap;
-        bool const left_fits = (height_box_left_candidate >= 0);
-        bool const right_fits = (height_box_right_candidate + p.height_box_w <= w);
-        if (left_fits) {
-            p.height_box_left = height_box_left_candidate;
-        } else if (right_fits) {
-            p.height_box_left = height_box_right_candidate;
-        } else {
-            p.height_box_left = (height_box_left_candidate >= w - p.height_box_w)
-                                    ? height_box_right_candidate
-                                    : height_box_left_candidate;
-        }
-        if (p.height_box_left < 0) p.height_box_left = 0;
-        if (p.height_box_left + p.height_box_w > w) {
-            p.height_box_left = w - p.height_box_w;
-        }
-
-        p.width_box_rect = greenflame::core::RectPx::From_ltrb(
-            p.width_box_left, p.width_box_top, p.width_box_left + p.width_box_w,
-            p.width_box_top + p.width_box_h);
-        p.height_box_rect = greenflame::core::RectPx::From_ltrb(
-            p.height_box_left, p.height_box_top, p.height_box_left + p.height_box_w,
-            p.height_box_top + p.height_box_h);
-    }
-
-    if (draw_center) {
-        p.center_box_w = center_size.cx + 2 * k_dim_margin;
-        p.center_box_h = center_size.cy + 2 * k_dim_margin;
-        p.center_box_left = center_x - p.center_box_w / 2;
-        p.center_box_top = center_y - p.center_box_h / 2;
-        p.draw_center_box = (sel_w >= p.center_box_w + 2 * k_center_min_padding &&
-                             sel_h >= p.center_box_h + 2 * k_center_min_padding);
-        if (p.draw_center_box) {
-            p.center_box_rect = greenflame::core::RectPx::From_ltrb(
-                p.center_box_left, p.center_box_top, p.center_box_left + p.center_box_w,
-                p.center_box_top + p.center_box_h);
-        }
-    }
+    Compute_side_label_positions(p, dc, sel, w, h, center_x, center_y, width_str,
+                                 height_str, font_dim);
+    Compute_center_label_position(p, dc, sel, center_x, center_y, center_str,
+                                  font_center);
+    Compute_help_label_position(p, dc, sel, w, h, help_str, font_help_hint,
+                                monitor_rects_client);
     return p;
 }
 
 void Draw_dimension_labels(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
                            greenflame::core::RectPx const &sel,
+                           std::span<const greenflame::core::RectPx> monitor_rects_client,
                            std::span<uint8_t> pixels,
                            greenflame::PaintResources const *res,
                            bool show_selection_size_side_labels,
-                           bool show_selection_size_center_label) {
+                           bool show_selection_size_center_label,
+                           bool show_help_hint_requested) {
     constexpr int k_dim_margin = 4;
-    if (!show_selection_size_side_labels && !show_selection_size_center_label) return;
+    constexpr wchar_t k_help_hint_text[] = L"Ctrl-H for Help";
+    bool const show_help_hint =
+        show_help_hint_requested && (res != nullptr && res->font_help_hint != nullptr);
+    if (!show_selection_size_side_labels && !show_selection_size_center_label &&
+        !show_help_hint) {
+        return;
+    }
     int const row_bytes = greenflame::Row_bytes32(w);
     size_t const pix_size = static_cast<size_t>(row_bytes) * static_cast<size_t>(h);
     if (pixels.size() < pix_size) return;
@@ -412,9 +549,11 @@ void Draw_dimension_labels(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
         HFONT font_center = show_selection_size_center_label
                                 ? (res ? res->font_center : nullptr)
                                 : nullptr;
-        if (!font_dim && !font_center) return;
+        HFONT font_help_hint = show_help_hint ? res->font_help_hint : nullptr;
+        if (!font_dim && !font_center && !font_help_hint) return;
 
-        HFONT const base_font = font_dim ? font_dim : font_center;
+        HFONT const base_font =
+            font_dim ? font_dim : (font_center ? font_center : font_help_hint);
         HGDIOBJ old_font = SelectObject(buf_dc, base_font);
 
         int const sel_w = sel.Width();
@@ -422,10 +561,12 @@ void Draw_dimension_labels(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
         std::wstring const width_str = std::to_wstring(sel_w);
         std::wstring const height_str = std::to_wstring(sel_h);
         std::wstring const center_str = width_str + L" x " + height_str;
+        std::wstring const help_str = k_help_hint_text;
 
         DimLabelPositions const p =
             Compute_dim_label_positions(buf_dc, sel, w, h, width_str, height_str,
-                                        center_str, font_dim, font_center);
+                                        center_str, help_str, font_dim, font_center,
+                                        font_help_hint, monitor_rects_client);
         SelectObject(buf_dc, base_font);
 
         // Pixel blending for box backgrounds.
@@ -443,6 +584,12 @@ void Draw_dimension_labels(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
         if (p.draw_center_box) {
             greenflame::core::Blend_rect_onto_pixels(
                 pixels, w, h, row_bytes, p.center_box_rect, greenflame::kCoordTooltipBg,
+                box_alpha);
+            wrote_pixels = true;
+        }
+        if (p.draw_help_box) {
+            greenflame::core::Blend_rect_onto_pixels(
+                pixels, w, h, row_bytes, p.help_box_rect, greenflame::kCoordTooltipBg,
                 box_alpha);
             wrote_pixels = true;
         }
@@ -467,6 +614,11 @@ void Draw_dimension_labels(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
                 Rectangle(buf_dc, p.center_box_left, p.center_box_top,
                           p.center_box_left + p.center_box_w,
                           p.center_box_top + p.center_box_h);
+            }
+            if (p.draw_help_box) {
+                Rectangle(buf_dc, p.help_box_left, p.help_box_top,
+                          p.help_box_left + p.help_box_w,
+                          p.help_box_top + p.help_box_h);
             }
             SelectObject(buf_dc, old_dim_pen);
             DeleteObject(dark_pen);
@@ -496,6 +648,15 @@ void Draw_dimension_labels(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
                                    p.center_box_top + p.center_box_h - k_dim_margin};
             SelectObject(buf_dc, font_center);
             DrawTextW(buf_dc, center_str.c_str(), -1, &center_text_rc,
+                      DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        }
+        if (p.draw_help_box) {
+            RECT help_text_rc = {p.help_box_left + k_dim_margin,
+                                 p.help_box_top + k_dim_margin,
+                                 p.help_box_left + p.help_box_w - k_dim_margin,
+                                 p.help_box_top + p.help_box_h - k_dim_margin};
+            SelectObject(buf_dc, font_help_hint);
+            DrawTextW(buf_dc, help_str.c_str(), -1, &help_text_rc,
                       DT_CENTER | DT_VCENTER | DT_SINGLELINE);
         }
         SelectObject(buf_dc, old_font);
@@ -749,12 +910,21 @@ void Paint_overlay(HDC hdc, HWND hwnd, const RECT &rc, const PaintOverlayInput &
     Draw_selection_dim_and_border(buf_dc, buf_bmp, w, h, sel, in.paint_buffer,
                                   in.resources, in.dragging);
 
-    if ((in.dragging || in.handle_dragging || in.move_dragging ||
-         in.modifier_preview) &&
-        !sel.Is_empty()) {
-        Draw_dimension_labels(buf_dc, buf_bmp, w, h, sel, in.paint_buffer, in.resources,
+    bool const interacting =
+        in.dragging || in.handle_dragging || in.move_dragging || in.modifier_preview;
+    if (interacting && !sel.Is_empty()) {
+        Draw_dimension_labels(buf_dc, buf_bmp, w, h, sel, in.monitor_rects_client,
+                              in.paint_buffer, in.resources,
                               in.show_selection_size_side_labels,
-                              in.show_selection_size_center_label);
+                              in.show_selection_size_center_label, false);
+    }
+
+    bool const show_help_hint_after_selection =
+        !interacting && !in.final_selection.Is_empty();
+    if (show_help_hint_after_selection) {
+        Draw_dimension_labels(buf_dc, buf_bmp, w, h, in.final_selection,
+                              in.monitor_rects_client, in.paint_buffer, in.resources,
+                              false, false, true);
     }
 
     bool const show_crosshair = in.final_selection.Is_empty() && !in.dragging &&

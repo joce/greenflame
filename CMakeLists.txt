@@ -84,6 +84,7 @@ add_library(greenflame_core STATIC
     src/greenflame_core/output_path.h
     src/greenflame_core/overlay_controller.cpp
     src/greenflame_core/overlay_controller.h
+    src/greenflame_core/overlay_help_content.h
     src/greenflame_core/command.h
     src/greenflame_core/undo_stack.cpp
     src/greenflame_core/undo_stack.h
@@ -163,6 +164,8 @@ add_executable(greenflame WIN32
     src/greenflame/win/save_image.cpp
     src/greenflame/win/overlay_paint.cpp
     src/greenflame/win/overlay_paint.h
+    src/greenflame/win/overlay_help_overlay.cpp
+    src/greenflame/win/overlay_help_overlay.h
     src/greenflame/win/overlay_window.cpp
     src/greenflame/win/overlay_window.h
     src/greenflame/win/tray_window.cpp
@@ -243,7 +246,7 @@ target_link_libraries(greenflame PRIVATE
 # Link-Time Optimization (release builds only)
 # -----------------------------
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    # Full LTO: TUs emit LLVM bitcode; lld-link merges and optimises at link time.
+    # Full LTO: TUs emit LLVM bitcode; lld-link merges and optimizes at link time.
     foreach(_lto_tgt greenflame_core greenflame)
         target_compile_options(${_lto_tgt} PRIVATE $<$<CONFIG:Release>:-flto=full>)
     endforeach()

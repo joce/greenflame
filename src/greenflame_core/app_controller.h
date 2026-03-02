@@ -2,6 +2,7 @@
 
 #include "greenflame_core/app_services.h"
 #include "greenflame_core/cli_options.h"
+#include "greenflame_core/overlay_help_content.h"
 #include "greenflame_core/process_exit_code.h"
 
 namespace greenflame {
@@ -49,6 +50,7 @@ class AppController final {
     [[nodiscard]] SelectionSavedResult
     On_selection_saved_to_file(core::RectPx screen_rect, std::optional<HWND> window,
                                std::wstring_view saved_path, bool file_copied);
+    [[nodiscard]] core::OverlayHelpContent Build_overlay_help_content() const;
     [[nodiscard]] CliResult Run_cli_capture_mode(core::CliOptions const &cli_options);
 
   private:

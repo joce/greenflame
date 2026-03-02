@@ -22,6 +22,7 @@ constexpr wchar_t kOverlayWindowClass[] = L"GreenflameOverlay";
 constexpr int32_t kSnapThresholdPx = 10;
 constexpr int kDimensionFontHeight = 14;
 constexpr int kCenterFontHeight = 36;
+constexpr int kHelpHintFontHeight = 16;
 
 constexpr int kThumbnailMaxWidth = 320;
 constexpr int kThumbnailMaxHeight = 120;
@@ -218,6 +219,10 @@ struct OverlayWindow::OverlayResources {
             CreateFontW(kCenterFontHeight, 0, 0, 0, FW_BLACK, FALSE, FALSE, FALSE,
                         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                         DEFAULT_QUALITY, FF_DONTCARE, L"Segoe UI");
+        paint.font_help_hint =
+            CreateFontW(kHelpHintFontHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                        DEFAULT_QUALITY, FF_DONTCARE, L"Segoe UI");
         paint.crosshair_pen = CreatePen(PS_SOLID, 1, kOverlayCrosshair);
         paint.border_pen = CreatePen(PS_SOLID, 1, kBorderColor);
         paint.handle_pen = CreatePen(PS_SOLID, 1, kOverlayHandle);
@@ -234,6 +239,10 @@ struct OverlayWindow::OverlayResources {
         if (paint.font_center) {
             DeleteObject(paint.font_center);
             paint.font_center = nullptr;
+        }
+        if (paint.font_help_hint) {
+            DeleteObject(paint.font_help_hint);
+            paint.font_help_hint = nullptr;
         }
         if (paint.crosshair_pen) {
             DeleteObject(paint.crosshair_pen);
@@ -256,6 +265,11 @@ OverlayWindow::OverlayWindow(IOverlayEvents *events, core::AppConfig *config,
       resources_(std::make_unique<OverlayResources>()) {}
 
 OverlayWindow::~OverlayWindow() { Destroy(); }
+
+void OverlayWindow::Set_hotkey_help_content(
+    core::OverlayHelpContent const *content) noexcept {
+    hotkey_help_overlay_.Set_content(content);
+}
 
 bool OverlayWindow::Register_window_class(HINSTANCE hinstance) {
     WNDCLASSEXW window_class{};
@@ -307,6 +321,12 @@ void OverlayWindow::Destroy() {
 }
 
 bool OverlayWindow::Is_open() const { return hwnd_ != nullptr && IsWindow(hwnd_) != 0; }
+
+bool OverlayWindow::Is_selection_stable_for_help() const {
+    auto const &s = controller_.State();
+    return !s.final_selection.Is_empty() && !s.dragging && !s.handle_dragging &&
+           !s.move_dragging && !s.modifier_preview;
+}
 
 LRESULT CALLBACK OverlayWindow::Static_wnd_proc(HWND hwnd, UINT msg, WPARAM wparam,
                                                 LPARAM lparam) {
@@ -366,12 +386,38 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
     bool const ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
     bool const shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
     bool const alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
+    bool const is_repeat = (lparam & (static_cast<LPARAM>(1) << 30)) != 0;
     bool const eff_ctrl = ctrl || (wparam == VK_CONTROL);
     bool const eff_shift = shift || (wparam == VK_SHIFT);
     bool const eff_alt = alt || (wparam == VK_MENU);
 
     if (wparam == VK_ESCAPE) {
+        if (hotkey_help_overlay_.Is_visible()) {
+            hotkey_help_overlay_.Hide();
+            InvalidateRect(hwnd_, nullptr, TRUE);
+            return 0;
+        }
         Apply_action(controller_.On_cancel());
+        return 0;
+    }
+    if (eff_ctrl && wparam == L'H') {
+        if (!is_repeat && Is_selection_stable_for_help()) {
+            RECT overlay_rect{};
+            if (GetWindowRect(hwnd_, &overlay_rect) != 0) {
+                core::RectPx const overlay_screen_rect = core::RectPx::From_ltrb(
+                    static_cast<int32_t>(overlay_rect.left),
+                    static_cast<int32_t>(overlay_rect.top),
+                    static_cast<int32_t>(overlay_rect.right),
+                    static_cast<int32_t>(overlay_rect.bottom));
+                hotkey_help_overlay_.Toggle_at_cursor(Get_cursor_pos_px(),
+                                                      controller_.State().cached_monitors,
+                                                      overlay_screen_rect);
+            }
+            InvalidateRect(hwnd_, nullptr, TRUE);
+        }
+        return 0;
+    }
+    if (hotkey_help_overlay_.Is_visible()) {
         return 0;
     }
     if (eff_ctrl && wparam == L'Z') {
@@ -434,6 +480,10 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
 }
 
 LRESULT OverlayWindow::On_key_up(WPARAM wparam, LPARAM lparam) {
+    if (hotkey_help_overlay_.Is_visible()) {
+        return 0;
+    }
+
     // Force-clear the released key from the effective modifier state.
     bool const eff_shift =
         (wparam != VK_SHIFT) && (GetKeyState(VK_SHIFT) & 0x8000) != 0;
@@ -458,6 +508,11 @@ LRESULT OverlayWindow::On_key_up(WPARAM wparam, LPARAM lparam) {
 
 LRESULT OverlayWindow::On_l_button_down() {
     if (!resources_->capture.Is_valid()) {
+        return 0;
+    }
+    if (hotkey_help_overlay_.Is_visible()) {
+        hotkey_help_overlay_.Hide();
+        InvalidateRect(hwnd_, nullptr, TRUE);
         return 0;
     }
     bool const shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
@@ -501,6 +556,10 @@ LRESULT OverlayWindow::On_l_button_down() {
 }
 
 LRESULT OverlayWindow::On_mouse_move() {
+    if (hotkey_help_overlay_.Is_visible()) {
+        return 0;
+    }
+
     bool const shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
     bool const ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
     bool const alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
@@ -933,6 +992,20 @@ LRESULT OverlayWindow::On_paint() {
         }
         input.live_rect = s.live_rect;
         input.final_selection = s.final_selection;
+        hotkey_help_overlay_.Hide_if_selection_unstable(Is_selection_stable_for_help());
+        std::vector<core::RectPx> monitor_client_rects = {};
+        monitor_client_rects.reserve(s.cached_monitors.size());
+        RECT overlay_rect{};
+        if (GetWindowRect(hwnd_, &overlay_rect) != 0) {
+            for (auto const &monitor : s.cached_monitors) {
+                monitor_client_rects.push_back(core::RectPx::From_ltrb(
+                    monitor.bounds.left - static_cast<int32_t>(overlay_rect.left),
+                    monitor.bounds.top - static_cast<int32_t>(overlay_rect.top),
+                    monitor.bounds.right - static_cast<int32_t>(overlay_rect.left),
+                    monitor.bounds.bottom - static_cast<int32_t>(overlay_rect.top)));
+            }
+        }
+        input.monitor_rects_client = std::span<const core::RectPx>(monitor_client_rects);
         core::PointPx cursor = Get_client_cursor_pos_px(hwnd_);
         bool const snap_enabled = (GetKeyState(VK_MENU) & 0x8000) == 0;
         bool const crosshair_mode = s.final_selection.Is_empty() && !s.dragging &&
@@ -955,6 +1028,7 @@ LRESULT OverlayWindow::On_paint() {
             input.highlight_handle = last_hover_handle_;
         }
         Paint_overlay(hdc, hwnd_, rect, input);
+        (void)hotkey_help_overlay_.Paint(hdc, rect, input.paint_buffer);
         EndPaint(hwnd_, &paint);
     }
     return 0;
@@ -975,6 +1049,11 @@ LRESULT OverlayWindow::On_close() {
 }
 
 void OverlayWindow::Refresh_cursor() {
+    if (hotkey_help_overlay_.Is_visible()) {
+        SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+        return;
+    }
+
     auto const &s = controller_.State();
     if (s.move_dragging) {
         SetCursor(LoadCursorW(nullptr, IDC_SIZEALL));

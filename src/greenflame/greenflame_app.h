@@ -43,6 +43,7 @@ class GreenflameApp final : public ITrayEvents, public IOverlayEvents {
     HINSTANCE hinstance_ = nullptr;
     TrayWindow tray_window_;
     Win32WindowQuery window_query_;
+    core::OverlayHelpContent overlay_help_content_ = {};
     OverlayWindow overlay_window_;
     Win32DisplayQueries display_queries_;
     Win32WindowInspector window_inspector_;

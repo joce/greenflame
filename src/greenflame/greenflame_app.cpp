@@ -205,6 +205,8 @@ GreenflameApp::GreenflameApp(HINSTANCE hinstance, core::CliOptions const &cli_op
 uint8_t GreenflameApp::Run() {
     Enable_per_monitor_dpi_awareness_v2();
     config_ = Load_app_config();
+    overlay_help_content_ = app_controller_.Build_overlay_help_content();
+    overlay_window_.Set_hotkey_help_content(&overlay_help_content_);
     if (core::Is_capture_mode(cli_options_.capture_mode)) {
         ProcessExitCode const cli_result = Run_cli_capture_mode();
         (void)Save_app_config(config_);

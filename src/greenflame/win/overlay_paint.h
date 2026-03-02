@@ -13,11 +13,12 @@ struct GdiCaptureResult;
 
 // Cached GDI resources created once at overlay init, reused every frame.
 struct PaintResources {
-    HFONT font_dim = nullptr;     // 14pt "Segoe UI" normal
-    HFONT font_center = nullptr;  // 36pt "Segoe UI" black weight
-    HPEN crosshair_pen = nullptr; // LightSeaGreen dashed crosshair
-    HPEN border_pen = nullptr;    // SeaGreen for label/tooltip borders
-    HPEN handle_pen = nullptr;    // Teal for border highlight
+    HFONT font_dim = nullptr;       // 14pt "Segoe UI" normal
+    HFONT font_center = nullptr;    // 36pt "Segoe UI" black weight
+    HFONT font_help_hint = nullptr; // 16pt "Segoe UI" normal
+    HPEN crosshair_pen = nullptr;
+    HPEN border_pen = nullptr;
+    HPEN handle_pen = nullptr;
 };
 
 namespace core {
@@ -29,6 +30,7 @@ struct PaintOverlayInput {
     core::RectPx live_rect = {};
     core::RectPx final_selection = {};
     core::PointPx cursor_client_px = {};
+    std::span<const core::RectPx> monitor_rects_client = {};
     std::span<uint8_t> paint_buffer = {};
     PaintResources const *resources = nullptr;
     bool dragging = false;

@@ -1,7 +1,9 @@
 #pragma once
 
+#include "greenflame_core/overlay_help_content.h"
 #include "greenflame_core/overlay_controller.h"
 #include "greenflame_core/rect_px.h"
+#include "win/overlay_help_overlay.h"
 
 namespace greenflame {
 
@@ -36,6 +38,7 @@ class OverlayWindow final {
     [[nodiscard]] static bool Register_window_class(HINSTANCE hinstance);
     [[nodiscard]] bool Create_and_show(HINSTANCE hinstance);
     void Destroy();
+    void Set_hotkey_help_content(core::OverlayHelpContent const *content) noexcept;
 
     [[nodiscard]] bool Is_open() const;
 
@@ -68,6 +71,7 @@ class OverlayWindow final {
     LRESULT On_close();
     LRESULT On_set_cursor(WPARAM wparam, LPARAM lparam);
     void Refresh_cursor();
+    [[nodiscard]] bool Is_selection_stable_for_help() const;
 
     IOverlayEvents *events_ = nullptr;
     core::AppConfig *config_ = nullptr;
@@ -77,6 +81,7 @@ class OverlayWindow final {
     core::OverlayController controller_;
     std::unique_ptr<OverlayResources> resources_;
     std::optional<core::SelectionHandle> last_hover_handle_;
+    OverlayHelpOverlay hotkey_help_overlay_ = {};
 };
 
 } // namespace greenflame

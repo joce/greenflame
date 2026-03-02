@@ -193,6 +193,26 @@ SelectionSavedResult AppController::On_selection_saved_to_file(
         std::wstring(saved_path)};
 }
 
+core::OverlayHelpContent AppController::Build_overlay_help_content() const {
+    core::OverlayHelpContent content{};
+    content.title = L"Keyboard Shortcuts";
+    content.close_hint = L"Ctrl+H or Esc to close";
+
+    core::OverlayHelpSection copy_and_save{};
+    copy_and_save.title = L"Copy and Save";
+    copy_and_save.entries = {
+        {L"Ctrl + C", L"Copy selection to clipboard"},
+        {L"Ctrl + S", L"Save selection to default location"},
+        {L"Ctrl + Alt + S", L"Save selection and copy saved file path"},
+        {L"Ctrl + Shift + S", L"Save selection as..."},
+        {L"Ctrl + Shift + Alt + S",
+         L"Save selection as... and copy saved file path"},
+    };
+    content.sections.push_back(std::move(copy_and_save));
+
+    return content;
+}
+
 CliResult AppController::Run_cli_capture_mode(core::CliOptions const &cli_options) {
     core::RectPx target_rect = {};
     core::SaveSelectionSource source = core::SaveSelectionSource::Region;

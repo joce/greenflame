@@ -43,6 +43,7 @@ class TrayWindow final {
                                             LPARAM lparam);
     LRESULT Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam);
     void Show_context_menu();
+    void Show_about_dialog();
     void Notify_start_capture();
     void Notify_copy_window_to_clipboard();
     void Notify_copy_monitor_to_clipboard();

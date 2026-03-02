@@ -168,6 +168,8 @@ add_executable(greenflame WIN32
     src/greenflame/win/overlay_help_overlay.h
     src/greenflame/win/overlay_window.cpp
     src/greenflame/win/overlay_window.h
+    src/greenflame/win/about_dialog.cpp
+    src/greenflame/win/about_dialog.h
     src/greenflame/win/tray_window.cpp
     src/greenflame/win/tray_window.h
     src/greenflame/win/window_query.cpp

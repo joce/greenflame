@@ -1,6 +1,7 @@
 // Tray window object: notification icon + context menu + PrintScreen hotkey.
 
 #include "win/tray_window.h"
+#include "win/about_dialog.h"
 #include "win/ui_palette.h"
 
 namespace {
@@ -23,7 +24,8 @@ enum CommandId : int {
     CopyDesktop = 4,
     CopyLastRegion = 5,
     CopyLastWindow = 6,
-    Exit = 7,
+    About = 7,
+    Exit = 8,
 };
 
 enum HotkeyId : int {
@@ -46,6 +48,7 @@ constexpr wchar_t kCaptureFullScreenMenuText[] =
 constexpr wchar_t kCaptureLastRegionMenuText[] = L"Capture last region\tAlt + Prt Scrn";
 constexpr wchar_t kCaptureLastWindowMenuText[] =
     L"Capture last window\tCtrl + Alt + Prt Scrn";
+constexpr wchar_t kAboutMenuText[] = L"About Greenflame...";
 
 #ifdef DEBUG
 constexpr wchar_t kTestingWarningBalloonMessage[] = L"Testing warning toast (Ctrl+W).";
@@ -1028,6 +1031,9 @@ LRESULT TrayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
         case CopyLastWindow:
             Notify_copy_last_window_to_clipboard();
             break;
+        case About:
+            Show_about_dialog();
+            break;
         case Exit:
             if (events_) events_->On_exit_requested();
             break;
@@ -1134,6 +1140,8 @@ void TrayWindow::Show_context_menu() {
     AppendMenuW(menu, MF_STRING, CopyLastRegion, kCaptureLastRegionMenuText);
     AppendMenuW(menu, MF_STRING, CopyLastWindow, kCaptureLastWindowMenuText);
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, About, kAboutMenuText);
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, Exit, L"Exit");
     POINT cursor{};
     GetCursorPos(&cursor);
@@ -1141,6 +1149,14 @@ void TrayWindow::Show_context_menu() {
     TrackPopupMenuEx(menu, TPM_RIGHTALIGN | TPM_BOTTOMALIGN | TPM_RIGHTBUTTON, cursor.x,
                      cursor.y, hwnd_, nullptr);
     DestroyMenu(menu);
+}
+
+void TrayWindow::Show_about_dialog() {
+    if (!Is_open()) {
+        return;
+    }
+    AboutDialog about_dialog(hinstance_);
+    about_dialog.Show(hwnd_);
 }
 
 void TrayWindow::Notify_start_capture() {

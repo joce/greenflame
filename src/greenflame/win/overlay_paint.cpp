@@ -511,10 +511,13 @@ static void Draw_magnifier(HDC buf_dc, HBITMAP buf_bmp, int w, int h, int cx, in
     int const src_y = cy - kMagnifierSource / 2;
     int const src_right = src_x + kMagnifierSource;
     int const src_bottom = src_y + kMagnifierSource;
-    int const sample_left = std::max(src_x, mon_left);
-    int const sample_top = std::max(src_y, mon_top);
-    int const sample_right = std::min(src_right, mon_right);
-    int const sample_bottom = std::min(src_bottom, mon_bottom);
+    // Clamp sample to the full capture (virtual desktop) extent so that pixels
+    // from adjacent monitors are shown rather than producing a checkered gap.
+    // Monitor bounds are only used for magnifier *placement* below.
+    int const sample_left = std::max(src_x, 0);
+    int const sample_top = std::max(src_y, 0);
+    int const sample_right = std::min(src_right, w);
+    int const sample_bottom = std::min(src_bottom, h);
     bool const source_has_coverage =
         sample_left < sample_right && sample_top < sample_bottom;
 

@@ -110,7 +110,9 @@ When building with Clang (`clang-cl`), prefer C++ standard library APIs over raw
 
 ## Formatting
 
-**clang-format** is enforced automatically via a git pre-commit hook (`.githooks/pre-commit`). The hook reformats any staged `.cpp`/`.h` files in place and re-stages them before the commit is recorded, so no manual formatting step is needed.
+**clang-format** is enforced automatically via a git pre-commit hook (`.githooks/pre-commit.bat`). The hook reformats any staged `.cpp`/`.h` files in place and re-stages them before the commit is recorded, so no manual formatting step is needed.
+
+The hook is implemented as a `.bat` launcher (`.githooks/pre-commit.bat`) that invokes a PowerShell script (`.githooks/pre-commit.ps1`) via `powershell.exe`. This avoids the MSYS2 `sh.exe` signal-pipe error that occurs in some sandboxed Windows environments (such as Codex agent runners).
 
 ### Installing the hook (once per clone)
 

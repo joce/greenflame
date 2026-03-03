@@ -153,6 +153,8 @@ endif()
 # -----------------------------
 add_executable(greenflame WIN32
     src/greenflame/main.cpp
+    src/greenflame/console_output.cpp
+    src/greenflame/console_output.h
     src/greenflame/greenflame_app.cpp
     src/greenflame/greenflame_app.h
     src/greenflame/app_config_store.cpp

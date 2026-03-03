@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # Pre-commit hook: auto-format staged C/C++ files with clang-format.
 #
 # Files are reformatted in place and re-staged so the commit always
@@ -7,23 +7,22 @@
 # Install once per clone:
 #   git config core.hooksPath .githooks
 
-set -euo pipefail
-
-if ! command -v clang-format &>/dev/null; then
+if ! command -v clang-format >/dev/null 2>&1; then
     echo "[pre-commit] clang-format not found in PATH — skipping auto-format." >&2
     exit 0
 fi
 
-mapfile -t files < <(
-    git diff --cached --name-only --diff-filter=d \
-        | grep -E '\.(cpp|h)$'
-)
+# grep exits 1 when there are no matches; || true keeps the script going.
+files=$(git diff --cached --name-only --diff-filter=d | grep -E '\.(cpp|h)$' || true)
 
-if [ ${#files[@]} -eq 0 ]; then
+if [ -z "$files" ]; then
     exit 0
 fi
 
-echo "[pre-commit] clang-format: formatting ${#files[@]} file(s)..."
-clang-format -i "${files[@]}"
-git add "${files[@]}"
+count=$(echo "$files" | wc -l | tr -d ' ')
+echo "[pre-commit] clang-format: formatting $count file(s)..."
+
+echo "$files" | tr '\n' '\0' | xargs -0 clang-format -i
+echo "$files" | tr '\n' '\0' | xargs -0 git add
+
 echo "[pre-commit] clang-format: done."

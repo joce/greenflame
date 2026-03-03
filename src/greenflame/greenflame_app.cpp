@@ -1,10 +1,13 @@
 #include "greenflame_app.h"
 #include "app_config_store.h"
+#include "win/startup_launch.h"
 
 namespace {
 
 constexpr int kThumbnailMaxWidth = 320;
 constexpr int kThumbnailMaxHeight = 120;
+constexpr wchar_t kStartupToggleFailedMessage[] =
+    L"Failed to update 'Start with Windows' setting.";
 
 [[nodiscard]] HBITMAP Create_thumbnail_from_clipboard() {
     if (OpenClipboard(nullptr) == 0) {
@@ -219,7 +222,9 @@ uint8_t GreenflameApp::Run() {
     }
 
     bool const testing_mode_enabled = Is_testing_mode_enabled(cli_options_);
-    if (!tray_window_.Create(hinstance_, testing_mode_enabled)) {
+    bool const start_with_windows_enabled = Is_startup_launch_enabled();
+    if (!tray_window_.Create(hinstance_, testing_mode_enabled,
+                             start_with_windows_enabled)) {
         return To_exit_code(ProcessExitCode::TrayWindowCreateFailed);
     }
 
@@ -335,6 +340,14 @@ void GreenflameApp::On_copy_last_window_to_clipboard_requested() {
     ClipboardCopyResult const result =
         app_controller_.On_copy_last_window_to_clipboard_requested();
     Show_clipboard_result(result, config_, tray_window_);
+}
+
+bool GreenflameApp::On_set_start_with_windows_enabled(bool enabled) {
+    bool const updated = Set_startup_launch_enabled(enabled);
+    if (!updated) {
+        tray_window_.Show_balloon(TrayBalloonIcon::Warning, kStartupToggleFailedMessage);
+    }
+    return updated;
 }
 
 void GreenflameApp::On_exit_requested() {

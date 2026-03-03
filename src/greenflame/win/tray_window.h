@@ -17,6 +17,7 @@ class ITrayEvents {
     virtual void On_copy_desktop_to_clipboard_requested() = 0;
     virtual void On_copy_last_region_to_clipboard_requested() = 0;
     virtual void On_copy_last_window_to_clipboard_requested() = 0;
+    [[nodiscard]] virtual bool On_set_start_with_windows_enabled(bool enabled) = 0;
     virtual void On_exit_requested() = 0;
 };
 
@@ -29,7 +30,8 @@ class TrayWindow final {
     TrayWindow &operator=(TrayWindow const &) = delete;
 
     [[nodiscard]] static bool Register_window_class(HINSTANCE hinstance);
-    [[nodiscard]] bool Create(HINSTANCE hinstance, bool enable_testing_hotkeys = false);
+    [[nodiscard]] bool Create(HINSTANCE hinstance, bool enable_testing_hotkeys = false,
+                              bool start_with_windows_enabled = false);
     void Destroy();
     void Show_balloon(TrayBalloonIcon icon, wchar_t const *message,
                       HBITMAP thumbnail = nullptr, std::wstring_view file_path = {});
@@ -50,11 +52,13 @@ class TrayWindow final {
     void Notify_copy_desktop_to_clipboard();
     void Notify_copy_last_region_to_clipboard();
     void Notify_copy_last_window_to_clipboard();
+    void Notify_toggle_start_with_windows();
 
     ITrayEvents *events_ = nullptr;
     HWND hwnd_ = nullptr;
     HINSTANCE hinstance_ = nullptr;
     bool testing_hotkeys_enabled_ = false;
+    bool start_with_windows_enabled_ = false;
     std::unique_ptr<ToastPopup> toast_popup_;
 };
 

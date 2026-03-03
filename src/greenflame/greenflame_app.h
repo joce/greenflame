@@ -31,6 +31,7 @@ class GreenflameApp final : public ITrayEvents, public IOverlayEvents {
     void On_copy_desktop_to_clipboard_requested() override;
     void On_copy_last_region_to_clipboard_requested() override;
     void On_copy_last_window_to_clipboard_requested() override;
+    [[nodiscard]] bool On_set_start_with_windows_enabled(bool enabled) override;
     void On_exit_requested() override;
     void On_overlay_closed() override;
     void On_selection_copied_to_clipboard(core::RectPx screen_rect,

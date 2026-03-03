@@ -24,8 +24,9 @@ enum CommandId : int {
     CopyDesktop = 4,
     CopyLastRegion = 5,
     CopyLastWindow = 6,
-    About = 7,
-    Exit = 8,
+    StartWithWindows = 7,
+    About = 8,
+    Exit = 9,
 };
 
 enum HotkeyId : int {
@@ -48,6 +49,7 @@ constexpr wchar_t kCaptureFullScreenMenuText[] =
 constexpr wchar_t kCaptureLastRegionMenuText[] = L"Capture last region\tAlt + Prt Scrn";
 constexpr wchar_t kCaptureLastWindowMenuText[] =
     L"Capture last window\tCtrl + Alt + Prt Scrn";
+constexpr wchar_t kStartWithWindowsMenuText[] = L"Start with Windows";
 constexpr wchar_t kAboutMenuText[] = L"About Greenflame...";
 
 #ifdef DEBUG
@@ -868,12 +870,14 @@ bool TrayWindow::Register_window_class(HINSTANCE hinstance) {
     return ToastPopup::Register_window_class(hinstance);
 }
 
-bool TrayWindow::Create(HINSTANCE hinstance, bool enable_testing_hotkeys) {
+bool TrayWindow::Create(HINSTANCE hinstance, bool enable_testing_hotkeys,
+                        bool start_with_windows_enabled) {
     if (Is_open()) {
         return true;
     }
     hinstance_ = hinstance;
     testing_hotkeys_enabled_ = enable_testing_hotkeys;
+    start_with_windows_enabled_ = start_with_windows_enabled;
     HWND const hwnd = CreateWindowExW(0, kTrayWindowClass, L"", 0, 0, 0, 0, 0,
                                       HWND_MESSAGE, nullptr, hinstance, this);
     if (!hwnd) {
@@ -1031,6 +1035,9 @@ LRESULT TrayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
         case CopyLastWindow:
             Notify_copy_last_window_to_clipboard();
             break;
+        case StartWithWindows:
+            Notify_toggle_start_with_windows();
+            break;
         case About:
             Show_about_dialog();
             break;
@@ -1140,6 +1147,13 @@ void TrayWindow::Show_context_menu() {
     AppendMenuW(menu, MF_STRING, CopyLastRegion, kCaptureLastRegionMenuText);
     AppendMenuW(menu, MF_STRING, CopyLastWindow, kCaptureLastWindowMenuText);
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    UINT start_with_windows_flags = MF_STRING;
+    if (start_with_windows_enabled_) {
+        start_with_windows_flags |= MF_CHECKED;
+    }
+    AppendMenuW(menu, start_with_windows_flags, StartWithWindows,
+                kStartWithWindowsMenuText);
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, About, kAboutMenuText);
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, Exit, L"Exit");
@@ -1192,6 +1206,16 @@ void TrayWindow::Notify_copy_last_region_to_clipboard() {
 void TrayWindow::Notify_copy_last_window_to_clipboard() {
     if (events_) {
         events_->On_copy_last_window_to_clipboard_requested();
+    }
+}
+
+void TrayWindow::Notify_toggle_start_with_windows() {
+    if (!events_) {
+        return;
+    }
+    bool const desired_state = !start_with_windows_enabled_;
+    if (events_->On_set_start_with_windows_enabled(desired_state)) {
+        start_with_windows_enabled_ = desired_state;
     }
 }
 

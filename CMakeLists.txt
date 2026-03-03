@@ -170,6 +170,8 @@ add_executable(greenflame WIN32
     src/greenflame/win/overlay_window.h
     src/greenflame/win/about_dialog.cpp
     src/greenflame/win/about_dialog.h
+    src/greenflame/win/startup_launch.cpp
+    src/greenflame/win/startup_launch.h
     src/greenflame/win/tray_window.cpp
     src/greenflame/win/tray_window.h
     src/greenflame/win/window_query.cpp
@@ -237,6 +239,7 @@ target_link_libraries(greenflame PRIVATE
         gdi32
         shcore
         shell32
+        advapi32
         dwmapi
         comdlg32
         Windowscodecs

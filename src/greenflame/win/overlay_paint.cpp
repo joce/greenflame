@@ -36,6 +36,7 @@ constexpr float kColorChannelMaxF = static_cast<float>(kColorChannelMax);
 
 constexpr int kSelDashPx = 4;
 constexpr int kSelGapPx = 3;
+constexpr int kCornerHighlightOutsetPx = 1;
 
 // Draws a 1-pixel dashed rectangle border using explicit MoveToEx/LineTo
 // segments so that dash and gap lengths are exact physical pixels regardless
@@ -256,72 +257,71 @@ void Draw_border_highlight(HDC dc, HPEN pen, greenflame::core::RectPx const &sel
     int const corner_w = std::min(max_corner_size_px, r.Width() / 2);
     int const corner_h = std::min(max_corner_size_px, r.Height() / 2);
     HGDIOBJ old_pen = SelectObject(dc, pen);
-    COLORREF const pen_color = Get_pen_color_or_fallback(pen, greenflame::kOverlayHandle);
-    auto const stamp_corner_tip = [&](int x, int y) noexcept {
-        // LineTo excludes the final endpoint, so stamp the outer corner tip.
-        (void)SetPixelV(dc, x, y, pen_color);
-    };
 
     switch (highlight) {
     case greenflame::core::SelectionHandle::Top:
-        for (int off = -1; off <= 1; ++off) {
+        for (int off = -kCornerHighlightOutsetPx; off <= kCornerHighlightOutsetPx;
+             ++off) {
             MoveToEx(dc, r.left + corner_w, r.top + off, nullptr);
             LineTo(dc, r.right - corner_w, r.top + off);
         }
         break;
     case greenflame::core::SelectionHandle::Bottom:
-        for (int off = -1; off <= 1; ++off) {
+        for (int off = -kCornerHighlightOutsetPx; off <= kCornerHighlightOutsetPx;
+             ++off) {
             MoveToEx(dc, r.left + corner_w, r.bottom - 1 + off, nullptr);
             LineTo(dc, r.right - corner_w, r.bottom - 1 + off);
         }
         break;
     case greenflame::core::SelectionHandle::Left:
-        for (int off = -1; off <= 1; ++off) {
+        for (int off = -kCornerHighlightOutsetPx; off <= kCornerHighlightOutsetPx;
+             ++off) {
             MoveToEx(dc, r.left + off, r.top + corner_h, nullptr);
             LineTo(dc, r.left + off, r.bottom - corner_h);
         }
         break;
     case greenflame::core::SelectionHandle::Right:
-        for (int off = -1; off <= 1; ++off) {
+        for (int off = -kCornerHighlightOutsetPx; off <= kCornerHighlightOutsetPx;
+             ++off) {
             MoveToEx(dc, r.right - 1 + off, r.top + corner_h, nullptr);
             LineTo(dc, r.right - 1 + off, r.bottom - corner_h);
         }
         break;
     case greenflame::core::SelectionHandle::TopLeft:
-        for (int off = -1; off <= 1; ++off) {
+        for (int off = -kCornerHighlightOutsetPx; off <= kCornerHighlightOutsetPx;
+             ++off) {
             MoveToEx(dc, r.left, r.top + off, nullptr);
             LineTo(dc, r.left + corner_w, r.top + off);
-            MoveToEx(dc, r.left + off, r.top, nullptr);
+            MoveToEx(dc, r.left + off, r.top - kCornerHighlightOutsetPx, nullptr);
             LineTo(dc, r.left + off, r.top + corner_h);
         }
-        stamp_corner_tip(r.left - 1, r.top - 1);
         break;
     case greenflame::core::SelectionHandle::TopRight:
-        for (int off = -1; off <= 1; ++off) {
+        for (int off = -kCornerHighlightOutsetPx; off <= kCornerHighlightOutsetPx;
+             ++off) {
             MoveToEx(dc, r.right - corner_w, r.top + off, nullptr);
             LineTo(dc, r.right, r.top + off);
-            MoveToEx(dc, r.right - 1 + off, r.top, nullptr);
+            MoveToEx(dc, r.right - 1 + off, r.top - kCornerHighlightOutsetPx, nullptr);
             LineTo(dc, r.right - 1 + off, r.top + corner_h);
         }
-        stamp_corner_tip(r.right, r.top - 1);
         break;
     case greenflame::core::SelectionHandle::BottomLeft:
-        for (int off = -1; off <= 1; ++off) {
+        for (int off = -kCornerHighlightOutsetPx; off <= kCornerHighlightOutsetPx;
+             ++off) {
             MoveToEx(dc, r.left, r.bottom - 1 + off, nullptr);
             LineTo(dc, r.left + corner_w, r.bottom - 1 + off);
             MoveToEx(dc, r.left + off, r.bottom - corner_h, nullptr);
-            LineTo(dc, r.left + off, r.bottom);
+            LineTo(dc, r.left + off, r.bottom + kCornerHighlightOutsetPx);
         }
-        stamp_corner_tip(r.left - 1, r.bottom);
         break;
     case greenflame::core::SelectionHandle::BottomRight:
-        for (int off = -1; off <= 1; ++off) {
+        for (int off = -kCornerHighlightOutsetPx; off <= kCornerHighlightOutsetPx;
+             ++off) {
             MoveToEx(dc, r.right - corner_w, r.bottom - 1 + off, nullptr);
             LineTo(dc, r.right, r.bottom - 1 + off);
             MoveToEx(dc, r.right - 1 + off, r.bottom - corner_h, nullptr);
-            LineTo(dc, r.right - 1 + off, r.bottom);
+            LineTo(dc, r.right - 1 + off, r.bottom + kCornerHighlightOutsetPx);
         }
-        stamp_corner_tip(r.right, r.bottom);
         break;
     }
 

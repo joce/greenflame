@@ -293,9 +293,18 @@ void OverlayWindow::Rebuild_toolbar_buttons() {
     } else {
         toolbar_buttons_.clear();
         toolbar_buttons_.reserve(static_cast<size_t>(count));
+        int const toggle_start = count / 2;
         for (int i = 0; i < count; ++i) {
-            toolbar_buttons_.push_back(std::make_unique<DebugNumberButton>(
-                positions[static_cast<size_t>(i)], kToolbarButtonSizePx, i));
+            bool const is_toggle = (i >= toggle_start);
+            std::wstring label;
+            if (is_toggle) {
+                label = L"T" + std::to_wstring(i - toggle_start + 1);
+            } else {
+                label = std::to_wstring(i + 1);
+            }
+            toolbar_buttons_.push_back(std::make_unique<OverlayButton>(
+                positions[static_cast<size_t>(i)], kToolbarButtonSizePx,
+                std::move(label), is_toggle));
         }
     }
 }
@@ -559,6 +568,7 @@ LRESULT OverlayWindow::On_l_button_down() {
         for (auto const &btn : toolbar_buttons_) {
             if (btn->Is_hovered()) {
                 btn->On_mouse_down(cur);
+                InvalidateRect(hwnd_, nullptr, FALSE);
                 return 0;
             }
         }
@@ -676,6 +686,7 @@ LRESULT OverlayWindow::On_l_button_up() {
         for (auto const &btn : toolbar_buttons_) {
             if (btn->Is_hovered()) {
                 btn->On_mouse_up(cur);
+                InvalidateRect(hwnd_, nullptr, FALSE);
                 return 0;
             }
         }

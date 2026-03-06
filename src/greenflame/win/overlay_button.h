@@ -20,8 +20,10 @@ class IOverlayButton {
     [[nodiscard]] virtual core::RectPx Bounds() const = 0;
     [[nodiscard]] virtual bool Hit_test(core::PointPx pt) const = 0;
     [[nodiscard]] virtual bool Is_hovered() const = 0;
+    [[nodiscard]] virtual bool Is_active() const = 0;
 
     virtual void Set_position(core::PointPx top_left) = 0;
+    virtual void Set_active(bool active) = 0;
 
     virtual void On_mouse_enter() {}
     virtual void On_mouse_leave() {}
@@ -29,24 +31,37 @@ class IOverlayButton {
     virtual void On_mouse_up(core::PointPx pt) { (void)pt; }
 };
 
-// Debug placeholder: numbered circle (1-based label). Hover shown as white inner ring.
-class DebugNumberButton final : public IOverlayButton {
+// Concrete round toolbar button with a text label.
+// Supports normal, active (inverted colors), and pressed (yellow-green fill) states.
+// Toggle buttons flip their active state on click.
+class OverlayButton final : public IOverlayButton {
   public:
-    DebugNumberButton(core::PointPx position, int diameter, int zero_based_index);
+    OverlayButton(core::PointPx position, int diameter, std::wstring label,
+                  bool is_toggle = false);
 
     void Draw(HDC dc, ButtonDrawContext const &ctx) const override;
     [[nodiscard]] core::RectPx Bounds() const override;
     [[nodiscard]] bool Hit_test(core::PointPx pt) const override;
     [[nodiscard]] bool Is_hovered() const override { return hovered_; }
+    [[nodiscard]] bool Is_active() const override { return active_; }
     void Set_position(core::PointPx top_left) override;
+    void Set_active(bool active) override { active_ = active; }
     void On_mouse_enter() override { hovered_ = true; }
-    void On_mouse_leave() override { hovered_ = false; }
+    void On_mouse_leave() override {
+        hovered_ = false;
+        pressed_ = false;
+    }
+    void On_mouse_down(core::PointPx pt) override;
+    void On_mouse_up(core::PointPx pt) override;
 
   private:
     core::PointPx position_;
     int diameter_;
-    int index_; // 0-based; displayed as index+1
+    std::wstring label_;
+    bool is_toggle_;
     bool hovered_ = false;
+    bool active_ = false;
+    bool pressed_ = false;
 };
 
 } // namespace greenflame

@@ -1,4 +1,4 @@
-// Debug overlay button: numbered circle for testing toolbar placement.
+// Overlay toolbar button: round labelled button with hover, active, and pressed states.
 
 #include "win/overlay_button.h"
 
@@ -8,8 +8,8 @@ namespace {
 
 constexpr BYTE kOpaqueAlpha = 255;
 constexpr Gdiplus::REAL kPenWidth = 1.5f;
-constexpr Gdiplus::REAL kRingInset = 3.5f;
-constexpr Gdiplus::REAL kDebugFontSize = 12.0f;
+constexpr Gdiplus::REAL kHoverRingWidth = 3.0f;
+constexpr Gdiplus::REAL kFontSize = 12.0f;
 
 // GDI+ startup — idempotent, called at most once per process.
 [[nodiscard]] bool Ensure_gdiplus() noexcept {
@@ -28,16 +28,17 @@ constexpr Gdiplus::REAL kDebugFontSize = 12.0f;
 
 } // namespace
 
-DebugNumberButton::DebugNumberButton(core::PointPx position, int diameter,
-                                     int zero_based_index)
-    : position_(position), diameter_(diameter), index_(zero_based_index) {}
+OverlayButton::OverlayButton(core::PointPx position, int diameter, std::wstring label,
+                             bool is_toggle)
+    : position_(position), diameter_(diameter), label_(std::move(label)),
+      is_toggle_(is_toggle) {}
 
-core::RectPx DebugNumberButton::Bounds() const {
+core::RectPx OverlayButton::Bounds() const {
     return core::RectPx::From_ltrb(position_.x, position_.y, position_.x + diameter_,
                                    position_.y + diameter_);
 }
 
-bool DebugNumberButton::Hit_test(core::PointPx pt) const {
+bool OverlayButton::Hit_test(core::PointPx pt) const {
     int const cx = position_.x + diameter_ / 2;
     int const cy = position_.y + diameter_ / 2;
     int const r = diameter_ / 2;
@@ -46,9 +47,18 @@ bool DebugNumberButton::Hit_test(core::PointPx pt) const {
     return (dx * dx + dy * dy) <= (r * r);
 }
 
-void DebugNumberButton::Set_position(core::PointPx top_left) { position_ = top_left; }
+void OverlayButton::Set_position(core::PointPx top_left) { position_ = top_left; }
 
-void DebugNumberButton::Draw(HDC dc, ButtonDrawContext const &ctx) const {
+void OverlayButton::On_mouse_down(core::PointPx /*pt*/) { pressed_ = true; }
+
+void OverlayButton::On_mouse_up(core::PointPx /*pt*/) {
+    pressed_ = false;
+    if (is_toggle_) {
+        active_ = !active_;
+    }
+}
+
+void OverlayButton::Draw(HDC dc, ButtonDrawContext const &ctx) const {
     if (!dc || !Ensure_gdiplus()) {
         return;
     }
@@ -66,45 +76,64 @@ void DebugNumberButton::Draw(HDC dc, ButtonDrawContext const &ctx) const {
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
 
+        // Three distinct visuals: normal, active (inverted), pressed (yellow-green fill
+        // only).
+        constexpr COLORREF k_pressed_fill = RGB(155, 220, 65);
+        COLORREF fill_col, outline_col, text_col;
+        if (pressed_) {
+            fill_col = k_pressed_fill;
+            outline_col = ctx.outline_color; // consistent regardless of active state
+            text_col = ctx.outline_color;
+        } else if (active_) {
+            fill_col = ctx.outline_color;
+            outline_col = ctx.fill_color;
+            text_col = ctx.fill_color;
+        } else {
+            fill_col = ctx.fill_color;
+            outline_col = ctx.outline_color;
+            text_col = ctx.outline_color;
+        }
+
         constexpr Gdiplus::REAL k_half_pen = kPenWidth / 2.0f;
 
         // Filled circle.
         {
-            Gdiplus::SolidBrush fill(To_gdip(ctx.fill_color));
+            Gdiplus::SolidBrush fill(To_gdip(fill_col));
             g.FillEllipse(&fill, 0.0f, 0.0f, df, df);
         }
 
         // Outline ring.
         {
-            Gdiplus::Pen outline(To_gdip(ctx.outline_color), kPenWidth);
+            Gdiplus::Pen outline(To_gdip(outline_col), kPenWidth);
             g.DrawEllipse(&outline, k_half_pen, k_half_pen, df - kPenWidth,
                           df - kPenWidth);
         }
 
-        // Hover: white inner ring.
+        // Hover: 3px ring at the button edge, 75% outline + 25% fill color.
         if (hovered_) {
+            COLORREF const hover_col =
+                RGB((GetRValue(outline_col) * 3 + GetRValue(fill_col)) / 4,
+                    (GetGValue(outline_col) * 3 + GetGValue(fill_col)) / 4,
+                    (GetBValue(outline_col) * 3 + GetBValue(fill_col)) / 4);
             constexpr Gdiplus::REAL k_ring_double = 2.0f;
-            Gdiplus::Pen ring(
-                Gdiplus::Color(kOpaqueAlpha, kOpaqueAlpha, kOpaqueAlpha,
-                              kOpaqueAlpha),
-                kPenWidth);
-            g.DrawEllipse(&ring, kRingInset, kRingInset,
-                          df - k_ring_double * kRingInset,
-                          df - k_ring_double * kRingInset);
+            constexpr Gdiplus::REAL k_hover_inset = kHoverRingWidth / 2.0f;
+            Gdiplus::Pen ring(To_gdip(hover_col), kHoverRingWidth);
+            g.DrawEllipse(&ring, k_hover_inset, k_hover_inset,
+                          df - k_ring_double * k_hover_inset,
+                          df - k_ring_double * k_hover_inset);
         }
 
-        // Label (1-based number) with antialiased GDI+ text (no ClearType fringing).
+        // Label with antialiased GDI+ text (no ClearType fringing).
         {
             g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAlias);
-            Gdiplus::Font font(L"Segoe UI", kDebugFontSize, Gdiplus::FontStyleBold,
+            Gdiplus::Font font(L"Segoe UI", kFontSize, Gdiplus::FontStyleBold,
                                Gdiplus::UnitPixel);
-            Gdiplus::SolidBrush text_brush(To_gdip(ctx.outline_color));
+            Gdiplus::SolidBrush text_brush(To_gdip(text_col));
             Gdiplus::StringFormat fmt;
             fmt.SetAlignment(Gdiplus::StringAlignmentCenter);
             fmt.SetLineAlignment(Gdiplus::StringAlignmentCenter);
             Gdiplus::RectF const text_rect(0.0f, 0.0f, df, df);
-            std::wstring const label = std::to_wstring(index_ + 1);
-            g.DrawString(label.c_str(), static_cast<INT>(label.size()), &font,
+            g.DrawString(label_.c_str(), static_cast<INT>(label_.size()), &font,
                          text_rect, &fmt, &text_brush);
         }
     }

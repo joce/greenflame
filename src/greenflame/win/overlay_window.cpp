@@ -504,6 +504,9 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
     if (wparam == VK_TAB) {
         // Tab pressed: refresh cursor (IDC_SIZEALL when inside selection) since
         // WM_SETCURSOR may not be sent on key press.
+        if (Refresh_hover_handle()) {
+            InvalidateRect(hwnd_, nullptr, TRUE);
+        }
         Refresh_cursor();
     }
     UINT const message_id =
@@ -531,6 +534,9 @@ LRESULT OverlayWindow::On_key_up(WPARAM wparam, LPARAM lparam) {
     if (wparam == VK_TAB) {
         // Tab released: cursor was IDC_SIZEALL when inside selection; refresh it
         // since WM_SETCURSOR is not sent on key release.
+        if (Refresh_hover_handle()) {
+            InvalidateRect(hwnd_, nullptr, TRUE);
+        }
         Refresh_cursor();
     }
     UINT const message_id =
@@ -636,22 +642,8 @@ LRESULT OverlayWindow::On_mouse_move() {
                                              win_rect, vdesk, monitor_idx, ox, oy,
                                              static_cast<uint64_t>(GetTickCount64())));
 
-    auto const &s2 = controller_.State();
-    if (!s2.final_selection.Is_empty() && !s2.dragging && !s2.handle_dragging &&
-        !s2.move_dragging) {
-        core::PointPx const cur = Get_client_cursor_pos_px(hwnd_);
-        bool const tab_held = (GetKeyState(VK_TAB) & 0x8000) != 0;
-        std::optional<core::SelectionHandle> hover =
-            (tab_held && s2.final_selection.Contains(cur))
-                ? std::nullopt
-                : core::Hit_test_border_zone(s2.final_selection, cur);
-        if (hover != last_hover_handle_) {
-            last_hover_handle_ = hover;
-            InvalidateRect(hwnd_, nullptr, TRUE);
-        }
-    } else if (last_hover_handle_.has_value()) {
-        last_hover_handle_ = std::nullopt;
-        // no extra repaint needed — drags already repaint
+    if (Refresh_hover_handle()) {
+        InvalidateRect(hwnd_, nullptr, TRUE);
     }
 
     // Update toolbar button hover state.
@@ -698,6 +690,11 @@ LRESULT OverlayWindow::On_l_button_up() {
     core::OverlayModifierState mods{};
     mods.alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
     Apply_action(controller_.On_primary_release(mods, Get_client_cursor_pos_px(hwnd_)));
+    bool const hover_changed = Refresh_hover_handle();
+    Refresh_cursor();
+    if (hover_changed) {
+        InvalidateRect(hwnd_, nullptr, TRUE);
+    }
 
     if ((was_move || was_resize)) {
         core::RectPx const after = controller_.State().final_selection;
@@ -714,6 +711,30 @@ LRESULT OverlayWindow::On_l_button_up() {
     }
 
     return 0;
+}
+
+bool OverlayWindow::Refresh_hover_handle() {
+    auto const &s = controller_.State();
+    if (!s.final_selection.Is_empty() && !s.dragging && !s.handle_dragging &&
+        !s.move_dragging) {
+        core::PointPx const cur = Get_client_cursor_pos_px(hwnd_);
+        bool const tab_held = (GetKeyState(VK_TAB) & 0x8000) != 0;
+        std::optional<core::SelectionHandle> hover =
+            (tab_held && s.final_selection.Contains(cur))
+                ? std::nullopt
+                : core::Hit_test_border_zone(s.final_selection, cur);
+        if (hover != last_hover_handle_) {
+            last_hover_handle_ = hover;
+            return true;
+        }
+        return false;
+    }
+
+    if (last_hover_handle_.has_value()) {
+        last_hover_handle_ = std::nullopt;
+        return true;
+    }
+    return false;
 }
 
 LRESULT OverlayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {

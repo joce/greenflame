@@ -73,6 +73,7 @@ class OverlayWindow final {
     LRESULT On_close();
     LRESULT On_set_cursor(WPARAM wparam, LPARAM lparam);
     void Refresh_cursor();
+    bool Refresh_hover_handle();
     [[nodiscard]] bool Is_selection_stable_for_help() const;
 
     void Rebuild_toolbar_buttons();

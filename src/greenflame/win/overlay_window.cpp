@@ -26,7 +26,6 @@ constexpr int kCenterFontHeight = 36;
 constexpr int kHelpHintFontHeight = 16;
 constexpr int kToolbarButtonSizePx = 36;
 constexpr int kToolbarButtonSeparatorPx = 9; // size / 4
-constexpr int kTestingButtonCount = 20;
 
 constexpr int kThumbnailMaxWidth = 320;
 constexpr int kThumbnailMaxHeight = 120;
@@ -237,9 +236,10 @@ void OverlayWindow::Set_testing_toolbar(bool enable) noexcept {
     testing_toolbar_ = enable;
 }
 
-std::vector<core::PointPx> OverlayWindow::Compute_toolbar_positions() const {
+std::vector<core::PointPx>
+OverlayWindow::Compute_toolbar_positions(int button_count) const {
     auto const &s = controller_.State();
-    if (s.final_selection.Is_empty()) {
+    if (s.final_selection.Is_empty() || button_count <= 0) {
         return {};
     }
 
@@ -262,7 +262,7 @@ std::vector<core::PointPx> OverlayWindow::Compute_toolbar_positions() const {
     params.available = monitor_client_rects;
     params.button_size = kToolbarButtonSizePx;
     params.separator = kToolbarButtonSeparatorPx;
-    params.button_count = kTestingButtonCount;
+    params.button_count = button_count;
     return core::Compute_toolbar_placement(params).positions;
 }
 
@@ -271,41 +271,31 @@ void OverlayWindow::Rebuild_toolbar_buttons() {
     bool const stable = !s.final_selection.Is_empty() && !s.dragging &&
                         !s.handle_dragging && !s.move_dragging;
 
-    if (!testing_toolbar_ || !stable) {
+    if (!stable) {
         for (auto const &btn : toolbar_buttons_) {
-            if (btn) {
-                btn->On_mouse_leave();
+            if (btn.button) {
+                btn.button->On_mouse_leave();
             }
         }
         toolbar_buttons_.clear();
         return;
     }
 
-    std::vector<core::PointPx> const positions = Compute_toolbar_positions();
-    int const count = static_cast<int>(positions.size());
+    std::vector<core::AnnotationToolbarButtonView> const views =
+        controller_.Build_annotation_toolbar_button_views();
+    std::vector<core::PointPx> const positions =
+        Compute_toolbar_positions(static_cast<int>(views.size()));
+    size_t const count = std::min(views.size(), positions.size());
 
-    if (count == static_cast<int>(toolbar_buttons_.size())) {
-        // Reuse existing buttons — just reposition them.
-        for (int i = 0; i < count; ++i) {
-            toolbar_buttons_[static_cast<size_t>(i)]->Set_position(
-                positions[static_cast<size_t>(i)]);
-        }
-    } else {
-        toolbar_buttons_.clear();
-        toolbar_buttons_.reserve(static_cast<size_t>(count));
-        int const toggle_start = count / 2;
-        for (int i = 0; i < count; ++i) {
-            bool const is_toggle = (i >= toggle_start);
-            std::wstring label;
-            if (is_toggle) {
-                label = L"T" + std::to_wstring(i - toggle_start + 1);
-            } else {
-                label = std::to_wstring(i + 1);
-            }
-            toolbar_buttons_.push_back(std::make_unique<OverlayButton>(
-                positions[static_cast<size_t>(i)], kToolbarButtonSizePx,
-                std::move(label), is_toggle));
-        }
+    toolbar_buttons_.clear();
+    toolbar_buttons_.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+        ToolbarButtonEntry entry{};
+        entry.tool_id = views[i].id;
+        entry.tooltip = views[i].tooltip;
+        entry.button = std::make_unique<OverlayButton>(
+            positions[i], kToolbarButtonSizePx, views[i].label, false, views[i].active);
+        toolbar_buttons_.push_back(std::move(entry));
     }
 }
 
@@ -364,6 +354,24 @@ bool OverlayWindow::Is_selection_stable_for_help() const {
     auto const &s = controller_.State();
     return !s.final_selection.Is_empty() && !s.dragging && !s.handle_dragging &&
            !s.move_dragging && !s.modifier_preview;
+}
+
+std::wstring_view OverlayWindow::Hovered_toolbar_tooltip_text() const noexcept {
+    for (auto const &entry : toolbar_buttons_) {
+        if (entry.button && entry.button->Is_hovered()) {
+            return entry.tooltip;
+        }
+    }
+    return {};
+}
+
+std::optional<core::RectPx> OverlayWindow::Hovered_toolbar_button_bounds() const {
+    for (auto const &entry : toolbar_buttons_) {
+        if (entry.button && entry.button->Is_hovered()) {
+            return entry.button->Bounds();
+        }
+    }
+    return std::nullopt;
 }
 
 LRESULT CALLBACK OverlayWindow::Static_wnd_proc(HWND hwnd, UINT msg, WPARAM wparam,
@@ -467,6 +475,9 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
         } else {
             controller_.Undo();
         }
+        Rebuild_toolbar_buttons();
+        (void)Refresh_hover_handle();
+        Refresh_cursor();
         InvalidateRect(hwnd_, nullptr, TRUE);
         return 0;
     }
@@ -476,6 +487,16 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
     }
     if (eff_ctrl && wparam == L'C') {
         Apply_action(controller_.On_copy_to_clipboard_requested());
+        return 0;
+    }
+    if (wparam == VK_DELETE) {
+        Apply_action(controller_.On_delete_selected_annotation());
+        return 0;
+    }
+    if (!eff_ctrl && !eff_alt && (wparam == L'S' || wparam == L'P')) {
+        Apply_action(
+            controller_.On_annotation_tool_hotkey(static_cast<wchar_t>(wparam)));
+        Refresh_cursor();
         return 0;
     }
     if (wparam == VK_SHIFT || wparam == VK_CONTROL || wparam == VK_MENU) {
@@ -566,13 +587,14 @@ LRESULT OverlayWindow::On_l_button_down() {
     if (!toolbar_buttons_.empty()) {
         core::PointPx const cur = Get_client_cursor_pos_px(hwnd_);
         for (auto const &btn : toolbar_buttons_) {
-            if (btn->Is_hovered()) {
-                btn->On_mouse_down(cur);
+            if (btn.button && btn.button->Is_hovered()) {
+                btn.button->On_mouse_down(cur);
                 InvalidateRect(hwnd_, nullptr, FALSE);
                 return 0;
             }
         }
     }
+    core::RectPx const before_selection = controller_.State().final_selection;
     bool const shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
     bool const ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
     bool const alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
@@ -610,6 +632,20 @@ LRESULT OverlayWindow::On_l_button_down() {
     Apply_action(controller_.On_primary_press(
         mods, cursor_client, cursor_screen, win_handle, monitor_idx,
         std::optional<core::RectPx>{}, vdesk, std::move(vis_rects), wr.left, wr.top));
+    core::RectPx const after_selection = controller_.State().final_selection;
+    auto const &after_state = controller_.State();
+    if (before_selection != after_selection && before_selection.Is_empty() &&
+        !after_selection.Is_empty() && !after_state.dragging &&
+        !after_state.handle_dragging && !after_state.move_dragging) {
+        controller_.Push_command(
+            std::make_unique<core::ModificationCommand<core::RectPx>>(
+                "Create selection",
+                [this](core::RectPx const &r) {
+                    controller_.Set_final_selection(r);
+                    InvalidateRect(hwnd_, nullptr, TRUE);
+                },
+                before_selection, after_selection));
+    }
     return 0;
 }
 
@@ -661,13 +697,13 @@ LRESULT OverlayWindow::On_mouse_move() {
         core::PointPx const cur = Get_client_cursor_pos_px(hwnd_);
         bool any_changed = false;
         for (auto const &btn : toolbar_buttons_) {
-            bool const was = btn->Is_hovered();
-            bool const now = btn->Hit_test(cur);
+            bool const was = btn.button && btn.button->Is_hovered();
+            bool const now = btn.button && btn.button->Hit_test(cur);
             if (!was && now) {
-                btn->On_mouse_enter();
+                btn.button->On_mouse_enter();
                 any_changed = true;
             } else if (was && !now) {
-                btn->On_mouse_leave();
+                btn.button->On_mouse_leave();
                 any_changed = true;
             }
         }
@@ -684,14 +720,22 @@ LRESULT OverlayWindow::On_l_button_up() {
     if (!toolbar_buttons_.empty()) {
         core::PointPx const cur = Get_client_cursor_pos_px(hwnd_);
         for (auto const &btn : toolbar_buttons_) {
-            if (btn->Is_hovered()) {
-                btn->On_mouse_up(cur);
-                InvalidateRect(hwnd_, nullptr, FALSE);
+            if (btn.button && btn.button->Is_hovered()) {
+                btn.button->On_mouse_up(cur);
+                core::OverlayAction const action =
+                    controller_.On_select_annotation_tool(btn.tool_id);
+                Apply_action(action);
+                if (action == core::OverlayAction::None) {
+                    InvalidateRect(hwnd_, nullptr, FALSE);
+                }
+                Refresh_cursor();
                 return 0;
             }
         }
     }
     auto const &s = controller_.State();
+    core::RectPx const selection_before = s.final_selection;
+    bool const was_drag = s.dragging;
     bool const was_move = s.move_dragging;
     bool const was_resize = s.handle_dragging;
     core::RectPx const before =
@@ -707,8 +751,8 @@ LRESULT OverlayWindow::On_l_button_up() {
         InvalidateRect(hwnd_, nullptr, TRUE);
     }
 
+    core::RectPx const after = controller_.State().final_selection;
     if ((was_move || was_resize)) {
-        core::RectPx const after = controller_.State().final_selection;
         if (before != after) {
             controller_.Push_command(
                 std::make_unique<core::ModificationCommand<core::RectPx>>(
@@ -719,6 +763,15 @@ LRESULT OverlayWindow::On_l_button_up() {
                     },
                     before, after));
         }
+    } else if (was_drag && selection_before != after && !after.Is_empty()) {
+        controller_.Push_command(
+            std::make_unique<core::ModificationCommand<core::RectPx>>(
+                "Draw selection",
+                [this](core::RectPx const &r) {
+                    controller_.Set_final_selection(r);
+                    InvalidateRect(hwnd_, nullptr, TRUE);
+                },
+                selection_before, after));
     }
 
     return 0;
@@ -876,6 +929,38 @@ core::RectPx OverlayWindow::Selection_screen_rect() const {
                                    sel.bottom + static_cast<int32_t>(overlay_rect.top));
 }
 
+bool OverlayWindow::Composite_annotations_into_capture(
+    GdiCaptureResult &capture, core::RectPx target_bounds) const {
+    std::span<const core::Annotation> const annotations = controller_.Annotations();
+    if (!capture.Is_valid() || annotations.empty()) {
+        return true;
+    }
+
+    HDC const dc = GetDC(nullptr);
+    if (dc == nullptr) {
+        return false;
+    }
+
+    bool ok = false;
+    int const row_bytes = Row_bytes32(capture.width);
+    size_t const buffer_size =
+        static_cast<size_t>(row_bytes) * static_cast<size_t>(capture.height);
+    std::vector<uint8_t> pixels(buffer_size);
+    BITMAPINFOHEADER bmi{};
+    Fill_bmi32_top_down(bmi, capture.width, capture.height);
+    if (GetDIBits(dc, capture.bitmap, 0, static_cast<UINT>(capture.height),
+                  pixels.data(), reinterpret_cast<BITMAPINFO *>(&bmi),
+                  DIB_RGB_COLORS) != 0) {
+        core::Blend_annotations_onto_pixels(pixels, capture.width, capture.height,
+                                            row_bytes, annotations, target_bounds);
+        ok = SetDIBits(dc, capture.bitmap, 0, static_cast<UINT>(capture.height),
+                       pixels.data(), reinterpret_cast<BITMAPINFO *>(&bmi),
+                       DIB_RGB_COLORS) != 0;
+    }
+    ReleaseDC(nullptr, dc);
+    return ok;
+}
+
 void OverlayWindow::Save_directly_and_close(bool copy_saved_file_to_clipboard) {
     if (!resources_->capture.Is_valid()) {
         return;
@@ -888,6 +973,11 @@ void OverlayWindow::Save_directly_and_close(bool copy_saved_file_to_clipboard) {
     GdiCaptureResult cropped;
     if (!Crop_capture(resources_->capture, selection.left, selection.top,
                       selection.Width(), selection.Height(), cropped)) {
+        Destroy();
+        return;
+    }
+    if (!Composite_annotations_into_capture(cropped, selection)) {
+        cropped.Free();
         Destroy();
         return;
     }
@@ -951,6 +1041,10 @@ void OverlayWindow::Save_as_and_close(bool copy_saved_file_to_clipboard) {
     if (!Crop_capture(resources_->capture, selection.left, selection.top,
                       selection.Width(), selection.Height(), cropped)) {
         Destroy();
+        return;
+    }
+    if (!Composite_annotations_into_capture(cropped, selection)) {
+        cropped.Free();
         return;
     }
 
@@ -1048,6 +1142,11 @@ void OverlayWindow::Copy_to_clipboard_and_close() {
         Destroy();
         return;
     }
+    if (!Composite_annotations_into_capture(cropped, selection)) {
+        cropped.Free();
+        Destroy();
+        return;
+    }
     bool const copied_to_clipboard = Copy_capture_to_clipboard(cropped, hwnd_);
     cropped.Free();
 
@@ -1110,6 +1209,12 @@ LRESULT OverlayWindow::On_paint() {
         input.cursor_client_px = cursor;
         input.paint_buffer = std::span<uint8_t>(resources_->paint_buffer);
         input.resources = &resources_->paint;
+        input.annotations = controller_.Annotations();
+        input.draft_freehand_points = controller_.Draft_freehand_points();
+        input.draft_freehand_style = controller_.Draft_freehand_style();
+        input.selected_annotation_bounds = controller_.Selected_annotation_bounds();
+        input.toolbar_tooltip_text = Hovered_toolbar_tooltip_text();
+        input.hovered_toolbar_bounds = Hovered_toolbar_button_bounds();
         if (s.handle_dragging && s.resize_handle.has_value()) {
             input.highlight_handle = s.resize_handle;
         } else if (!s.move_dragging && !s.dragging && !s.modifier_preview) {
@@ -1118,7 +1223,7 @@ LRESULT OverlayWindow::On_paint() {
         std::vector<IOverlayButton *> btn_ptrs;
         btn_ptrs.reserve(toolbar_buttons_.size());
         for (auto const &u : toolbar_buttons_) {
-            btn_ptrs.push_back(u.get());
+            btn_ptrs.push_back(u.button.get());
         }
         input.toolbar_buttons = std::span<IOverlayButton *const>(btn_ptrs);
         Paint_overlay(hdc, hwnd_, rect, input);
@@ -1175,7 +1280,11 @@ void OverlayWindow::Refresh_cursor() {
             SetCursor(Cursor_for_handle(*hit));
             return;
         }
-        SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+        if (controller_.Active_annotation_tool() == core::AnnotationToolId::Freehand) {
+            SetCursor(LoadCursorW(nullptr, IDC_CROSS));
+        } else {
+            SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+        }
         return;
     }
     SetCursor(LoadCursorW(nullptr, IDC_CROSS));

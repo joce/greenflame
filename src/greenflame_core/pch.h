@@ -3,15 +3,19 @@
 #include "greenflame_core/compiler_diagnostic.h"
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <cwchar>
 #include <cwctype>
+#include <functional>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 // Include windef.h for HWND without pulling in all of windows.h.

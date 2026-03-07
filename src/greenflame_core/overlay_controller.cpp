@@ -42,13 +42,19 @@ void OverlaySessionData::Reset_for_session() {
 void OverlayController::Reset_for_session(std::vector<MonitorWithBounds> monitors) {
     state_.Reset_for_session();
     undo_stack_.Clear();
+    annotation_controller_.Reset_for_session();
     state_.cached_monitors = std::move(monitors);
     state_.window_rects.reserve(64);
     state_.vertical_edges.reserve(128);
     state_.horizontal_edges.reserve(128);
 }
 
-void OverlayController::Set_final_selection(RectPx r) { state_.final_selection = r; }
+void OverlayController::Set_final_selection(RectPx r) {
+    state_.final_selection = r;
+    if (r.Is_empty()) {
+        annotation_controller_.Clear_annotations();
+    }
+}
 
 void OverlayController::Push_command(std::unique_ptr<ICommand> cmd) {
     undo_stack_.Push(std::move(cmd));
@@ -57,6 +63,61 @@ void OverlayController::Push_command(std::unique_ptr<ICommand> cmd) {
 void OverlayController::Undo() { undo_stack_.Undo(); }
 
 void OverlayController::Redo() { undo_stack_.Redo(); }
+
+OverlayAction OverlayController::On_annotation_tool_hotkey(wchar_t hotkey) {
+    if (state_.final_selection.Is_empty()) {
+        return OverlayAction::None;
+    }
+    return annotation_controller_.Select_tool_by_hotkey(hotkey) ? OverlayAction::Repaint
+                                                                : OverlayAction::None;
+}
+
+OverlayAction OverlayController::On_select_annotation_tool(AnnotationToolId id) {
+    if (state_.final_selection.Is_empty()) {
+        return OverlayAction::None;
+    }
+    return annotation_controller_.Select_tool(id) ? OverlayAction::Repaint
+                                                  : OverlayAction::None;
+}
+
+OverlayAction OverlayController::On_delete_selected_annotation() {
+    if (annotation_controller_.Delete_selected_annotation(undo_stack_)) {
+        return OverlayAction::Repaint;
+    }
+    return OverlayAction::None;
+}
+
+std::vector<AnnotationToolbarButtonView>
+OverlayController::Build_annotation_toolbar_button_views() const {
+    if (state_.final_selection.Is_empty()) {
+        return {};
+    }
+    return annotation_controller_.Build_toolbar_button_views();
+}
+
+std::span<const Annotation> OverlayController::Annotations() const noexcept {
+    return annotation_controller_.Annotations();
+}
+
+Annotation const *OverlayController::Draft_annotation() const noexcept {
+    return annotation_controller_.Draft_annotation();
+}
+
+std::span<const PointPx> OverlayController::Draft_freehand_points() const noexcept {
+    return annotation_controller_.Draft_freehand_points();
+}
+
+std::optional<StrokeStyle> OverlayController::Draft_freehand_style() const noexcept {
+    return annotation_controller_.Draft_freehand_style();
+}
+
+std::optional<RectPx> OverlayController::Selected_annotation_bounds() const noexcept {
+    return annotation_controller_.Selected_annotation_bounds();
+}
+
+AnnotationToolId OverlayController::Active_annotation_tool() const noexcept {
+    return annotation_controller_.Active_tool();
+}
 
 void OverlayController::Rebuild_snap_edges(std::vector<RectPx> window_rects,
                                            int32_t origin_x, int32_t origin_y) {
@@ -142,8 +203,11 @@ OverlayAction OverlayController::On_cancel() {
         state_.live_rect = {};
         return OverlayAction::Repaint;
     }
+    if (annotation_controller_.On_cancel()) {
+        return OverlayAction::Repaint;
+    }
     if (!state_.final_selection.Is_empty()) {
-        state_.final_selection = {};
+        Set_final_selection({});
         state_.live_rect = {};
         return OverlayAction::Repaint;
     }
@@ -221,7 +285,9 @@ OverlayAction OverlayController::On_primary_press(
             Rebuild_snap_edges(std::move(visible_window_rects), origin_x, origin_y);
             return OverlayAction::Repaint;
         }
-        // Click outside selection and no handle hit — fall through to fresh drag.
+        return annotation_controller_.On_primary_press(cursor_client)
+                   ? OverlayAction::Repaint
+                   : OverlayAction::None;
     }
 
     // ---- Fresh drag ----
@@ -281,6 +347,10 @@ OverlayAction OverlayController::On_pointer_move(
                                            state_.horizontal_edges, kSnapThresholdPx);
         }
         state_.live_rect = candidate;
+    } else if (annotation_controller_.Has_active_tool_gesture()) {
+        // Annotation tools update their own draft state here; repaint cadence is
+        // controlled by the shared throttle below.
+        (void)annotation_controller_.On_pointer_move(cursor_client);
     } else {
         Apply_modifier_preview(mods, cursor_screen, window_rect_screen,
                                virtual_desktop_bounds, monitor_index_under_cursor,
@@ -343,6 +413,12 @@ OverlayAction OverlayController::On_primary_release(OverlayModifierState mods,
         state_.selection_monitor_index = std::nullopt;
         state_.dragging = false;
         return OverlayAction::Repaint;
+    }
+
+    if (annotation_controller_.Has_active_tool_gesture()) {
+        return annotation_controller_.On_primary_release(undo_stack_)
+                   ? OverlayAction::Repaint
+                   : OverlayAction::None;
     }
 
     return OverlayAction::None;

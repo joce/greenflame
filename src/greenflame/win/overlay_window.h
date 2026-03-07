@@ -67,6 +67,9 @@ class OverlayWindow final {
     void Copy_to_clipboard_and_close();
     void Notify_save_and_close(GdiCaptureResult &cropped, std::wstring_view saved_path,
                                bool file_copied_to_clipboard);
+    [[nodiscard]] bool
+    Composite_annotations_into_capture(GdiCaptureResult &capture,
+                                       core::RectPx target_bounds) const;
 
     LRESULT On_paint();
     LRESULT On_destroy();
@@ -75,9 +78,24 @@ class OverlayWindow final {
     void Refresh_cursor();
     bool Refresh_hover_handle();
     [[nodiscard]] bool Is_selection_stable_for_help() const;
+    [[nodiscard]] std::wstring_view Hovered_toolbar_tooltip_text() const noexcept;
+    [[nodiscard]] std::optional<core::RectPx> Hovered_toolbar_button_bounds() const;
 
     void Rebuild_toolbar_buttons();
-    [[nodiscard]] std::vector<core::PointPx> Compute_toolbar_positions() const;
+    [[nodiscard]] std::vector<core::PointPx>
+    Compute_toolbar_positions(int button_count) const;
+
+    struct ToolbarButtonEntry final {
+        core::AnnotationToolId tool_id = core::AnnotationToolId::Pointer;
+        std::wstring tooltip = {};
+        std::unique_ptr<IOverlayButton> button = {};
+
+        ToolbarButtonEntry() = default;
+        ToolbarButtonEntry(ToolbarButtonEntry const &) = delete;
+        ToolbarButtonEntry &operator=(ToolbarButtonEntry const &) = delete;
+        ToolbarButtonEntry(ToolbarButtonEntry &&) noexcept = default;
+        ToolbarButtonEntry &operator=(ToolbarButtonEntry &&) noexcept = default;
+    };
 
     IOverlayEvents *events_ = nullptr;
     core::AppConfig *config_ = nullptr;
@@ -89,7 +107,7 @@ class OverlayWindow final {
     std::optional<core::SelectionHandle> last_hover_handle_;
     OverlayHelpOverlay hotkey_help_overlay_ = {};
     bool testing_toolbar_ = false;
-    std::vector<std::unique_ptr<IOverlayButton>> toolbar_buttons_;
+    std::vector<ToolbarButtonEntry> toolbar_buttons_;
 };
 
 } // namespace greenflame

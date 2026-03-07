@@ -37,7 +37,7 @@ class IOverlayButton {
 class OverlayButton final : public IOverlayButton {
   public:
     OverlayButton(core::PointPx position, int diameter, std::wstring label,
-                  bool is_toggle = false);
+                  bool is_toggle = false, bool active = false);
 
     void Draw(HDC dc, ButtonDrawContext const &ctx) const override;
     [[nodiscard]] core::RectPx Bounds() const override;

@@ -5,7 +5,9 @@
 // read-only paint input; no dependency on OverlayState or window state
 // accessors.
 
+#include "greenflame_core/annotation_raster.h"
 #include "greenflame_core/rect_px.h"
+#include "greenflame_core/selection_handles.h"
 
 namespace greenflame {
 
@@ -21,10 +23,6 @@ struct PaintResources {
     HPEN handle_pen = nullptr;
 };
 
-namespace core {
-enum class SelectionHandle : uint8_t;
-} // namespace core
-
 class IOverlayButton;
 
 struct PaintOverlayInput {
@@ -35,6 +33,9 @@ struct PaintOverlayInput {
     std::span<const core::RectPx> monitor_rects_client = {};
     std::span<uint8_t> paint_buffer = {};
     PaintResources const *resources = nullptr;
+    std::span<const core::Annotation> annotations = {};
+    std::span<const core::PointPx> draft_freehand_points = {};
+    std::optional<core::StrokeStyle> draft_freehand_style = std::nullopt;
     bool dragging = false;
     bool handle_dragging = false;
     bool move_dragging = false;
@@ -42,7 +43,10 @@ struct PaintOverlayInput {
     bool show_selection_size_side_labels = true;
     bool show_selection_size_center_label = true;
     std::optional<core::SelectionHandle> highlight_handle = std::nullopt;
+    std::optional<core::RectPx> selected_annotation_bounds = std::nullopt;
     std::span<IOverlayButton *const> toolbar_buttons = {};
+    std::wstring_view toolbar_tooltip_text = {};
+    std::optional<core::RectPx> hovered_toolbar_bounds = std::nullopt;
 };
 
 void Paint_overlay(HDC hdc, HWND hwnd, const RECT &rc, const PaintOverlayInput &in);

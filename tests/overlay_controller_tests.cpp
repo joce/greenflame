@@ -470,7 +470,7 @@ TEST(overlay_controller, F_CancelMoveDrag_RestoresMoveAnchor) {
     EXPECT_EQ(c.State().final_selection, original_sel);
 }
 
-TEST(overlay_controller, F_TabOutsideSelection_FreshDrag) {
+TEST(overlay_controller, F_TabOutsideSelection_DoesNotStartFreshDrag) {
     auto c = Make_controller();
     Press(c, {100, 100});
     Release(c, {300, 300});
@@ -479,9 +479,11 @@ TEST(overlay_controller, F_TabOutsideSelection_FreshDrag) {
     std::ignore =
         c.On_primary_press(Tab_only(), {50, 50}, {50, 50}, std::nullopt, std::nullopt,
                            std::nullopt, {}, Make_vis_rects(c), 0, 0);
-    // Should start a fresh drag, not move drag
-    EXPECT_TRUE(c.State().dragging);
+    // With annotation tools available outside the region, this no longer starts a
+    // replacement capture drag.
+    EXPECT_FALSE(c.State().dragging);
     EXPECT_FALSE(c.State().move_dragging);
+    EXPECT_EQ(c.State().final_selection, (RectPx::From_ltrb(100, 100, 300, 300)));
 }
 
 // ===========================================================================
@@ -536,6 +538,27 @@ TEST(overlay_controller, G_Cancel_FinalSelection_ClearsSelection) {
     OverlayAction action = c.On_cancel();
     EXPECT_EQ(action, OverlayAction::Repaint);
     EXPECT_TRUE(c.State().final_selection.Is_empty());
+}
+
+TEST(overlay_controller, G_Cancel_FinalSelectionAlsoClearsAnnotations) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+    ASSERT_FALSE(c.State().final_selection.Is_empty());
+
+    EXPECT_EQ(c.On_annotation_tool_hotkey(L'P'), OverlayAction::Repaint);
+    std::ignore =
+        c.On_primary_press(No_mods(), {120, 120}, {120, 120}, std::nullopt,
+                           std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0, 0);
+    std::ignore = c.On_pointer_move(No_mods(), {140, 140}, {140, 140}, std::nullopt, {},
+                                    std::nullopt, 0, 0, 100u);
+    std::ignore = c.On_primary_release(No_mods(), {140, 140});
+    ASSERT_EQ(c.Annotations().size(), 1u);
+
+    OverlayAction action = c.On_cancel();
+    EXPECT_EQ(action, OverlayAction::Repaint);
+    EXPECT_TRUE(c.State().final_selection.Is_empty());
+    EXPECT_TRUE(c.Annotations().empty());
 }
 
 TEST(overlay_controller, G_Cancel_AllClear_ReturnsClose) {

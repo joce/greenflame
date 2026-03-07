@@ -1,5 +1,6 @@
 #pragma once
 
+#include "greenflame_core/annotation_controller.h"
 #include "greenflame_core/command.h"
 #include "greenflame_core/monitor_rules.h"
 #include "greenflame_core/rect_px.h"
@@ -102,6 +103,18 @@ class OverlayController final {
     void Undo();
     void Redo();
 
+    [[nodiscard]] OverlayAction On_annotation_tool_hotkey(wchar_t hotkey);
+    [[nodiscard]] OverlayAction On_select_annotation_tool(AnnotationToolId id);
+    [[nodiscard]] OverlayAction On_delete_selected_annotation();
+    [[nodiscard]] std::vector<AnnotationToolbarButtonView>
+    Build_annotation_toolbar_button_views() const;
+    [[nodiscard]] std::span<const Annotation> Annotations() const noexcept;
+    [[nodiscard]] Annotation const *Draft_annotation() const noexcept;
+    [[nodiscard]] std::span<const PointPx> Draft_freehand_points() const noexcept;
+    [[nodiscard]] std::optional<StrokeStyle> Draft_freehand_style() const noexcept;
+    [[nodiscard]] std::optional<RectPx> Selected_annotation_bounds() const noexcept;
+    [[nodiscard]] AnnotationToolId Active_annotation_tool() const noexcept;
+
   private:
     void Rebuild_snap_edges(std::vector<RectPx> window_rects, int32_t origin_x,
                             int32_t origin_y);
@@ -113,6 +126,7 @@ class OverlayController final {
 
     OverlaySessionData state_;
     UndoStack undo_stack_;
+    AnnotationController annotation_controller_;
 };
 
 } // namespace greenflame::core

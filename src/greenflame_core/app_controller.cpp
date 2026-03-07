@@ -209,6 +209,23 @@ core::OverlayHelpContent AppController::Build_overlay_help_content() const {
     };
     content.sections.push_back(std::move(copy_and_save));
 
+    core::OverlayHelpSection tools{};
+    tools.title = L"Annotation Tools";
+    tools.entries = {
+        {L"S", L"Select annotations"},
+        {L"P", L"Draw freehand annotations"},
+    };
+    content.sections.push_back(std::move(tools));
+
+    core::OverlayHelpSection edit{};
+    edit.title = L"Edit";
+    edit.entries = {
+        {L"Delete", L"Delete selected annotation"},
+        {L"Ctrl + Z", L"Undo last region or annotation change"},
+        {L"Ctrl + Shift + Z", L"Redo last undone change"},
+    };
+    content.sections.push_back(std::move(edit));
+
     return content;
 }
 

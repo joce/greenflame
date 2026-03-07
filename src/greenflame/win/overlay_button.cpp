@@ -29,9 +29,9 @@ constexpr Gdiplus::REAL kFontSize = 12.0f;
 } // namespace
 
 OverlayButton::OverlayButton(core::PointPx position, int diameter, std::wstring label,
-                             bool is_toggle)
+                             bool is_toggle, bool active)
     : position_(position), diameter_(diameter), label_(std::move(label)),
-      is_toggle_(is_toggle) {}
+      is_toggle_(is_toggle), active_(active) {}
 
 core::RectPx OverlayButton::Bounds() const {
     return core::RectPx::From_ltrb(position_.x, position_.y, position_.x + diameter_,

@@ -4,11 +4,15 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <cmath>
 #include <filesystem>
+#include <functional>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 // Include windef.h for HWND without pulling in all of windows.h.

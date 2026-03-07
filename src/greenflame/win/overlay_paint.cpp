@@ -37,6 +37,10 @@ constexpr float kColorChannelMaxF = static_cast<float>(kColorChannelMax);
 constexpr int kSelDashPx = 4;
 constexpr int kSelGapPx = 3;
 constexpr int kCornerHighlightOutsetPx = 1;
+constexpr int kToolbarTooltipOffsetPx = 6;
+constexpr int kToolbarTooltipMarginPx = 4;
+
+void Measure_text_size(HDC dc, HFONT font, std::wstring const &text, SIZE &text_size);
 
 // Draws a 1-pixel dashed rectangle border using explicit MoveToEx/LineTo
 // segments so that dash and gap lengths are exact physical pixels regardless
@@ -356,6 +360,183 @@ void Draw_selection_dim_and_border(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
             SelectObject(buf_dc, old_pen);
         }
     }
+}
+
+void Draw_annotations_to_buffer(
+    HDC buf_dc, HBITMAP buf_bmp, int w, int h, std::span<uint8_t> pixels,
+    std::span<const greenflame::core::Annotation> annotations) {
+    if (annotations.empty() || w <= 0 || h <= 0) {
+        return;
+    }
+    int const row_bytes = greenflame::Row_bytes32(w);
+    size_t const size = static_cast<size_t>(row_bytes) * static_cast<size_t>(h);
+    if (pixels.size() < size) {
+        return;
+    }
+    BITMAPINFOHEADER bmi{};
+    greenflame::Fill_bmi32_top_down(bmi, w, h);
+    if (GetDIBits(buf_dc, buf_bmp, 0, static_cast<UINT>(h), pixels.data(),
+                  reinterpret_cast<BITMAPINFO *>(&bmi), DIB_RGB_COLORS) == 0) {
+        return;
+    }
+
+    greenflame::core::RectPx const target_bounds =
+        greenflame::core::RectPx::From_ltrb(0, 0, w, h);
+    greenflame::core::Blend_annotations_onto_pixels(pixels, w, h, row_bytes,
+                                                    annotations, target_bounds);
+    SetDIBits(buf_dc, buf_bmp, 0, static_cast<UINT>(h), pixels.data(),
+              reinterpret_cast<BITMAPINFO *>(&bmi), DIB_RGB_COLORS);
+}
+
+void Draw_draft_freehand_stroke(HDC dc,
+                                std::span<const greenflame::core::PointPx> points,
+                                greenflame::core::StrokeStyle style) {
+    if (dc == nullptr || points.empty()) {
+        return;
+    }
+
+    int const width_px = std::max<int32_t>(1, style.width_px);
+    HBRUSH const brush = CreateSolidBrush(style.color);
+
+    LOGBRUSH log_brush{};
+    log_brush.lbStyle = BS_SOLID;
+    log_brush.lbColor = style.color;
+    HPEN pen = ExtCreatePen(PS_GEOMETRIC | PS_SOLID | PS_ENDCAP_ROUND | PS_JOIN_ROUND,
+                            static_cast<DWORD>(width_px), &log_brush, 0, nullptr);
+    if (pen == nullptr) {
+        pen = CreatePen(PS_SOLID, width_px, style.color);
+    }
+    if (pen == nullptr) {
+        if (brush != nullptr) {
+            DeleteObject(brush);
+        }
+        return;
+    }
+
+    HGDIOBJ const old_pen = SelectObject(dc, pen);
+    HGDIOBJ const old_brush =
+        SelectObject(dc, brush != nullptr ? brush : GetStockObject(NULL_BRUSH));
+
+    if (points.size() == 1) {
+        int const left = points.front().x - width_px / 2;
+        int const top = points.front().y - width_px / 2;
+        Ellipse(dc, left, top, left + width_px, top + width_px);
+    } else {
+        std::vector<POINT> polyline_points;
+        polyline_points.reserve(points.size());
+        for (greenflame::core::PointPx const point : points) {
+            polyline_points.push_back({point.x, point.y});
+        }
+        if (!polyline_points.empty()) {
+            Polyline(dc, polyline_points.data(),
+                     static_cast<int>(polyline_points.size()));
+        }
+    }
+
+    SelectObject(dc, old_brush);
+    SelectObject(dc, old_pen);
+    DeleteObject(pen);
+    if (brush != nullptr) {
+        DeleteObject(brush);
+    }
+}
+
+void Draw_annotation_selection_corners(HDC dc, HPEN pen,
+                                       greenflame::core::RectPx const &bounds) {
+    if (pen == nullptr || bounds.Is_empty()) {
+        return;
+    }
+    greenflame::core::RectPx const r = bounds.Normalized();
+    int const corner_w = std::min(greenflame::core::kMaxCornerSizePx, r.Width() / 2);
+    int const corner_h = std::min(greenflame::core::kMaxCornerSizePx, r.Height() / 2);
+    HGDIOBJ const old_pen = SelectObject(dc, pen);
+
+    MoveToEx(dc, r.left, r.top + corner_h, nullptr);
+    LineTo(dc, r.left, r.top);
+    LineTo(dc, r.left + corner_w, r.top);
+
+    MoveToEx(dc, r.right - 1 - corner_w, r.top, nullptr);
+    LineTo(dc, r.right - 1, r.top);
+    LineTo(dc, r.right - 1, r.top + corner_h);
+
+    MoveToEx(dc, r.left, r.bottom - 1 - corner_h, nullptr);
+    LineTo(dc, r.left, r.bottom - 1);
+    LineTo(dc, r.left + corner_w, r.bottom - 1);
+
+    MoveToEx(dc, r.right - 1 - corner_w, r.bottom - 1, nullptr);
+    LineTo(dc, r.right - 1, r.bottom - 1);
+    LineTo(dc, r.right - 1, r.bottom - 1 - corner_h);
+
+    SelectObject(dc, old_pen);
+}
+
+void Draw_toolbar_tooltip(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
+                          std::span<uint8_t> pixels,
+                          greenflame::PaintResources const *res, std::wstring_view text,
+                          std::optional<greenflame::core::RectPx> anchor_bounds) {
+    if (text.empty() || !anchor_bounds.has_value() || res == nullptr ||
+        res->font_dim == nullptr || w <= 0 || h <= 0) {
+        return;
+    }
+
+    std::wstring const text_str(text);
+    SIZE text_size{};
+    Measure_text_size(buf_dc, res->font_dim, text_str, text_size);
+    int const box_w = text_size.cx + 2 * kToolbarTooltipMarginPx;
+    int const box_h = text_size.cy + 2 * kToolbarTooltipMarginPx;
+    int const anchor_center = anchor_bounds->left + anchor_bounds->Width() / 2;
+    int box_left = anchor_center - box_w / 2;
+    int box_top = anchor_bounds->top - kToolbarTooltipOffsetPx - box_h;
+    if (box_top < 0) {
+        box_top = anchor_bounds->bottom + kToolbarTooltipOffsetPx;
+    }
+    if (box_left < 0) {
+        box_left = 0;
+    }
+    if (box_left + box_w > w) {
+        box_left = w - box_w;
+    }
+    if (box_top < 0) {
+        box_top = 0;
+    }
+    if (box_top + box_h > h) {
+        box_top = h - box_h;
+    }
+
+    greenflame::core::RectPx const tooltip_rect = greenflame::core::RectPx::From_ltrb(
+        box_left, box_top, box_left + box_w, box_top + box_h);
+    int const row_bytes = greenflame::Row_bytes32(w);
+    size_t const size = static_cast<size_t>(row_bytes) * static_cast<size_t>(h);
+    if (pixels.size() >= size) {
+        BITMAPINFOHEADER bmi{};
+        greenflame::Fill_bmi32_top_down(bmi, w, h);
+        if (GetDIBits(buf_dc, buf_bmp, 0, static_cast<UINT>(h), pixels.data(),
+                      reinterpret_cast<BITMAPINFO *>(&bmi), DIB_RGB_COLORS) != 0) {
+            greenflame::core::Blend_rect_onto_pixels(
+                pixels, w, h, row_bytes, tooltip_rect, greenflame::kCoordTooltipBg,
+                greenflame::kCoordTooltipAlpha);
+            SetDIBits(buf_dc, buf_bmp, 0, static_cast<UINT>(h), pixels.data(),
+                      reinterpret_cast<BITMAPINFO *>(&bmi), DIB_RGB_COLORS);
+        }
+    }
+
+    if (res->border_pen != nullptr) {
+        HGDIOBJ const old_pen = SelectObject(buf_dc, res->border_pen);
+        SelectObject(buf_dc, GetStockObject(NULL_BRUSH));
+        Rectangle(buf_dc, box_left, box_top, box_left + box_w, box_top + box_h);
+        SelectObject(buf_dc, old_pen);
+    }
+
+    HGDIOBJ const old_font = SelectObject(buf_dc, res->font_dim);
+    SetBkMode(buf_dc, TRANSPARENT);
+    SetTextColor(buf_dc, greenflame::kCoordTooltipText);
+    RECT text_rect = {box_left + kToolbarTooltipMarginPx,
+                      box_top + kToolbarTooltipMarginPx,
+                      box_left + box_w - kToolbarTooltipMarginPx,
+                      box_top + box_h - kToolbarTooltipMarginPx};
+    DrawTextW(buf_dc, text_str.c_str(), -1, &text_rect,
+              DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    SelectObject(buf_dc, old_font);
 }
 
 [[nodiscard]] bool Rect_fully_covered_by_monitors(
@@ -979,6 +1160,11 @@ void Paint_overlay(HDC hdc, HWND hwnd, const RECT &rc, const PaintOverlayInput &
             : in.final_selection;
     Draw_selection_dim_and_border(buf_dc, buf_bmp, w, h, sel, in.paint_buffer,
                                   in.resources, in.dragging);
+    Draw_annotations_to_buffer(buf_dc, buf_bmp, w, h, in.paint_buffer, in.annotations);
+    if (in.draft_freehand_style.has_value()) {
+        Draw_draft_freehand_stroke(buf_dc, in.draft_freehand_points,
+                                   *in.draft_freehand_style);
+    }
 
     bool const interacting =
         in.dragging || in.handle_dragging || in.move_dragging || in.modifier_preview;
@@ -1008,6 +1194,11 @@ void Paint_overlay(HDC hdc, HWND hwnd, const RECT &rc, const PaintOverlayInput &
                                   *in.highlight_handle, core::kMaxCornerSizePx);
         }
     }
+    if (in.selected_annotation_bounds.has_value() && in.resources &&
+        in.resources->handle_pen) {
+        Draw_annotation_selection_corners(buf_dc, in.resources->handle_pen,
+                                          *in.selected_annotation_bounds);
+    }
 
     if (!in.toolbar_buttons.empty()) {
         ButtonDrawContext const btn_ctx{kCoordTooltipBg, kCoordTooltipText};
@@ -1017,6 +1208,8 @@ void Paint_overlay(HDC hdc, HWND hwnd, const RECT &rc, const PaintOverlayInput &
             }
         }
     }
+    Draw_toolbar_tooltip(buf_dc, buf_bmp, w, h, in.paint_buffer, in.resources,
+                         in.toolbar_tooltip_text, in.hovered_toolbar_bounds);
 
     BitBlt(hdc, 0, 0, w, h, buf_dc, 0, 0, SRCCOPY);
     SelectObject(buf_dc, old_buf);

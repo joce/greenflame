@@ -82,6 +82,15 @@ add_library(greenflame_core STATIC
     src/greenflame_core/window_query.h
     src/greenflame_core/output_path.cpp
     src/greenflame_core/output_path.h
+    src/greenflame_core/annotation_commands.cpp
+    src/greenflame_core/annotation_commands.h
+    src/greenflame_core/annotation_controller.cpp
+    src/greenflame_core/annotation_controller.h
+    src/greenflame_core/annotation_raster.cpp
+    src/greenflame_core/annotation_raster.h
+    src/greenflame_core/annotation_tool.h
+    src/greenflame_core/annotation_tool_registry.cpp
+    src/greenflame_core/annotation_tool_registry.h
     src/greenflame_core/overlay_controller.cpp
     src/greenflame_core/overlay_controller.h
     src/greenflame_core/overlay_help_content.h

@@ -18,71 +18,70 @@ Annotation Make_stroke(uint64_t id, std::initializer_list<PointPx> points) {
 
 } // namespace
 
-TEST(annotation_controller, InitialState_DefaultsToPointerTool) {
+TEST(annotation_controller, InitialState_DefaultsToNoActiveTool) {
     AnnotationController controller;
 
-    EXPECT_EQ(controller.Active_tool(), AnnotationToolId::Pointer);
+    EXPECT_EQ(controller.Active_tool(), std::nullopt);
     EXPECT_TRUE(controller.Annotations().empty());
     EXPECT_EQ(controller.Selected_annotation_id(), std::nullopt);
     EXPECT_EQ(controller.Draft_annotation(), nullptr);
 }
 
-TEST(annotation_controller, ToolbarViews_ExposeRegisteredTools) {
+TEST(annotation_controller, ToolbarViews_ExposeFreehandOnly) {
     AnnotationController controller;
 
     std::vector<AnnotationToolbarButtonView> const views =
         controller.Build_toolbar_button_views();
 
-    ASSERT_EQ(views.size(), 2u);
-    EXPECT_EQ(views[0].id, AnnotationToolId::Pointer);
-    EXPECT_EQ(views[0].label, L"S");
-    EXPECT_EQ(views[0].tooltip, L"Select");
-    EXPECT_TRUE(views[0].active);
-    EXPECT_EQ(views[1].id, AnnotationToolId::Freehand);
-    EXPECT_EQ(views[1].label, L"P");
-    EXPECT_EQ(views[1].tooltip, L"Pencil");
-    EXPECT_FALSE(views[1].active);
+    ASSERT_EQ(views.size(), 1u);
+    EXPECT_EQ(views[0].id, AnnotationToolId::Freehand);
+    EXPECT_EQ(views[0].label, L"P");
+    EXPECT_EQ(views[0].tooltip, L"Pencil");
+    EXPECT_FALSE(views[0].active);
 }
 
-TEST(annotation_controller, SelectToolByHotkey_ActivatesFreehand) {
+TEST(annotation_controller, ToggleToolByHotkey_ActivatesAndDeactivatesFreehand) {
     AnnotationController controller;
 
-    EXPECT_TRUE(controller.Select_tool_by_hotkey(L'P'));
-    EXPECT_EQ(controller.Active_tool(), AnnotationToolId::Freehand);
-    EXPECT_FALSE(controller.Select_tool_by_hotkey(L'P'));
+    EXPECT_TRUE(controller.Toggle_tool_by_hotkey(L'P'));
+    EXPECT_EQ(controller.Active_tool(),
+              std::optional<AnnotationToolId>{AnnotationToolId::Freehand});
+    EXPECT_TRUE(controller.Toggle_tool_by_hotkey(L'P'));
+    EXPECT_EQ(controller.Active_tool(), std::nullopt);
 }
 
-TEST(annotation_controller, SelectToolByLowercaseHotkey_ActivatesFreehand) {
+TEST(annotation_controller, ToggleToolByLowercaseHotkey_ActivatesFreehand) {
     AnnotationController controller;
 
-    EXPECT_TRUE(controller.Select_tool_by_hotkey(L'p'));
-    EXPECT_EQ(controller.Active_tool(), AnnotationToolId::Freehand);
+    EXPECT_TRUE(controller.Toggle_tool_by_hotkey(L'p'));
+    EXPECT_EQ(controller.Active_tool(),
+              std::optional<AnnotationToolId>{AnnotationToolId::Freehand});
 }
 
-TEST(annotation_controller, PointerSelectsTopmostAnnotationByCoveredPixel) {
+TEST(annotation_controller, AnnotationIdAt_ReturnsTopmostAnnotationByCoveredPixel) {
     AnnotationController controller;
     controller.Insert_annotation_at(0, Make_stroke(1, {{20, 20}, {30, 20}}),
                                     std::nullopt);
     controller.Insert_annotation_at(1, Make_stroke(2, {{20, 20}, {30, 20}}),
                                     std::nullopt);
 
-    EXPECT_TRUE(controller.On_primary_press({25, 20}));
-    EXPECT_EQ(controller.Selected_annotation_id(), std::optional<uint64_t>{2});
+    EXPECT_EQ(controller.Annotation_id_at({25, 20}), std::optional<uint64_t>{2});
 }
 
-TEST(annotation_controller, PointerClickOnEmptySpace_Deselects) {
+TEST(annotation_controller, SetSelectedAnnotation_ClearsSelection) {
     AnnotationController controller;
     controller.Insert_annotation_at(0, Make_stroke(1, {{20, 20}, {30, 20}}),
                                     std::optional<uint64_t>{1});
 
-    EXPECT_TRUE(controller.On_primary_press({200, 200}));
+    EXPECT_TRUE(controller.Set_selected_annotation(std::nullopt));
     EXPECT_EQ(controller.Selected_annotation_id(), std::nullopt);
+    EXPECT_FALSE(controller.Set_selected_annotation(std::nullopt));
 }
 
 TEST(annotation_controller, FreehandRelease_AddsAnnotationAndKeepsSelectionEmpty) {
     AnnotationController controller;
     UndoStack undo_stack;
-    EXPECT_TRUE(controller.Select_tool(AnnotationToolId::Freehand));
+    EXPECT_TRUE(controller.Toggle_tool(AnnotationToolId::Freehand));
 
     EXPECT_TRUE(controller.On_primary_press({10, 10}));
     EXPECT_TRUE(controller.On_pointer_move({12, 11}));
@@ -91,7 +90,8 @@ TEST(annotation_controller, FreehandRelease_AddsAnnotationAndKeepsSelectionEmpty
 
     ASSERT_EQ(controller.Annotations().size(), 1u);
     EXPECT_EQ(controller.Selected_annotation_id(), std::nullopt);
-    EXPECT_EQ(controller.Active_tool(), AnnotationToolId::Freehand);
+    EXPECT_EQ(controller.Active_tool(),
+              std::optional<AnnotationToolId>{AnnotationToolId::Freehand});
     EXPECT_EQ(controller.Annotations()[0].freehand.points.size(), 3u);
     EXPECT_EQ(controller.Annotations()[0].freehand.points[0], (PointPx{10, 10}));
     EXPECT_EQ(controller.Annotations()[0].freehand.points[2], (PointPx{14, 12}));
@@ -102,7 +102,7 @@ TEST(annotation_controller, FreehandAddPreservesSelectionThroughUndoRedo) {
     UndoStack undo_stack;
     controller.Insert_annotation_at(0, Make_stroke(1, {{20, 20}, {30, 20}}),
                                     std::optional<uint64_t>{1});
-    EXPECT_TRUE(controller.Select_tool(AnnotationToolId::Freehand));
+    EXPECT_TRUE(controller.Toggle_tool(AnnotationToolId::Freehand));
 
     EXPECT_TRUE(controller.On_primary_press({100, 100}));
     EXPECT_TRUE(controller.On_pointer_move({110, 110}));
@@ -123,7 +123,7 @@ TEST(annotation_controller, FreehandAddPreservesSelectionThroughUndoRedo) {
 TEST(annotation_controller, FreehandDraftPointsTrackActiveGesture) {
     AnnotationController controller;
     UndoStack undo_stack;
-    EXPECT_TRUE(controller.Select_tool(AnnotationToolId::Freehand));
+    EXPECT_TRUE(controller.Toggle_tool(AnnotationToolId::Freehand));
 
     EXPECT_TRUE(controller.On_primary_press({10, 10}));
     EXPECT_TRUE(controller.On_pointer_move({12, 11}));
@@ -142,7 +142,7 @@ TEST(annotation_controller, FreehandDraftPointsTrackActiveGesture) {
 
 TEST(annotation_controller, CancelDuringFreehand_ClearsDraftWithoutCommit) {
     AnnotationController controller;
-    EXPECT_TRUE(controller.Select_tool(AnnotationToolId::Freehand));
+    EXPECT_TRUE(controller.Toggle_tool(AnnotationToolId::Freehand));
 
     EXPECT_TRUE(controller.On_primary_press({10, 10}));
     EXPECT_TRUE(controller.On_pointer_move({20, 10}));
@@ -153,13 +153,62 @@ TEST(annotation_controller, CancelDuringFreehand_ClearsDraftWithoutCommit) {
     EXPECT_TRUE(controller.Annotations().empty());
 }
 
+TEST(annotation_controller, AnnotationDragRelease_MovesAnnotationAndIsUndoable) {
+    AnnotationController controller;
+    UndoStack undo_stack;
+    Annotation const original = Make_stroke(1, {{40, 40}, {60, 40}});
+    RectPx const expected_bounds =
+        RectPx::From_ltrb(original.freehand.raster.bounds.left + 20,
+                          original.freehand.raster.bounds.top + 20,
+                          original.freehand.raster.bounds.right + 20,
+                          original.freehand.raster.bounds.bottom + 20);
+
+    controller.Insert_annotation_at(0, original, std::nullopt);
+
+    ASSERT_TRUE(controller.Begin_annotation_drag(1, {50, 40}));
+    EXPECT_EQ(controller.Selected_annotation_id(), std::optional<uint64_t>{1});
+    EXPECT_TRUE(controller.On_pointer_move({70, 60}));
+    EXPECT_EQ(controller.Annotations()[0].freehand.points[0], (PointPx{60, 60}));
+    EXPECT_EQ(controller.Selected_annotation_bounds(),
+              std::optional<RectPx>{expected_bounds});
+
+    EXPECT_TRUE(controller.On_primary_release(undo_stack));
+    EXPECT_FALSE(controller.Is_annotation_dragging());
+
+    undo_stack.Undo();
+    ASSERT_EQ(controller.Annotations().size(), 1u);
+    EXPECT_EQ(controller.Annotations()[0], original);
+    EXPECT_EQ(controller.Selected_annotation_id(), std::optional<uint64_t>{1});
+
+    undo_stack.Redo();
+    ASSERT_EQ(controller.Annotations().size(), 1u);
+    EXPECT_EQ(controller.Annotations()[0].freehand.points[0], (PointPx{60, 60}));
+    EXPECT_EQ(controller.Selected_annotation_bounds(),
+              std::optional<RectPx>{expected_bounds});
+}
+
+TEST(annotation_controller, CancelDuringAnnotationDrag_RestoresOriginalAnnotation) {
+    AnnotationController controller;
+    Annotation const original = Make_stroke(1, {{40, 40}, {60, 40}});
+    controller.Insert_annotation_at(0, original, std::nullopt);
+
+    ASSERT_TRUE(controller.Begin_annotation_drag(1, {50, 40}));
+    EXPECT_TRUE(controller.On_pointer_move({80, 70}));
+    ASSERT_NE(controller.Annotations()[0], original);
+
+    EXPECT_TRUE(controller.On_cancel());
+    EXPECT_FALSE(controller.Is_annotation_dragging());
+    EXPECT_EQ(controller.Annotations()[0], original);
+    EXPECT_EQ(controller.Selected_annotation_id(), std::optional<uint64_t>{1});
+}
+
 TEST(annotation_controller, DeleteSelectedAnnotation_IsUndoableAndRedoable) {
     AnnotationController controller;
     UndoStack undo_stack;
 
     controller.Insert_annotation_at(0, Make_stroke(1, {{20, 20}, {30, 20}}),
                                     std::nullopt);
-    EXPECT_TRUE(controller.On_primary_press({25, 20}));
+    EXPECT_TRUE(controller.Set_selected_annotation(std::optional<uint64_t>{1}));
     ASSERT_EQ(controller.Selected_annotation_id(), std::optional<uint64_t>{1});
 
     EXPECT_TRUE(controller.Delete_selected_annotation(undo_stack));
@@ -179,7 +228,8 @@ TEST(annotation_controller, SelectedAnnotationBounds_FollowSelectedAnnotation) {
     AnnotationController controller;
     Annotation const stroke = Make_stroke(1, {{40, 40}, {60, 40}});
     RectPx const expected = stroke.freehand.raster.bounds;
-    controller.Insert_annotation_at(0, stroke, std::optional<uint64_t>{1});
+    controller.Insert_annotation_at(0, stroke, std::nullopt);
+    ASSERT_TRUE(controller.Set_selected_annotation(std::optional<uint64_t>{1}));
 
     EXPECT_EQ(controller.Selected_annotation_bounds(), std::optional<RectPx>{expected});
 }

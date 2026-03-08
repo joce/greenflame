@@ -8,19 +8,18 @@ class AnnotationController;
 class UndoStack;
 
 enum class AnnotationToolId : uint8_t {
-    Pointer,
     Freehand,
 };
 
 struct AnnotationToolDescriptor final {
-    AnnotationToolId id = AnnotationToolId::Pointer;
+    AnnotationToolId id = AnnotationToolId::Freehand;
     std::wstring name = {};
     wchar_t hotkey = L'\0';
     std::wstring toolbar_label = {};
 };
 
 struct AnnotationToolbarButtonView final {
-    AnnotationToolId id = AnnotationToolId::Pointer;
+    AnnotationToolId id = AnnotationToolId::Freehand;
     std::wstring label = {};
     std::wstring tooltip = {};
     bool active = false;

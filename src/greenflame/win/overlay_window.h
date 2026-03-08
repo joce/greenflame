@@ -86,7 +86,7 @@ class OverlayWindow final {
     Compute_toolbar_positions(int button_count) const;
 
     struct ToolbarButtonEntry final {
-        core::AnnotationToolId tool_id = core::AnnotationToolId::Pointer;
+        core::AnnotationToolId tool_id = core::AnnotationToolId::Freehand;
         std::wstring tooltip = {};
         std::unique_ptr<IOverlayButton> button = {};
 

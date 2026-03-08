@@ -144,6 +144,8 @@ Create_thumbnail_from_capture(greenflame::GdiCaptureResult const &capture) {
     return LoadCursorW(nullptr, IDC_ARROW);
 }
 
+[[nodiscard]] HCURSOR Move_mode_cursor() { return LoadCursorW(nullptr, IDC_SIZEALL); }
+
 } // namespace
 
 namespace greenflame {
@@ -269,7 +271,8 @@ OverlayWindow::Compute_toolbar_positions(int button_count) const {
 void OverlayWindow::Rebuild_toolbar_buttons() {
     auto const &s = controller_.State();
     bool const stable = !s.final_selection.Is_empty() && !s.dragging &&
-                        !s.handle_dragging && !s.move_dragging;
+                        !s.handle_dragging && !s.move_dragging &&
+                        !controller_.Has_active_annotation_gesture();
 
     if (!stable) {
         for (auto const &btn : toolbar_buttons_) {
@@ -353,7 +356,8 @@ bool OverlayWindow::Is_open() const { return hwnd_ != nullptr && IsWindow(hwnd_)
 bool OverlayWindow::Is_selection_stable_for_help() const {
     auto const &s = controller_.State();
     return !s.final_selection.Is_empty() && !s.dragging && !s.handle_dragging &&
-           !s.move_dragging && !s.modifier_preview;
+           !s.move_dragging && !s.modifier_preview &&
+           !controller_.Has_active_annotation_gesture();
 }
 
 std::wstring_view OverlayWindow::Hovered_toolbar_tooltip_text() const noexcept {
@@ -493,7 +497,7 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
         Apply_action(controller_.On_delete_selected_annotation());
         return 0;
     }
-    if (!eff_ctrl && !eff_alt && (wparam == L'S' || wparam == L'P')) {
+    if (!eff_ctrl && !eff_alt && wparam == L'P') {
         Apply_action(
             controller_.On_annotation_tool_hotkey(static_cast<wchar_t>(wparam)));
         Refresh_cursor();
@@ -531,14 +535,6 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
                                                      vdesk, monitor_idx, ox, oy));
         return 0;
     }
-    if (wparam == VK_TAB) {
-        // Tab pressed: refresh cursor (IDC_SIZEALL when inside selection) since
-        // WM_SETCURSOR may not be sent on key press.
-        if (Refresh_hover_handle()) {
-            InvalidateRect(hwnd_, nullptr, TRUE);
-        }
-        Refresh_cursor();
-    }
     UINT const message_id =
         (lparam & (static_cast<LPARAM>(1) << 29)) != 0 ? WM_SYSKEYDOWN : WM_KEYDOWN;
     return DefWindowProcW(hwnd_, message_id, wparam, lparam);
@@ -560,14 +556,6 @@ LRESULT OverlayWindow::On_key_up(WPARAM wparam, LPARAM lparam) {
         // On key-up, no preview hints: preview is being cleared, not set.
         Apply_action(controller_.On_modifier_changed(new_mods, {}, {}, {}, {}, 0, 0));
         return 0;
-    }
-    if (wparam == VK_TAB) {
-        // Tab released: cursor was IDC_SIZEALL when inside selection; refresh it
-        // since WM_SETCURSOR is not sent on key release.
-        if (Refresh_hover_handle()) {
-            InvalidateRect(hwnd_, nullptr, TRUE);
-        }
-        Refresh_cursor();
     }
     UINT const message_id =
         (lparam & (static_cast<LPARAM>(1) << 29)) != 0 ? WM_SYSKEYUP : WM_KEYUP;
@@ -598,8 +586,7 @@ LRESULT OverlayWindow::On_l_button_down() {
     bool const shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
     bool const ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
     bool const alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
-    bool const tab = (GetKeyState(VK_TAB) & 0x8000) != 0;
-    core::OverlayModifierState mods{shift, ctrl, alt, tab};
+    core::OverlayModifierState mods{shift, ctrl, alt};
     core::PointPx const cursor_client = Get_client_cursor_pos_px(hwnd_);
     core::PointPx const cursor_screen = Get_cursor_pos_px();
     RECT wr{};
@@ -632,6 +619,11 @@ LRESULT OverlayWindow::On_l_button_down() {
     Apply_action(controller_.On_primary_press(
         mods, cursor_client, cursor_screen, win_handle, monitor_idx,
         std::optional<core::RectPx>{}, vdesk, std::move(vis_rects), wr.left, wr.top));
+    bool const hover_changed = Refresh_hover_handle();
+    Refresh_cursor();
+    if (hover_changed) {
+        InvalidateRect(hwnd_, nullptr, TRUE);
+    }
     core::RectPx const after_selection = controller_.State().final_selection;
     auto const &after_state = controller_.State();
     if (before_selection != after_selection && before_selection.Is_empty() &&
@@ -780,13 +772,10 @@ LRESULT OverlayWindow::On_l_button_up() {
 bool OverlayWindow::Refresh_hover_handle() {
     auto const &s = controller_.State();
     if (!s.final_selection.Is_empty() && !s.dragging && !s.handle_dragging &&
-        !s.move_dragging) {
+        !s.move_dragging && !controller_.Has_active_annotation_gesture()) {
         core::PointPx const cur = Get_client_cursor_pos_px(hwnd_);
-        bool const tab_held = (GetKeyState(VK_TAB) & 0x8000) != 0;
         std::optional<core::SelectionHandle> hover =
-            (tab_held && s.final_selection.Contains(cur))
-                ? std::nullopt
-                : core::Hit_test_border_zone(s.final_selection, cur);
+            core::Hit_test_border_zone(s.final_selection, cur);
         if (hover != last_hover_handle_) {
             last_hover_handle_ = hover;
             return true;
@@ -1217,7 +1206,8 @@ LRESULT OverlayWindow::On_paint() {
         input.hovered_toolbar_bounds = Hovered_toolbar_button_bounds();
         if (s.handle_dragging && s.resize_handle.has_value()) {
             input.highlight_handle = s.resize_handle;
-        } else if (!s.move_dragging && !s.dragging && !s.modifier_preview) {
+        } else if (!s.move_dragging && !s.dragging && !s.modifier_preview &&
+                   !controller_.Has_active_annotation_gesture()) {
             input.highlight_handle = last_hover_handle_;
         }
         std::vector<IOverlayButton *> btn_ptrs;
@@ -1255,8 +1245,8 @@ void OverlayWindow::Refresh_cursor() {
     }
 
     auto const &s = controller_.State();
-    if (s.move_dragging) {
-        SetCursor(LoadCursorW(nullptr, IDC_SIZEALL));
+    if (s.move_dragging || controller_.Is_annotation_dragging()) {
+        SetCursor(Move_mode_cursor());
         return;
     }
     if (s.handle_dragging && s.resize_handle.has_value()) {
@@ -1269,18 +1259,19 @@ void OverlayWindow::Refresh_cursor() {
     }
     if (!s.final_selection.Is_empty() && !s.dragging) {
         core::PointPx const cursor = Get_client_cursor_pos_px(hwnd_);
-        bool const tab_held = (GetKeyState(VK_TAB) & 0x8000) != 0;
-        if (tab_held && s.final_selection.Contains(cursor)) {
-            SetCursor(LoadCursorW(nullptr, IDC_SIZEALL));
-            return;
-        }
         std::optional<core::SelectionHandle> hit =
             core::Hit_test_border_zone(s.final_selection, cursor);
         if (hit.has_value()) {
             SetCursor(Cursor_for_handle(*hit));
             return;
         }
-        if (controller_.Active_annotation_tool() == core::AnnotationToolId::Freehand) {
+        std::optional<core::AnnotationToolId> const active_tool =
+            controller_.Active_annotation_tool();
+        if (!active_tool.has_value()) {
+            SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+            return;
+        }
+        if (*active_tool == core::AnnotationToolId::Freehand) {
             SetCursor(LoadCursorW(nullptr, IDC_CROSS));
         } else {
             SetCursor(LoadCursorW(nullptr, IDC_ARROW));

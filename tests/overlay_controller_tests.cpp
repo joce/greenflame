@@ -40,11 +40,10 @@ Make_controller(std::vector<MonitorWithBounds> monitors = Single_monitor()) {
 }
 
 OverlayModifierState No_mods() { return {}; }
-OverlayModifierState Shift_only() { return {true, false, false, false}; }
-OverlayModifierState Ctrl_only() { return {false, true, false, false}; }
-OverlayModifierState Shift_ctrl() { return {true, true, false, false}; }
-OverlayModifierState Alt_only() { return {false, false, true, false}; }
-OverlayModifierState Tab_only() { return {false, false, false, true}; }
+OverlayModifierState Shift_only() { return {true, false, false}; }
+OverlayModifierState Ctrl_only() { return {false, true, false}; }
+OverlayModifierState Shift_ctrl() { return {true, true, false}; }
+OverlayModifierState Alt_only() { return {false, false, true}; }
 
 // Convenience: build vis_rects already including the monitor bounds (as Win32 layer
 // would).
@@ -409,13 +408,13 @@ TEST(overlay_controller, E_CancelHandleDrag_FinalSelectionUnchanged) {
 // Group F — Move Drag
 // ===========================================================================
 
-TEST(overlay_controller, F_TabInsideSelection_StartsMoveDoc) {
+TEST(overlay_controller, F_ClickInsideSelection_StartsMoveDragInDefaultMode) {
     auto c = Make_controller();
     Press(c, {100, 100});
     Release(c, {300, 300});
 
     OverlayAction action =
-        c.On_primary_press(Tab_only(), {200, 200}, {200, 200}, std::nullopt,
+        c.On_primary_press(No_mods(), {200, 200}, {200, 200}, std::nullopt,
                            std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0, 0);
 
     EXPECT_EQ(action, OverlayAction::Repaint);
@@ -427,7 +426,7 @@ TEST(overlay_controller, F_MoveDoc_MovesRect) {
     Press(c, {100, 100});
     Release(c, {300, 300});
     std::ignore =
-        c.On_primary_press(Tab_only(), {200, 200}, {200, 200}, std::nullopt,
+        c.On_primary_press(No_mods(), {200, 200}, {200, 200}, std::nullopt,
                            std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0, 0);
 
     Move(c, {250, 250}, No_mods(), 100);
@@ -444,7 +443,7 @@ TEST(overlay_controller, F_MoveRelease_CommitsFinalSelection) {
     Press(c, {100, 100});
     Release(c, {300, 300});
     std::ignore =
-        c.On_primary_press(Tab_only(), {200, 200}, {200, 200}, std::nullopt,
+        c.On_primary_press(No_mods(), {200, 200}, {200, 200}, std::nullopt,
                            std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0, 0);
     Move(c, {250, 250}, No_mods(), 100);
     OverlayAction action = Release(c, {250, 250});
@@ -460,7 +459,7 @@ TEST(overlay_controller, F_CancelMoveDrag_RestoresMoveAnchor) {
     RectPx const original_sel = c.State().final_selection;
 
     std::ignore =
-        c.On_primary_press(Tab_only(), {200, 200}, {200, 200}, std::nullopt,
+        c.On_primary_press(No_mods(), {200, 200}, {200, 200}, std::nullopt,
                            std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0, 0);
     Move(c, {400, 400}, No_mods(), 100);
 
@@ -470,20 +469,45 @@ TEST(overlay_controller, F_CancelMoveDrag_RestoresMoveAnchor) {
     EXPECT_EQ(c.State().final_selection, original_sel);
 }
 
-TEST(overlay_controller, F_TabOutsideSelection_DoesNotStartFreshDrag) {
+TEST(overlay_controller, F_ClickOutsideSelection_DoesNotStartFreshDrag) {
     auto c = Make_controller();
     Press(c, {100, 100});
     Release(c, {300, 300});
 
-    // Tab held but cursor outside selection (click at 50,50)
     std::ignore =
-        c.On_primary_press(Tab_only(), {50, 50}, {50, 50}, std::nullopt, std::nullopt,
+        c.On_primary_press(No_mods(), {50, 50}, {50, 50}, std::nullopt, std::nullopt,
                            std::nullopt, {}, Make_vis_rects(c), 0, 0);
     // With annotation tools available outside the region, this no longer starts a
     // replacement capture drag.
     EXPECT_FALSE(c.State().dragging);
     EXPECT_FALSE(c.State().move_dragging);
     EXPECT_EQ(c.State().final_selection, (RectPx::From_ltrb(100, 100, 300, 300)));
+}
+
+TEST(overlay_controller,
+     F_ClickOnAnnotation_StartsAnnotationDragInsteadOfSelectionMove) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+
+    EXPECT_EQ(c.On_annotation_tool_hotkey(L'P'), OverlayAction::Repaint);
+    std::ignore =
+        c.On_primary_press(No_mods(), {120, 120}, {120, 120}, std::nullopt,
+                           std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0, 0);
+    std::ignore = c.On_pointer_move(No_mods(), {140, 140}, {140, 140}, std::nullopt, {},
+                                    std::nullopt, 0, 0, 100u);
+    std::ignore = c.On_primary_release(No_mods(), {140, 140});
+    ASSERT_EQ(c.Annotations().size(), 1u);
+    EXPECT_EQ(c.On_annotation_tool_hotkey(L'P'), OverlayAction::Repaint);
+    ASSERT_EQ(c.Active_annotation_tool(), std::nullopt);
+
+    OverlayAction action =
+        c.On_primary_press(No_mods(), {130, 130}, {130, 130}, std::nullopt,
+                           std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0, 0);
+
+    EXPECT_EQ(action, OverlayAction::Repaint);
+    EXPECT_FALSE(c.State().move_dragging);
+    EXPECT_TRUE(c.Is_annotation_dragging());
 }
 
 // ===========================================================================
@@ -495,7 +519,7 @@ TEST(overlay_controller, G_Cancel_MoveDragging_Restores) {
     Press(c, {100, 100});
     Release(c, {300, 300});
     std::ignore =
-        c.On_primary_press(Tab_only(), {200, 200}, {200, 200}, std::nullopt,
+        c.On_primary_press(No_mods(), {200, 200}, {200, 200}, std::nullopt,
                            std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0, 0);
     ASSERT_TRUE(c.State().move_dragging);
 
@@ -708,4 +732,17 @@ TEST(overlay_controller, K_AltRelease_AlwaysRepaint) {
     // Simulate alt was held, now released
     OverlayAction action = c.On_modifier_changed(No_mods(), {}, {}, {}, {}, 0, 0);
     EXPECT_EQ(action, OverlayAction::Repaint);
+}
+
+TEST(overlay_controller, AnnotationToolHotkey_TogglesFreehand) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+
+    EXPECT_EQ(c.Active_annotation_tool(), std::nullopt);
+    EXPECT_EQ(c.On_annotation_tool_hotkey(L'P'), OverlayAction::Repaint);
+    EXPECT_EQ(c.Active_annotation_tool(),
+              std::optional<AnnotationToolId>{AnnotationToolId::Freehand});
+    EXPECT_EQ(c.On_annotation_tool_hotkey(L'P'), OverlayAction::Repaint);
+    EXPECT_EQ(c.Active_annotation_tool(), std::nullopt);
 }

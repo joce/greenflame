@@ -31,9 +31,14 @@ class AnnotationController final {
 
     void Reset_for_session();
 
-    [[nodiscard]] AnnotationToolId Active_tool() const noexcept { return active_tool_; }
-    [[nodiscard]] bool Select_tool(AnnotationToolId id);
-    [[nodiscard]] bool Select_tool_by_hotkey(wchar_t hotkey);
+    [[nodiscard]] std::optional<AnnotationToolId> Active_tool() const noexcept {
+        return active_tool_;
+    }
+    [[nodiscard]] bool Has_active_tool() const noexcept {
+        return active_tool_.has_value();
+    }
+    [[nodiscard]] bool Toggle_tool(AnnotationToolId id);
+    [[nodiscard]] bool Toggle_tool_by_hotkey(wchar_t hotkey);
     [[nodiscard]] std::vector<AnnotationToolbarButtonView>
     Build_toolbar_button_views() const;
     [[nodiscard]] std::optional<AnnotationToolId>
@@ -52,8 +57,12 @@ class AnnotationController final {
     }
     [[nodiscard]] std::optional<RectPx> Selected_annotation_bounds() const noexcept;
     [[nodiscard]] bool Has_active_tool_gesture() const noexcept;
+    [[nodiscard]] bool Has_active_gesture() const noexcept;
     [[nodiscard]] bool Has_annotations() const noexcept {
         return !document_.annotations.empty();
+    }
+    [[nodiscard]] bool Is_annotation_dragging() const noexcept {
+        return annotation_dragging_;
     }
 
     [[nodiscard]] bool On_primary_press(PointPx cursor);
@@ -64,12 +73,22 @@ class AnnotationController final {
     void Clear_annotations() noexcept;
 
     // Tool-support API
+    [[nodiscard]] std::optional<uint64_t>
+    Annotation_id_at(PointPx cursor) const noexcept;
+    [[nodiscard]] bool
+    Set_selected_annotation(std::optional<uint64_t> selected_annotation_id) noexcept;
     [[nodiscard]] bool Select_topmost_annotation(PointPx cursor);
     void Begin_freehand_stroke(PointPx start);
     [[nodiscard]] bool Append_freehand_point(PointPx point);
     [[nodiscard]] bool Commit_freehand_stroke(UndoStack &undo_stack);
     [[nodiscard]] bool Cancel_freehand_stroke();
+    [[nodiscard]] bool Begin_annotation_drag(uint64_t id, PointPx cursor);
+    [[nodiscard]] bool Update_annotation_drag(PointPx cursor);
+    [[nodiscard]] bool Commit_annotation_drag(UndoStack &undo_stack);
+    [[nodiscard]] bool Cancel_annotation_drag();
 
+    void Update_annotation_at(size_t index, Annotation annotation,
+                              std::optional<uint64_t> selected_annotation_id);
     void Insert_annotation_at(size_t index, Annotation annotation,
                               std::optional<uint64_t> selected_annotation_id);
     void Erase_annotation_at(size_t index,
@@ -84,9 +103,12 @@ class AnnotationController final {
     AnnotationDocument document_ = {};
     AnnotationToolRegistry registry_ = {};
     PassthroughStrokeSmoother smoother_ = {};
-    AnnotationToolId active_tool_ = AnnotationToolId::Pointer;
+    std::optional<AnnotationToolId> active_tool_ = std::nullopt;
     bool freehand_drawing_ = false;
+    bool annotation_dragging_ = false;
     std::vector<PointPx> freehand_points_ = {};
+    PointPx annotation_drag_start_ = {};
+    Annotation annotation_drag_before_ = {};
     mutable std::optional<Annotation> freehand_preview_ = std::nullopt;
 };
 

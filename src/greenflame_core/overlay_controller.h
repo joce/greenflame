@@ -14,7 +14,6 @@ struct OverlayModifierState {
     bool shift = false;
     bool ctrl = false;
     bool alt = false;
-    bool tab = false;
 };
 
 enum class OverlayAction : uint8_t {
@@ -113,7 +112,11 @@ class OverlayController final {
     [[nodiscard]] std::span<const PointPx> Draft_freehand_points() const noexcept;
     [[nodiscard]] std::optional<StrokeStyle> Draft_freehand_style() const noexcept;
     [[nodiscard]] std::optional<RectPx> Selected_annotation_bounds() const noexcept;
-    [[nodiscard]] AnnotationToolId Active_annotation_tool() const noexcept;
+    [[nodiscard]] std::optional<AnnotationToolId>
+    Active_annotation_tool() const noexcept;
+    [[nodiscard]] bool Has_active_annotation_gesture() const noexcept;
+    [[nodiscard]] bool Is_annotation_dragging() const noexcept;
+    [[nodiscard]] bool Has_annotation_at(PointPx cursor) const noexcept;
 
   private:
     void Rebuild_snap_edges(std::vector<RectPx> window_rects, int32_t origin_x,

@@ -68,7 +68,7 @@ OverlayAction OverlayController::On_annotation_tool_hotkey(wchar_t hotkey) {
     if (state_.final_selection.Is_empty()) {
         return OverlayAction::None;
     }
-    return annotation_controller_.Select_tool_by_hotkey(hotkey) ? OverlayAction::Repaint
+    return annotation_controller_.Toggle_tool_by_hotkey(hotkey) ? OverlayAction::Repaint
                                                                 : OverlayAction::None;
 }
 
@@ -76,7 +76,7 @@ OverlayAction OverlayController::On_select_annotation_tool(AnnotationToolId id) 
     if (state_.final_selection.Is_empty()) {
         return OverlayAction::None;
     }
-    return annotation_controller_.Select_tool(id) ? OverlayAction::Repaint
+    return annotation_controller_.Toggle_tool(id) ? OverlayAction::Repaint
                                                   : OverlayAction::None;
 }
 
@@ -115,8 +115,21 @@ std::optional<RectPx> OverlayController::Selected_annotation_bounds() const noex
     return annotation_controller_.Selected_annotation_bounds();
 }
 
-AnnotationToolId OverlayController::Active_annotation_tool() const noexcept {
+std::optional<AnnotationToolId>
+OverlayController::Active_annotation_tool() const noexcept {
     return annotation_controller_.Active_tool();
+}
+
+bool OverlayController::Has_active_annotation_gesture() const noexcept {
+    return annotation_controller_.Has_active_gesture();
+}
+
+bool OverlayController::Is_annotation_dragging() const noexcept {
+    return annotation_controller_.Is_annotation_dragging();
+}
+
+bool OverlayController::Has_annotation_at(PointPx cursor) const noexcept {
+    return annotation_controller_.Annotation_id_at(cursor).has_value();
 }
 
 void OverlayController::Rebuild_snap_edges(std::vector<RectPx> window_rects,
@@ -263,18 +276,9 @@ OverlayAction OverlayController::On_primary_press(
         return OverlayAction::Repaint;
     }
 
-    // ---- When a committed selection exists, try move-drag or handle-drag ----
+    // ---- When a committed selection exists, resolve resize / tool / move ----
     if (!state_.final_selection.Is_empty() && !state_.dragging &&
         !state_.handle_dragging && !state_.move_dragging) {
-        if (mods.tab && state_.final_selection.Contains(cursor_client)) {
-            state_.move_dragging = true;
-            state_.move_grab_offset = {cursor_client.x - state_.final_selection.left,
-                                       cursor_client.y - state_.final_selection.top};
-            state_.move_anchor_rect = state_.final_selection;
-            state_.live_rect = state_.final_selection;
-            Rebuild_snap_edges(std::move(visible_window_rects), origin_x, origin_y);
-            return OverlayAction::Repaint;
-        }
         std::optional<SelectionHandle> hit =
             Hit_test_border_zone(state_.final_selection, cursor_client);
         if (hit.has_value()) {
@@ -285,9 +289,35 @@ OverlayAction OverlayController::On_primary_press(
             Rebuild_snap_edges(std::move(visible_window_rects), origin_x, origin_y);
             return OverlayAction::Repaint;
         }
-        return annotation_controller_.On_primary_press(cursor_client)
-                   ? OverlayAction::Repaint
-                   : OverlayAction::None;
+
+        if (annotation_controller_.Has_active_tool()) {
+            return annotation_controller_.On_primary_press(cursor_client)
+                       ? OverlayAction::Repaint
+                       : OverlayAction::None;
+        }
+
+        if (std::optional<uint64_t> const annotation_id =
+                annotation_controller_.Annotation_id_at(cursor_client);
+            annotation_id.has_value()) {
+            return annotation_controller_.Begin_annotation_drag(*annotation_id,
+                                                                cursor_client)
+                       ? OverlayAction::Repaint
+                       : OverlayAction::None;
+        }
+
+        bool const selection_changed =
+            annotation_controller_.Set_selected_annotation(std::nullopt);
+        if (state_.final_selection.Contains(cursor_client)) {
+            state_.move_dragging = true;
+            state_.move_grab_offset = {cursor_client.x - state_.final_selection.left,
+                                       cursor_client.y - state_.final_selection.top};
+            state_.move_anchor_rect = state_.final_selection;
+            state_.live_rect = state_.final_selection;
+            Rebuild_snap_edges(std::move(visible_window_rects), origin_x, origin_y);
+            return OverlayAction::Repaint;
+        }
+
+        return selection_changed ? OverlayAction::Repaint : OverlayAction::None;
     }
 
     // ---- Fresh drag ----
@@ -347,9 +377,9 @@ OverlayAction OverlayController::On_pointer_move(
                                            state_.horizontal_edges, kSnapThresholdPx);
         }
         state_.live_rect = candidate;
-    } else if (annotation_controller_.Has_active_tool_gesture()) {
-        // Annotation tools update their own draft state here; repaint cadence is
-        // controlled by the shared throttle below.
+    } else if (annotation_controller_.Has_active_gesture()) {
+        // Annotation gestures update their own draft/live state here; repaint cadence
+        // is controlled by the shared throttle below.
         (void)annotation_controller_.On_pointer_move(cursor_client);
     } else {
         Apply_modifier_preview(mods, cursor_screen, window_rect_screen,
@@ -415,7 +445,7 @@ OverlayAction OverlayController::On_primary_release(OverlayModifierState mods,
         return OverlayAction::Repaint;
     }
 
-    if (annotation_controller_.Has_active_tool_gesture()) {
+    if (annotation_controller_.Has_active_gesture()) {
         return annotation_controller_.On_primary_release(undo_stack_)
                    ? OverlayAction::Repaint
                    : OverlayAction::None;

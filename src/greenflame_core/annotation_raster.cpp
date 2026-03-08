@@ -159,6 +159,23 @@ std::optional<size_t> Index_of_annotation_id(std::span<const Annotation> annotat
     return std::nullopt;
 }
 
+Annotation Translate_annotation(Annotation annotation, PointPx delta) noexcept {
+    switch (annotation.kind) {
+    case AnnotationKind::Freehand:
+        for (PointPx &point : annotation.freehand.points) {
+            point.x += delta.x;
+            point.y += delta.y;
+        }
+        annotation.freehand.raster.bounds =
+            RectPx::From_ltrb(annotation.freehand.raster.bounds.left + delta.x,
+                              annotation.freehand.raster.bounds.top + delta.y,
+                              annotation.freehand.raster.bounds.right + delta.x,
+                              annotation.freehand.raster.bounds.bottom + delta.y);
+        break;
+    }
+    return annotation;
+}
+
 void Blend_annotations_onto_pixels(std::span<uint8_t> pixels, int width, int height,
                                    int row_bytes,
                                    std::span<const Annotation> annotations,

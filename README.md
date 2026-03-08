@@ -29,7 +29,9 @@ In interactive mode, the screen is captured and a region is selected:
 Once a region is selected:
 
 - **Drag the handles** on the selection to resize (hold **Alt** to disable snapping).
-- Hold **Tab** and drag inside the selection to **move** it (hold **Alt** to disable snapping).
+- With **no annotation tool selected** (the default mode), **click and drag inside the selection** to **move** it (hold **Alt** to disable snapping).
+- With **no annotation tool selected**, **click and drag an annotation** to **select** and **move** it.
+- Press **P** or use the toolbar to toggle the **freehand annotation** tool on or off.
 - **Ctrl-S** ➜ save directly (no dialog) to the configured default save folder as the configured format (default PNG), then close.
 - **Ctrl-Shift-S** ➜ open **Save As** dialog, then save and close.
 - **Ctrl-Alt-S** ➜ save directly (no dialog), copy the saved file to the clipboard, then close.

@@ -37,29 +37,36 @@ The annotation system applies only to the interactive overlay flow.
 
 - Before a region exists, the overlay behaves exactly like the original capture
   selector.
-- After a region exists, ordinary clicks are routed to the active annotation tool.
-- Region adjustment stays available through:
-  - `Tab` + drag inside the region for move
-  - border/corner drag for resize
-- If a tool gesture is already in progress, new `Tab` or resize interactions do not
-  steal that gesture.
+- After a region exists, border/corner drag still resizes the selection.
+- When no annotation tool is selected, the overlay is in its default interaction
+  mode:
+  - click and drag an annotation to select it and move it
+  - click and drag empty space inside the selection to move the selection
+  - clicking empty space outside the selection clears the selected annotation
+- When the freehand tool is active, ordinary clicks are routed to that tool instead
+  of the default selection/move behavior.
+- If a gesture is already in progress, competing resize, selection-move, and
+  annotation-move interactions do not steal that gesture.
 
 ### Tool interaction
 
-- Default tool: `Pointer`
+- Default mode: no tool selected
 - Registered tools:
-  - `Pointer` hotkey `S`
   - `Freehand` hotkey `P`
 - The toolbar is anchored to the current selection border.
 - Toolbar buttons currently display the tool hotkey letter.
 - Hovering a toolbar button shows a tooltip with the full tool name.
+- Pressing `P` or clicking the `Freehand` toolbar button toggles that tool on or
+  off.
 - Completing an annotation does not change the active tool.
-- Clicking empty space with `Pointer` clears the selected annotation.
+- Starting a selection move clears the selected annotation.
 
 ### Selection and deletion
 
 - Selection uses topmost-first hit-testing.
 - Hit-testing is pixel-accurate against the annotation's rendered coverage.
+- In default mode, clicking a covered pixel both selects the topmost annotation and
+  begins moving it immediately.
 - Selected annotations are shown by drawing the corners of their bounding box.
 - `Delete` removes the selected annotation.
 - Deletion is undoable and redoable.
@@ -83,9 +90,10 @@ The annotation system applies only to the interactive overlay flow.
 
 - `greenflame::core::AnnotationController`
   - annotation-session state
-  - active tool
+  - optional active tool
   - ordered annotation list
   - selected annotation id
+  - annotation drag state
   - in-progress freehand draft points and style
 
 ## Tool registry and tool objects
@@ -97,10 +105,12 @@ The registry lives in core.
   - resolves by id and hotkey
   - builds toolbar button view models
 
+- The default select/move behavior is intentionally **not** a registered tool.
+  It is the controller's fallback mode when no annotation tool is active.
+
 - `IAnnotationTool`
   - interface implemented by each tool object
   - current concrete tools:
-    - `PointerTool`
     - `FreehandTool`
 
 Tools are objects so behavior remains encapsulated and future tools can be added
@@ -187,6 +197,7 @@ Current command types:
 - selection move / resize via `ModificationCommand<RectPx>`
 - annotation add via `AddAnnotationCommand`
 - annotation delete via `DeleteAnnotationCommand`
+- annotation move via `MoveAnnotationCommand`
 
 Tool switching is **not** currently part of undo history.
 

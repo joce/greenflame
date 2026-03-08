@@ -41,4 +41,27 @@ void DeleteAnnotationCommand::Redo() {
     }
 }
 
+MoveAnnotationCommand::MoveAnnotationCommand(AnnotationController *controller,
+                                             size_t index, Annotation annotation_before,
+                                             Annotation annotation_after,
+                                             std::optional<uint64_t> selection_before,
+                                             std::optional<uint64_t> selection_after)
+    : controller_(controller), index_(index),
+      annotation_before_(std::move(annotation_before)),
+      annotation_after_(std::move(annotation_after)),
+      selection_before_(selection_before), selection_after_(selection_after) {}
+
+void MoveAnnotationCommand::Undo() {
+    if (controller_ != nullptr) {
+        controller_->Update_annotation_at(index_, annotation_before_,
+                                          selection_before_);
+    }
+}
+
+void MoveAnnotationCommand::Redo() {
+    if (controller_ != nullptr) {
+        controller_->Update_annotation_at(index_, annotation_after_, selection_after_);
+    }
+}
+
 } // namespace greenflame::core

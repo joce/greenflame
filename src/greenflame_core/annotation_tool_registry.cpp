@@ -11,37 +11,6 @@ namespace {
     return static_cast<wchar_t>(std::towupper(hotkey));
 }
 
-class PointerTool final : public IAnnotationTool {
-  public:
-    PointerTool() : descriptor_{AnnotationToolId::Pointer, L"Select", L'S', L"S"} {}
-
-    [[nodiscard]] AnnotationToolDescriptor const &Descriptor() const noexcept override {
-        return descriptor_;
-    }
-
-    [[nodiscard]] bool On_primary_press(AnnotationController &controller,
-                                        PointPx cursor) override {
-        return controller.Select_topmost_annotation(cursor);
-    }
-
-    [[nodiscard]] bool On_pointer_move(AnnotationController & /*controller*/,
-                                       PointPx /*cursor*/) override {
-        return false;
-    }
-
-    [[nodiscard]] bool On_primary_release(AnnotationController & /*controller*/,
-                                          UndoStack & /*undo_stack*/) override {
-        return false;
-    }
-
-    [[nodiscard]] bool On_cancel(AnnotationController & /*controller*/) override {
-        return false;
-    }
-
-  private:
-    AnnotationToolDescriptor descriptor_;
-};
-
 class FreehandTool final : public IAnnotationTool {
   public:
     FreehandTool() : descriptor_{AnnotationToolId::Freehand, L"Pencil", L'P', L"P"} {}
@@ -77,7 +46,6 @@ class FreehandTool final : public IAnnotationTool {
 } // namespace
 
 AnnotationToolRegistry::AnnotationToolRegistry() {
-    tools_.push_back(std::make_unique<PointerTool>());
     tools_.push_back(std::make_unique<FreehandTool>());
 }
 
@@ -113,14 +81,15 @@ IAnnotationTool *AnnotationToolRegistry::Find_by_hotkey(wchar_t hotkey) noexcept
 }
 
 std::vector<AnnotationToolbarButtonView>
-AnnotationToolRegistry::Build_toolbar_button_views(AnnotationToolId active_tool) const {
+AnnotationToolRegistry::Build_toolbar_button_views(
+    std::optional<AnnotationToolId> active_tool) const {
     std::vector<AnnotationToolbarButtonView> views;
     views.reserve(tools_.size());
     for (auto const &tool : tools_) {
         AnnotationToolDescriptor const &descriptor = tool->Descriptor();
-        views.push_back(
-            AnnotationToolbarButtonView{descriptor.id, descriptor.toolbar_label,
-                                        descriptor.name, descriptor.id == active_tool});
+        views.push_back(AnnotationToolbarButtonView{
+            descriptor.id, descriptor.toolbar_label, descriptor.name,
+            active_tool.has_value() && descriptor.id == *active_tool});
     }
     return views;
 }

@@ -66,6 +66,8 @@ Index_of_topmost_annotation_at(std::span<const Annotation> annotations,
                                PointPx point) noexcept;
 [[nodiscard]] std::optional<size_t>
 Index_of_annotation_id(std::span<const Annotation> annotations, uint64_t id) noexcept;
+[[nodiscard]] Annotation Translate_annotation(Annotation annotation,
+                                              PointPx delta) noexcept;
 
 void Blend_annotation_onto_pixels(std::span<uint8_t> pixels, int width, int height,
                                   int row_bytes, Annotation const &annotation,

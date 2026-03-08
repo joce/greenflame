@@ -31,6 +31,7 @@ add_executable(greenflame_tests
     app_config_tests.cpp
     annotation_raster_tests.cpp
     annotation_tool_tests.cpp
+    annotation_edit_interaction_tests.cpp
     annotation_controller_tests.cpp
     color_wheel_tests.cpp
     overlay_controller_tests.cpp

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "greenflame_core/annotation_edit_interaction.h"
 #include "greenflame_core/annotation_raster.h"
 #include "greenflame_core/annotation_tool_registry.h"
 
@@ -25,9 +26,14 @@ class PassthroughStrokeSmoother final : public IStrokeSmoother {
     Smooth(std::span<const PointPx> points) const override;
 };
 
-class AnnotationController final : public IAnnotationToolHost {
+class AnnotationController final : public IAnnotationToolHost,
+                                   public IAnnotationEditInteractionHost {
   public:
     AnnotationController();
+    AnnotationController(AnnotationController const &) = delete;
+    AnnotationController &operator=(AnnotationController const &) = delete;
+    AnnotationController(AnnotationController &&) = default;
+    AnnotationController &operator=(AnnotationController &&) = default;
 
     void Reset_for_session();
 
@@ -64,16 +70,20 @@ class AnnotationController final : public IAnnotationToolHost {
     }
     [[nodiscard]] Annotation const *Selected_annotation() const noexcept;
     [[nodiscard]] std::optional<RectPx> Selected_annotation_bounds() const noexcept;
-    [[nodiscard]] std::optional<AnnotationLineEndpoint>
-    Selected_line_handle_at(PointPx cursor) const noexcept;
+    [[nodiscard]] std::optional<AnnotationEditTarget>
+    Annotation_edit_target_at(PointPx cursor) const noexcept;
     [[nodiscard]] bool Has_active_tool_gesture() const noexcept;
+    [[nodiscard]] bool Has_active_edit_interaction() const noexcept;
     [[nodiscard]] bool Has_active_gesture() const noexcept;
     [[nodiscard]] bool Has_annotations() const noexcept {
         return !document_.annotations.empty();
     }
     [[nodiscard]] bool Is_annotation_dragging() const noexcept {
-        return annotation_dragging_;
+        return active_edit_interaction_ != nullptr &&
+               active_edit_interaction_->Is_move_drag();
     }
+    [[nodiscard]] std::optional<AnnotationEditHandleKind>
+    Active_annotation_edit_handle() const noexcept;
 
     [[nodiscard]] bool On_primary_press(PointPx cursor);
     [[nodiscard]] bool On_pointer_move(PointPx cursor);
@@ -89,25 +99,11 @@ class AnnotationController final : public IAnnotationToolHost {
     [[nodiscard]] bool
     Set_selected_annotation(std::optional<uint64_t> selected_annotation_id) noexcept;
     [[nodiscard]] bool Select_topmost_annotation(PointPx cursor);
-    [[nodiscard]] bool Begin_annotation_drag(uint64_t id, PointPx cursor);
-    [[nodiscard]] bool Update_annotation_drag(PointPx cursor);
-    [[nodiscard]] bool Commit_annotation_drag(UndoStack &undo_stack);
-    [[nodiscard]] bool Cancel_annotation_drag();
-    [[nodiscard]] bool
-    Begin_selected_line_endpoint_drag(AnnotationLineEndpoint endpoint);
-    [[nodiscard]] bool Update_selected_line_endpoint_drag(PointPx cursor);
-    [[nodiscard]] bool Commit_selected_line_endpoint_drag(UndoStack &undo_stack);
-    [[nodiscard]] bool Cancel_selected_line_endpoint_drag();
-    [[nodiscard]] bool Is_line_endpoint_dragging() const noexcept {
-        return line_endpoint_dragging_;
-    }
-    [[nodiscard]] std::optional<AnnotationLineEndpoint>
-    Active_line_endpoint_drag() const noexcept {
-        return active_line_endpoint_drag_;
-    }
+    [[nodiscard]] bool Begin_annotation_edit(AnnotationEditTarget target,
+                                             PointPx cursor);
 
     void Update_annotation_at(size_t index, Annotation annotation,
-                              std::optional<uint64_t> selected_annotation_id);
+                              std::optional<uint64_t> selected_annotation_id) override;
     void Insert_annotation_at(size_t index, Annotation annotation,
                               std::optional<uint64_t> selected_annotation_id);
     void Erase_annotation_at(size_t index,
@@ -119,6 +115,7 @@ class AnnotationController final : public IAnnotationToolHost {
     [[nodiscard]] std::vector<PointPx>
     Smooth_points(std::span<const PointPx> points) const override;
     void Commit_new_annotation(UndoStack &undo_stack, Annotation annotation) override;
+    [[nodiscard]] Annotation const *Annotation_at(size_t index) const noexcept override;
 
     [[nodiscard]] IAnnotationTool *Active_tool_impl() noexcept;
     [[nodiscard]] IAnnotationTool const *Active_tool_impl() const noexcept;
@@ -129,12 +126,7 @@ class AnnotationController final : public IAnnotationToolHost {
     PassthroughStrokeSmoother smoother_ = {};
     std::optional<AnnotationToolId> active_tool_ = std::nullopt;
     StrokeStyle brush_style_ = {};
-    bool annotation_dragging_ = false;
-    bool line_endpoint_dragging_ = false;
-    PointPx annotation_drag_start_ = {};
-    Annotation annotation_drag_before_ = {};
-    Annotation annotation_edit_before_ = {};
-    std::optional<AnnotationLineEndpoint> active_line_endpoint_drag_ = std::nullopt;
+    std::unique_ptr<IAnnotationEditInteraction> active_edit_interaction_ = {};
 };
 
 } // namespace greenflame::core

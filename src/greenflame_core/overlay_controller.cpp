@@ -123,9 +123,9 @@ std::optional<RectPx> OverlayController::Selected_annotation_bounds() const noex
     return annotation_controller_.Selected_annotation_bounds();
 }
 
-std::optional<AnnotationLineEndpoint>
-OverlayController::Selected_line_handle_at(PointPx cursor) const noexcept {
-    return annotation_controller_.Selected_line_handle_at(cursor);
+std::optional<AnnotationEditTarget>
+OverlayController::Annotation_edit_target_at(PointPx cursor) const noexcept {
+    return annotation_controller_.Annotation_edit_target_at(cursor);
 }
 
 std::optional<AnnotationToolId>
@@ -133,13 +133,13 @@ OverlayController::Active_annotation_tool() const noexcept {
     return annotation_controller_.Active_tool();
 }
 
-bool OverlayController::Is_line_endpoint_dragging() const noexcept {
-    return annotation_controller_.Is_line_endpoint_dragging();
+bool OverlayController::Has_active_annotation_edit() const noexcept {
+    return annotation_controller_.Has_active_edit_interaction();
 }
 
-std::optional<AnnotationLineEndpoint>
-OverlayController::Active_line_endpoint_drag() const noexcept {
-    return annotation_controller_.Active_line_endpoint_drag();
+std::optional<AnnotationEditHandleKind>
+OverlayController::Active_annotation_edit_handle() const noexcept {
+    return annotation_controller_.Active_annotation_edit_handle();
 }
 
 int32_t OverlayController::Brush_width_px() const noexcept {
@@ -177,8 +177,7 @@ std::optional<int32_t> OverlayController::Adjust_brush_width(int32_t delta_steps
 bool OverlayController::Should_show_annotation_toolbar() const noexcept {
     return !state_.final_selection.Is_empty() && !state_.dragging &&
            !state_.handle_dragging && !state_.move_dragging &&
-           !annotation_controller_.Is_annotation_dragging() &&
-           !annotation_controller_.Is_line_endpoint_dragging();
+           !annotation_controller_.Has_active_edit_interaction();
 }
 
 bool OverlayController::Can_interact_with_annotation_toolbar() const noexcept {
@@ -362,20 +361,10 @@ OverlayAction OverlayController::On_primary_press(
                        : OverlayAction::None;
         }
 
-        if (std::optional<AnnotationLineEndpoint> const line_handle =
-                annotation_controller_.Selected_line_handle_at(cursor_client);
-            line_handle.has_value()) {
-            return annotation_controller_.Begin_selected_line_endpoint_drag(
-                       *line_handle)
-                       ? OverlayAction::Repaint
-                       : OverlayAction::None;
-        }
-
-        if (std::optional<uint64_t> const annotation_id =
-                annotation_controller_.Annotation_id_at(cursor_client);
-            annotation_id.has_value()) {
-            return annotation_controller_.Begin_annotation_drag(*annotation_id,
-                                                                cursor_client)
+        if (std::optional<AnnotationEditTarget> const target =
+                annotation_controller_.Annotation_edit_target_at(cursor_client);
+            target.has_value()) {
+            return annotation_controller_.Begin_annotation_edit(*target, cursor_client)
                        ? OverlayAction::Repaint
                        : OverlayAction::None;
         }

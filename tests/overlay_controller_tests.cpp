@@ -918,7 +918,10 @@ TEST(overlay_controller, SelectedLineHandleDragTakesPriorityOverAnnotationMove) 
                                  std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
                                  0),
               OverlayAction::Repaint);
-    EXPECT_TRUE(c.Is_line_endpoint_dragging());
+    EXPECT_TRUE(c.Has_active_annotation_edit());
+    EXPECT_EQ(
+        c.Active_annotation_edit_handle(),
+        std::optional<AnnotationEditHandleKind>{AnnotationEditHandleKind::LineStart});
     EXPECT_FALSE(c.Is_annotation_dragging());
 }
 
@@ -949,7 +952,10 @@ TEST(overlay_controller, AnnotationToolbar_LineEndpointDragHidesToolbar) {
                                  std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
                                  0),
               OverlayAction::Repaint);
-    EXPECT_TRUE(c.Is_line_endpoint_dragging());
+    EXPECT_TRUE(c.Has_active_annotation_edit());
+    EXPECT_EQ(
+        c.Active_annotation_edit_handle(),
+        std::optional<AnnotationEditHandleKind>{AnnotationEditHandleKind::LineStart});
     EXPECT_FALSE(c.Should_show_annotation_toolbar());
     EXPECT_FALSE(c.Can_interact_with_annotation_toolbar());
     EXPECT_EQ(c.On_pointer_move(No_mods(), {120, 130}, {120, 130}, std::nullopt, {},

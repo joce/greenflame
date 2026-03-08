@@ -53,6 +53,12 @@ struct OverlaySessionData {
 
 class OverlayController final {
   public:
+    OverlayController() = default;
+    OverlayController(OverlayController const &) = delete;
+    OverlayController &operator=(OverlayController const &) = delete;
+    OverlayController(OverlayController &&) = default;
+    OverlayController &operator=(OverlayController &&) = default;
+
     void Reset_for_session(std::vector<MonitorWithBounds> monitors);
 
     // WM_LBUTTONDOWN: all Win32 queries are pre-resolved by caller.
@@ -114,13 +120,13 @@ class OverlayController final {
     [[nodiscard]] std::optional<double> Draft_line_angle_radians() const noexcept;
     [[nodiscard]] Annotation const *Selected_annotation() const noexcept;
     [[nodiscard]] std::optional<RectPx> Selected_annotation_bounds() const noexcept;
-    [[nodiscard]] std::optional<AnnotationLineEndpoint>
-    Selected_line_handle_at(PointPx cursor) const noexcept;
+    [[nodiscard]] std::optional<AnnotationEditTarget>
+    Annotation_edit_target_at(PointPx cursor) const noexcept;
     [[nodiscard]] std::optional<AnnotationToolId>
     Active_annotation_tool() const noexcept;
-    [[nodiscard]] bool Is_line_endpoint_dragging() const noexcept;
-    [[nodiscard]] std::optional<AnnotationLineEndpoint>
-    Active_line_endpoint_drag() const noexcept;
+    [[nodiscard]] bool Has_active_annotation_edit() const noexcept;
+    [[nodiscard]] std::optional<AnnotationEditHandleKind>
+    Active_annotation_edit_handle() const noexcept;
     [[nodiscard]] int32_t Brush_width_px() const noexcept;
     [[nodiscard]] COLORREF Annotation_color() const noexcept;
     void Set_brush_width_px(int32_t width_px) noexcept;

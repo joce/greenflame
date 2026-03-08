@@ -335,16 +335,21 @@ TEST(annotation_controller, CancelDuringLine_ClearsDraftWithoutCommit) {
     EXPECT_TRUE(controller.Annotations().empty());
 }
 
-TEST(annotation_controller, SelectedLineHandleAt_HitsEndpointHandles) {
+TEST(annotation_controller,
+     AnnotationEditTargetAt_PrefersSelectedLineHandlesAndFallsBackToBody) {
     AnnotationController controller;
     controller.Insert_annotation_at(0, Make_line(1, {40, 40}, {80, 50}, 6),
                                     std::optional<uint64_t>{1});
 
-    EXPECT_EQ(controller.Selected_line_handle_at({40, 40}),
-              std::optional<AnnotationLineEndpoint>{AnnotationLineEndpoint::Start});
-    EXPECT_EQ(controller.Selected_line_handle_at({80, 50}),
-              std::optional<AnnotationLineEndpoint>{AnnotationLineEndpoint::End});
-    EXPECT_EQ(controller.Selected_line_handle_at({60, 45}), std::nullopt);
+    EXPECT_EQ(controller.Annotation_edit_target_at({40, 40}),
+              (std::optional<AnnotationEditTarget>{
+                  AnnotationEditTarget{1, AnnotationEditTargetKind::LineStartHandle}}));
+    EXPECT_EQ(controller.Annotation_edit_target_at({80, 50}),
+              (std::optional<AnnotationEditTarget>{
+                  AnnotationEditTarget{1, AnnotationEditTargetKind::LineEndHandle}}));
+    EXPECT_EQ(controller.Annotation_edit_target_at({60, 45}),
+              (std::optional<AnnotationEditTarget>{
+                  AnnotationEditTarget{1, AnnotationEditTargetKind::Body}}));
 }
 
 TEST(annotation_controller, AnnotationDragRelease_MovesAnnotationAndIsUndoable) {
@@ -359,7 +364,8 @@ TEST(annotation_controller, AnnotationDragRelease_MovesAnnotationAndIsUndoable) 
 
     controller.Insert_annotation_at(0, original, std::nullopt);
 
-    ASSERT_TRUE(controller.Begin_annotation_drag(1, {50, 40}));
+    ASSERT_TRUE(controller.Begin_annotation_edit(
+        AnnotationEditTarget{1, AnnotationEditTargetKind::Body}, {50, 40}));
     EXPECT_EQ(controller.Selected_annotation_id(), std::optional<uint64_t>{1});
     EXPECT_TRUE(controller.On_pointer_move({70, 60}));
     EXPECT_EQ(controller.Annotations()[0].freehand.points[0], (PointPx{60, 60}));
@@ -386,7 +392,8 @@ TEST(annotation_controller, CancelDuringAnnotationDrag_RestoresOriginalAnnotatio
     Annotation const original = Make_stroke(1, {{40, 40}, {60, 40}});
     controller.Insert_annotation_at(0, original, std::nullopt);
 
-    ASSERT_TRUE(controller.Begin_annotation_drag(1, {50, 40}));
+    ASSERT_TRUE(controller.Begin_annotation_edit(
+        AnnotationEditTarget{1, AnnotationEditTargetKind::Body}, {50, 40}));
     EXPECT_TRUE(controller.On_pointer_move({80, 70}));
     ASSERT_NE(controller.Annotations()[0], original);
 
@@ -402,15 +409,17 @@ TEST(annotation_controller, LineEndpointDragRelease_UpdatesLineAndIsUndoable) {
     Annotation const original = Make_line(1, {40, 40}, {90, 40}, 6);
     controller.Insert_annotation_at(0, original, std::optional<uint64_t>{1});
 
-    ASSERT_TRUE(
-        controller.Begin_selected_line_endpoint_drag(AnnotationLineEndpoint::Start));
-    EXPECT_TRUE(controller.Is_line_endpoint_dragging());
+    ASSERT_TRUE(controller.Begin_annotation_edit(
+        AnnotationEditTarget{1, AnnotationEditTargetKind::LineStartHandle}, {40, 40}));
+    EXPECT_EQ(
+        controller.Active_annotation_edit_handle(),
+        std::optional<AnnotationEditHandleKind>{AnnotationEditHandleKind::LineStart});
     EXPECT_TRUE(controller.On_pointer_move({60, 65}));
     EXPECT_EQ(controller.Annotations()[0].line.start, (PointPx{60, 65}));
     EXPECT_EQ(controller.Annotations()[0].line.end, (PointPx{90, 40}));
 
     EXPECT_TRUE(controller.On_primary_release(undo_stack));
-    EXPECT_FALSE(controller.Is_line_endpoint_dragging());
+    EXPECT_EQ(controller.Active_annotation_edit_handle(), std::nullopt);
 
     undo_stack.Undo();
     ASSERT_EQ(controller.Annotations().size(), 1u);
@@ -428,13 +437,13 @@ TEST(annotation_controller, CancelDuringLineEndpointDrag_RestoresOriginalLine) {
     Annotation const original = Make_line(1, {40, 40}, {90, 40}, 6);
     controller.Insert_annotation_at(0, original, std::optional<uint64_t>{1});
 
-    ASSERT_TRUE(
-        controller.Begin_selected_line_endpoint_drag(AnnotationLineEndpoint::End));
+    ASSERT_TRUE(controller.Begin_annotation_edit(
+        AnnotationEditTarget{1, AnnotationEditTargetKind::LineEndHandle}, {90, 40}));
     EXPECT_TRUE(controller.On_pointer_move({120, 70}));
     ASSERT_NE(controller.Annotations()[0], original);
 
     EXPECT_TRUE(controller.On_cancel());
-    EXPECT_FALSE(controller.Is_line_endpoint_dragging());
+    EXPECT_EQ(controller.Active_annotation_edit_handle(), std::nullopt);
     EXPECT_EQ(controller.Annotations()[0], original);
     EXPECT_EQ(controller.Selected_annotation_id(), std::optional<uint64_t>{1});
 }

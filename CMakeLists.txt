@@ -101,6 +101,8 @@ add_library(greenflame_core STATIC
     src/greenflame_core/annotation_commands.h
     src/greenflame_core/annotation_controller.cpp
     src/greenflame_core/annotation_controller.h
+    src/greenflame_core/annotation_edit_interaction.cpp
+    src/greenflame_core/annotation_edit_interaction.h
     src/greenflame_core/annotation_raster.cpp
     src/greenflame_core/annotation_raster.h
     src/greenflame_core/annotation_tool.h

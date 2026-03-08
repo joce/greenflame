@@ -1792,10 +1792,15 @@ void OverlayWindow::Refresh_cursor() {
             SetCursor(Cursor_for_handle(*hit));
             return;
         }
-        if (!controller_.Active_annotation_tool().has_value() &&
-            controller_.Selected_line_handle_at(cursor).has_value()) {
-            SetCursor(Load_annotation_tool_cursor(hinstance_));
-            return;
+        if (!controller_.Active_annotation_tool().has_value()) {
+            if (std::optional<core::AnnotationEditTarget> const edit_target =
+                    controller_.Annotation_edit_target_at(cursor);
+                edit_target.has_value() &&
+                (edit_target->kind == core::AnnotationEditTargetKind::LineStartHandle ||
+                 edit_target->kind == core::AnnotationEditTargetKind::LineEndHandle)) {
+                SetCursor(Load_annotation_tool_cursor(hinstance_));
+                return;
+            }
         }
         std::optional<core::AnnotationToolId> const active_tool =
             controller_.Active_annotation_tool();

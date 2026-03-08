@@ -92,6 +92,9 @@ class OverlayWindow final {
     void Select_color_wheel_segment(size_t index);
     [[nodiscard]] bool Clear_toolbar_hover_states();
     [[nodiscard]] bool Should_show_brush_cursor_preview() const;
+    [[nodiscard]] bool Should_show_line_cursor_preview() const;
+    [[nodiscard]] std::optional<double>
+    Current_line_cursor_preview_angle_radians() const;
     [[nodiscard]] bool Is_selection_stable_for_help() const;
     [[nodiscard]] std::wstring_view Hovered_toolbar_tooltip_text() const noexcept;
     [[nodiscard]] std::optional<core::RectPx> Hovered_toolbar_button_bounds() const;

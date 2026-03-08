@@ -27,8 +27,9 @@ constexpr int kCenterFontHeight = 36;
 constexpr int kHelpHintFontHeight = 16;
 constexpr int kToolbarButtonSizePx = 36;
 constexpr int kToolbarButtonSeparatorPx = 9; // size / 4
-constexpr int kFreehandCursorResourceId = 102;
+constexpr int kAnnotationToolCursorResourceId = 102;
 constexpr int kBrushToolGlyphResourceId = 103;
+constexpr int kLineToolGlyphResourceId = 104;
 constexpr UINT_PTR kBrushSizeOverlayTimerId = 1;
 
 constexpr int kThumbnailMaxWidth = 320;
@@ -150,10 +151,10 @@ Create_thumbnail_from_capture(greenflame::GdiCaptureResult const &capture) {
 
 [[nodiscard]] HCURSOR Move_mode_cursor() { return LoadCursorW(nullptr, IDC_SIZEALL); }
 
-[[nodiscard]] HCURSOR Load_freehand_annotation_cursor(HINSTANCE hinstance) {
+[[nodiscard]] HCURSOR Load_annotation_tool_cursor(HINSTANCE hinstance) {
     if (hinstance != nullptr) {
         HCURSOR const cursor =
-            LoadCursorW(hinstance, MAKEINTRESOURCEW(kFreehandCursorResourceId));
+            LoadCursorW(hinstance, MAKEINTRESOURCEW(kAnnotationToolCursorResourceId));
         if (cursor != nullptr) {
             return cursor;
         }
@@ -323,6 +324,7 @@ struct OverlayWindow::OverlayResources {
     std::vector<uint8_t> paint_buffer = {};
     PaintResources paint = {};
     std::shared_ptr<OverlayButtonGlyph const> brush_tool_glyph = {};
+    std::shared_ptr<OverlayButtonGlyph const> line_tool_glyph = {};
 
     OverlayResources() = default;
     ~OverlayResources() { Reset(); }
@@ -360,6 +362,8 @@ struct OverlayWindow::OverlayResources {
         paint.handle_pen = CreatePen(PS_SOLID, 1, kOverlayHandle);
         brush_tool_glyph =
             Load_png_resource_alpha_mask(hinstance, kBrushToolGlyphResourceId);
+        line_tool_glyph =
+            Load_png_resource_alpha_mask(hinstance, kLineToolGlyphResourceId);
         return true;
     }
 
@@ -367,6 +371,7 @@ struct OverlayWindow::OverlayResources {
         capture.Free();
         paint_buffer.clear();
         brush_tool_glyph.reset();
+        line_tool_glyph.reset();
         if (paint.font_dim) {
             DeleteObject(paint.font_dim);
             paint.font_dim = nullptr;
@@ -448,6 +453,8 @@ OverlayButtonGlyph const *OverlayWindow::Resolve_toolbar_button_glyph(
     switch (glyph) {
     case core::AnnotationToolbarGlyph::Brush:
         return resources_->brush_tool_glyph.get();
+    case core::AnnotationToolbarGlyph::Line:
+        return resources_->line_tool_glyph.get();
     case core::AnnotationToolbarGlyph::None:
         return nullptr;
     }
@@ -690,6 +697,24 @@ bool OverlayWindow::Should_show_brush_cursor_preview() const {
            !s.move_dragging && !s.modifier_preview && !last_hover_handle_.has_value();
 }
 
+bool OverlayWindow::Should_show_line_cursor_preview() const {
+    if (color_wheel_.visible) {
+        return false;
+    }
+    auto const &s = controller_.State();
+    return controller_.Active_annotation_tool() ==
+               std::optional<core::AnnotationToolId>{core::AnnotationToolId::Line} &&
+           !s.final_selection.Is_empty() && !s.dragging && !s.handle_dragging &&
+           !s.move_dragging && !s.modifier_preview && !last_hover_handle_.has_value();
+}
+
+std::optional<double> OverlayWindow::Current_line_cursor_preview_angle_radians() const {
+    if (!Should_show_line_cursor_preview()) {
+        return std::nullopt;
+    }
+    return controller_.Draft_line_angle_radians();
+}
+
 bool OverlayWindow::Is_selection_stable_for_help() const {
     auto const &s = controller_.State();
     return !s.final_selection.Is_empty() && !s.dragging && !s.handle_dragging &&
@@ -863,11 +888,14 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
         Apply_action(controller_.On_delete_selected_annotation());
         return 0;
     }
-    if (!eff_ctrl && !eff_alt && wparam == L'B') {
-        Apply_action(
-            controller_.On_annotation_tool_hotkey(static_cast<wchar_t>(wparam)));
-        Refresh_cursor();
-        return 0;
+    if (!eff_ctrl && !eff_alt) {
+        core::OverlayAction const action =
+            controller_.On_annotation_tool_hotkey(static_cast<wchar_t>(wparam));
+        if (action != core::OverlayAction::None) {
+            Apply_action(action);
+            Refresh_cursor();
+            return 0;
+        }
     }
     if (wparam == VK_SHIFT || wparam == VK_CONTROL || wparam == VK_MENU) {
         core::OverlayModifierState new_mods{eff_shift, eff_ctrl, eff_alt};
@@ -1103,7 +1131,7 @@ LRESULT OverlayWindow::On_mouse_move() {
         InvalidateRect(hwnd_, nullptr, FALSE);
     }
 
-    if (Should_show_brush_cursor_preview()) {
+    if (Should_show_brush_cursor_preview() || Should_show_line_cursor_preview()) {
         RedrawWindow(hwnd_, nullptr, nullptr,
                      RDW_INVALIDATE | RDW_NOERASE | RDW_UPDATENOW);
     }
@@ -1118,8 +1146,10 @@ LRESULT OverlayWindow::On_mouse_wheel(WPARAM wparam) {
     if (hotkey_help_overlay_.Is_visible()) {
         return 0;
     }
-    if (controller_.Active_annotation_tool() !=
-        std::optional<core::AnnotationToolId>{core::AnnotationToolId::Freehand}) {
+    std::optional<core::AnnotationToolId> const active_tool =
+        controller_.Active_annotation_tool();
+    if (!active_tool.has_value() || (*active_tool != core::AnnotationToolId::Freehand &&
+                                     *active_tool != core::AnnotationToolId::Line)) {
         mouse_wheel_delta_remainder_ = 0;
         return 0;
     }
@@ -1663,8 +1693,10 @@ LRESULT OverlayWindow::On_paint() {
         input.paint_buffer = std::span<uint8_t>(resources_->paint_buffer);
         input.resources = &resources_->paint;
         input.annotations = controller_.Annotations();
+        input.draft_annotation = controller_.Draft_annotation();
         input.draft_freehand_points = controller_.Draft_freehand_points();
         input.draft_freehand_style = controller_.Draft_freehand_style();
+        input.selected_annotation = controller_.Selected_annotation();
         input.selected_annotation_bounds = controller_.Selected_annotation_bounds();
         input.transient_center_label_text = brush_size_overlay_text_;
         input.toolbar_tooltip_text = Hovered_toolbar_tooltip_text();
@@ -1683,6 +1715,11 @@ LRESULT OverlayWindow::On_paint() {
         }
         if (Should_show_brush_cursor_preview()) {
             input.brush_cursor_preview_width_px = controller_.Brush_width_px();
+        }
+        if (Should_show_line_cursor_preview()) {
+            input.line_cursor_preview_width_px = controller_.Brush_width_px();
+            input.line_cursor_preview_angle_radians =
+                Current_line_cursor_preview_angle_radians();
         }
         std::vector<IOverlayButton *> btn_ptrs;
         btn_ptrs.reserve(toolbar_buttons_.size());
@@ -1732,7 +1769,7 @@ void OverlayWindow::Refresh_cursor() {
         return;
     }
     if (controller_.Has_active_annotation_gesture()) {
-        SetCursor(nullptr);
+        SetCursor(Load_annotation_tool_cursor(hinstance_));
         return;
     }
     if (s.handle_dragging && s.resize_handle.has_value()) {
@@ -1751,14 +1788,20 @@ void OverlayWindow::Refresh_cursor() {
             SetCursor(Cursor_for_handle(*hit));
             return;
         }
+        if (!controller_.Active_annotation_tool().has_value() &&
+            controller_.Selected_line_handle_at(cursor).has_value()) {
+            SetCursor(Load_annotation_tool_cursor(hinstance_));
+            return;
+        }
         std::optional<core::AnnotationToolId> const active_tool =
             controller_.Active_annotation_tool();
         if (!active_tool.has_value()) {
             SetCursor(LoadCursorW(nullptr, IDC_ARROW));
             return;
         }
-        if (*active_tool == core::AnnotationToolId::Freehand) {
-            SetCursor(Load_freehand_annotation_cursor(hinstance_));
+        if (*active_tool == core::AnnotationToolId::Freehand ||
+            *active_tool == core::AnnotationToolId::Line) {
+            SetCursor(Load_annotation_tool_cursor(hinstance_));
         } else {
             SetCursor(LoadCursorW(nullptr, IDC_ARROW));
         }

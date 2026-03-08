@@ -60,10 +60,14 @@ class AnnotationController final {
         return freehand_points_;
     }
     [[nodiscard]] std::optional<StrokeStyle> Draft_freehand_style() const noexcept;
+    [[nodiscard]] std::optional<double> Draft_line_angle_radians() const noexcept;
     [[nodiscard]] std::optional<uint64_t> Selected_annotation_id() const noexcept {
         return document_.selected_annotation_id;
     }
+    [[nodiscard]] Annotation const *Selected_annotation() const noexcept;
     [[nodiscard]] std::optional<RectPx> Selected_annotation_bounds() const noexcept;
+    [[nodiscard]] std::optional<AnnotationLineEndpoint>
+    Selected_line_handle_at(PointPx cursor) const noexcept;
     [[nodiscard]] bool Has_active_tool_gesture() const noexcept;
     [[nodiscard]] bool Has_active_gesture() const noexcept;
     [[nodiscard]] bool Has_annotations() const noexcept {
@@ -91,10 +95,26 @@ class AnnotationController final {
     [[nodiscard]] bool Append_freehand_point(PointPx point);
     [[nodiscard]] bool Commit_freehand_stroke(UndoStack &undo_stack);
     [[nodiscard]] bool Cancel_freehand_stroke();
+    void Begin_line(PointPx start);
+    [[nodiscard]] bool Update_line(PointPx point);
+    [[nodiscard]] bool Commit_line(UndoStack &undo_stack);
+    [[nodiscard]] bool Cancel_line();
     [[nodiscard]] bool Begin_annotation_drag(uint64_t id, PointPx cursor);
     [[nodiscard]] bool Update_annotation_drag(PointPx cursor);
     [[nodiscard]] bool Commit_annotation_drag(UndoStack &undo_stack);
     [[nodiscard]] bool Cancel_annotation_drag();
+    [[nodiscard]] bool
+    Begin_selected_line_endpoint_drag(AnnotationLineEndpoint endpoint);
+    [[nodiscard]] bool Update_selected_line_endpoint_drag(PointPx cursor);
+    [[nodiscard]] bool Commit_selected_line_endpoint_drag(UndoStack &undo_stack);
+    [[nodiscard]] bool Cancel_selected_line_endpoint_drag();
+    [[nodiscard]] bool Is_line_endpoint_dragging() const noexcept {
+        return line_endpoint_dragging_;
+    }
+    [[nodiscard]] std::optional<AnnotationLineEndpoint>
+    Active_line_endpoint_drag() const noexcept {
+        return active_line_endpoint_drag_;
+    }
 
     void Update_annotation_at(size_t index, Annotation annotation,
                               std::optional<uint64_t> selected_annotation_id);
@@ -106,8 +126,10 @@ class AnnotationController final {
   private:
     [[nodiscard]] IAnnotationTool *Active_tool_impl() noexcept;
     [[nodiscard]] IAnnotationTool const *Active_tool_impl() const noexcept;
+    [[nodiscard]] std::optional<size_t> Selected_annotation_index() const noexcept;
     [[nodiscard]] Annotation
     Build_freehand_annotation(std::span<const PointPx> raw_points) const;
+    [[nodiscard]] Annotation Build_line_annotation(PointPx start, PointPx end) const;
 
     AnnotationDocument document_ = {};
     AnnotationToolRegistry registry_ = {};
@@ -115,11 +137,17 @@ class AnnotationController final {
     std::optional<AnnotationToolId> active_tool_ = std::nullopt;
     StrokeStyle brush_style_ = {};
     bool freehand_drawing_ = false;
+    bool line_drawing_ = false;
     bool annotation_dragging_ = false;
+    bool line_endpoint_dragging_ = false;
     std::vector<PointPx> freehand_points_ = {};
+    PointPx line_start_ = {};
+    PointPx line_end_ = {};
     PointPx annotation_drag_start_ = {};
     Annotation annotation_drag_before_ = {};
-    mutable std::optional<Annotation> freehand_preview_ = std::nullopt;
+    Annotation annotation_edit_before_ = {};
+    std::optional<AnnotationLineEndpoint> active_line_endpoint_drag_ = std::nullopt;
+    mutable std::optional<Annotation> draft_annotation_cache_ = std::nullopt;
 };
 
 } // namespace greenflame::core

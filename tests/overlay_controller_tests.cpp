@@ -765,6 +765,19 @@ TEST(overlay_controller, AnnotationToolHotkey_TogglesFreehand) {
     EXPECT_EQ(c.Active_annotation_tool(), std::nullopt);
 }
 
+TEST(overlay_controller, AnnotationToolHotkey_TogglesLine) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+
+    EXPECT_EQ(c.Active_annotation_tool(), std::nullopt);
+    EXPECT_EQ(c.On_annotation_tool_hotkey(L'L'), OverlayAction::Repaint);
+    EXPECT_EQ(c.Active_annotation_tool(),
+              std::optional<AnnotationToolId>{AnnotationToolId::Line});
+    EXPECT_EQ(c.On_annotation_tool_hotkey(L'L'), OverlayAction::Repaint);
+    EXPECT_EQ(c.Active_annotation_tool(), std::nullopt);
+}
+
 TEST(overlay_controller, BrushWidthAdjust_IgnoresInactiveBrushTool) {
     auto c = Make_controller();
 
@@ -785,6 +798,17 @@ TEST(overlay_controller, BrushWidthAdjust_ClampsAndReturnsUpdatedWidth) {
     EXPECT_EQ(c.Adjust_brush_width(100), std::optional<int32_t>{50});
     EXPECT_EQ(c.Adjust_brush_width(1), std::nullopt);
     EXPECT_EQ(c.Adjust_brush_width(-100), std::optional<int32_t>{1});
+}
+
+TEST(overlay_controller, BrushWidthAdjust_AppliesToLineTool) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'L'), OverlayAction::Repaint);
+
+    EXPECT_EQ(c.Brush_width_px(), StrokeStyle::kDefaultWidthPx);
+    EXPECT_EQ(c.Adjust_brush_width(1), std::optional<int32_t>{3});
+    EXPECT_EQ(c.Adjust_brush_width(-2), std::optional<int32_t>{1});
 }
 
 TEST(overlay_controller,
@@ -858,6 +882,80 @@ TEST(overlay_controller, AnnotationToolbar_AnnotationDragHidesToolbar) {
     EXPECT_FALSE(c.Should_show_annotation_toolbar());
     EXPECT_FALSE(c.Can_interact_with_annotation_toolbar());
     EXPECT_EQ(c.On_primary_release(No_mods(), {150, 150}), OverlayAction::Repaint);
+    EXPECT_TRUE(c.Should_show_annotation_toolbar());
+    EXPECT_TRUE(c.Can_interact_with_annotation_toolbar());
+}
+
+TEST(overlay_controller, SelectedLineHandleDragTakesPriorityOverAnnotationMove) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'L'), OverlayAction::Repaint);
+    ASSERT_EQ(c.On_primary_press(No_mods(), {140, 140}, {140, 140}, std::nullopt,
+                                 std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
+                                 0),
+              OverlayAction::Repaint);
+    ASSERT_EQ(c.On_pointer_move(No_mods(), {200, 180}, {200, 180}, std::nullopt, {},
+                                std::nullopt, 0, 0, 100u),
+              OverlayAction::Repaint);
+    ASSERT_EQ(c.On_primary_release(No_mods(), {200, 180}), OverlayAction::Repaint);
+    ASSERT_EQ(c.Annotations().size(), 1u);
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'L'), OverlayAction::Repaint);
+    ASSERT_EQ(c.Active_annotation_tool(), std::nullopt);
+
+    // First click selects the line and starts an ordinary annotation drag. Releasing
+    // without movement preserves selection so the endpoint handles become active.
+    ASSERT_EQ(c.On_primary_press(No_mods(), {170, 160}, {170, 160}, std::nullopt,
+                                 std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
+                                 0),
+              OverlayAction::Repaint);
+    ASSERT_TRUE(c.Is_annotation_dragging());
+    ASSERT_EQ(c.On_primary_release(No_mods(), {170, 160}), OverlayAction::None);
+    ASSERT_FALSE(c.Is_annotation_dragging());
+
+    ASSERT_EQ(c.On_primary_press(No_mods(), {140, 140}, {140, 140}, std::nullopt,
+                                 std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
+                                 0),
+              OverlayAction::Repaint);
+    EXPECT_TRUE(c.Is_line_endpoint_dragging());
+    EXPECT_FALSE(c.Is_annotation_dragging());
+}
+
+TEST(overlay_controller, AnnotationToolbar_LineEndpointDragHidesToolbar) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'L'), OverlayAction::Repaint);
+    ASSERT_EQ(c.On_primary_press(No_mods(), {140, 140}, {140, 140}, std::nullopt,
+                                 std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
+                                 0),
+              OverlayAction::Repaint);
+    ASSERT_EQ(c.On_pointer_move(No_mods(), {220, 180}, {220, 180}, std::nullopt, {},
+                                std::nullopt, 0, 0, 100u),
+              OverlayAction::Repaint);
+    ASSERT_EQ(c.On_primary_release(No_mods(), {220, 180}), OverlayAction::Repaint);
+    ASSERT_EQ(c.Annotations().size(), 1u);
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'L'), OverlayAction::Repaint);
+
+    ASSERT_EQ(c.On_primary_press(No_mods(), {180, 160}, {180, 160}, std::nullopt,
+                                 std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
+                                 0),
+              OverlayAction::Repaint);
+    ASSERT_EQ(c.On_primary_release(No_mods(), {180, 160}), OverlayAction::None);
+
+    ASSERT_TRUE(c.Should_show_annotation_toolbar());
+    ASSERT_EQ(c.On_primary_press(No_mods(), {140, 140}, {140, 140}, std::nullopt,
+                                 std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
+                                 0),
+              OverlayAction::Repaint);
+    EXPECT_TRUE(c.Is_line_endpoint_dragging());
+    EXPECT_FALSE(c.Should_show_annotation_toolbar());
+    EXPECT_FALSE(c.Can_interact_with_annotation_toolbar());
+    EXPECT_EQ(c.On_pointer_move(No_mods(), {120, 130}, {120, 130}, std::nullopt, {},
+                                std::nullopt, 0, 0, 116u),
+              OverlayAction::Repaint);
+    EXPECT_EQ(c.On_primary_release(No_mods(), {120, 130}), OverlayAction::Repaint);
     EXPECT_TRUE(c.Should_show_annotation_toolbar());
     EXPECT_TRUE(c.Can_interact_with_annotation_toolbar());
 }

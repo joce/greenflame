@@ -25,11 +25,17 @@ void AnnotationController::Reset_for_session() {
     active_tool_.reset();
     brush_style_ = {};
     freehand_drawing_ = false;
+    line_drawing_ = false;
     annotation_dragging_ = false;
+    line_endpoint_dragging_ = false;
     freehand_points_.clear();
+    line_start_ = {};
+    line_end_ = {};
     annotation_drag_start_ = {};
     annotation_drag_before_ = {};
-    freehand_preview_.reset();
+    annotation_edit_before_ = {};
+    active_line_endpoint_drag_.reset();
+    draft_annotation_cache_.reset();
 }
 
 bool AnnotationController::Toggle_tool(AnnotationToolId id) {
@@ -72,7 +78,7 @@ bool AnnotationController::Set_brush_width_px(int32_t width_px) noexcept {
         return false;
     }
     brush_style_.width_px = clamped_width;
-    freehand_preview_.reset();
+    draft_annotation_cache_.reset();
     return true;
 }
 
@@ -81,18 +87,29 @@ bool AnnotationController::Set_annotation_color(COLORREF color) noexcept {
         return false;
     }
     brush_style_.color = color;
-    freehand_preview_.reset();
+    draft_annotation_cache_.reset();
     return true;
 }
 
 Annotation const *AnnotationController::Draft_annotation() const noexcept {
-    if (!freehand_drawing_ || freehand_points_.empty()) {
-        return nullptr;
+    if (freehand_drawing_) {
+        if (freehand_points_.empty()) {
+            return nullptr;
+        }
+        if (!draft_annotation_cache_.has_value()) {
+            draft_annotation_cache_ = Build_freehand_annotation(freehand_points_);
+        }
+        return &*draft_annotation_cache_;
     }
-    if (!freehand_preview_.has_value()) {
-        freehand_preview_ = Build_freehand_annotation(freehand_points_);
+
+    if (line_drawing_) {
+        if (!draft_annotation_cache_.has_value()) {
+            draft_annotation_cache_ = Build_line_annotation(line_start_, line_end_);
+        }
+        return &*draft_annotation_cache_;
     }
-    return &*freehand_preview_;
+
+    return nullptr;
 }
 
 std::optional<StrokeStyle> AnnotationController::Draft_freehand_style() const noexcept {
@@ -102,25 +119,59 @@ std::optional<StrokeStyle> AnnotationController::Draft_freehand_style() const no
     return brush_style_;
 }
 
-std::optional<RectPx>
-AnnotationController::Selected_annotation_bounds() const noexcept {
+std::optional<double> AnnotationController::Draft_line_angle_radians() const noexcept {
+    if (!line_drawing_) {
+        return std::nullopt;
+    }
+    int32_t const dx = line_end_.x - line_start_.x;
+    int32_t const dy = line_end_.y - line_start_.y;
+    if (dx == 0 && dy == 0) {
+        return std::nullopt;
+    }
+    return std::atan2(static_cast<double>(dy), static_cast<double>(dx));
+}
+
+std::optional<size_t> AnnotationController::Selected_annotation_index() const noexcept {
     if (!document_.selected_annotation_id.has_value()) {
         return std::nullopt;
     }
-    std::optional<size_t> const index = Index_of_annotation_id(
-        document_.annotations, *document_.selected_annotation_id);
+    return Index_of_annotation_id(document_.annotations,
+                                  *document_.selected_annotation_id);
+}
+
+Annotation const *AnnotationController::Selected_annotation() const noexcept {
+    std::optional<size_t> const index = Selected_annotation_index();
     if (!index.has_value()) {
+        return nullptr;
+    }
+    return &document_.annotations[*index];
+}
+
+std::optional<RectPx>
+AnnotationController::Selected_annotation_bounds() const noexcept {
+    Annotation const *const selected = Selected_annotation();
+    if (selected == nullptr) {
         return std::nullopt;
     }
-    return Annotation_bounds(document_.annotations[*index]);
+    return Annotation_bounds(*selected);
+}
+
+std::optional<AnnotationLineEndpoint>
+AnnotationController::Selected_line_handle_at(PointPx cursor) const noexcept {
+    Annotation const *const selected = Selected_annotation();
+    if (selected == nullptr || selected->kind != AnnotationKind::Line) {
+        return std::nullopt;
+    }
+    return Hit_test_line_endpoint_handles(selected->line.start, selected->line.end,
+                                          cursor);
 }
 
 bool AnnotationController::Has_active_tool_gesture() const noexcept {
-    return freehand_drawing_;
+    return freehand_drawing_ || line_drawing_;
 }
 
 bool AnnotationController::Has_active_gesture() const noexcept {
-    return freehand_drawing_ || annotation_dragging_;
+    return Has_active_tool_gesture() || annotation_dragging_ || line_endpoint_dragging_;
 }
 
 bool AnnotationController::On_primary_press(PointPx cursor) {
@@ -132,6 +183,9 @@ bool AnnotationController::On_primary_press(PointPx cursor) {
 }
 
 bool AnnotationController::On_pointer_move(PointPx cursor) {
+    if (line_endpoint_dragging_) {
+        return Update_selected_line_endpoint_drag(cursor);
+    }
     if (annotation_dragging_) {
         return Update_annotation_drag(cursor);
     }
@@ -143,6 +197,9 @@ bool AnnotationController::On_pointer_move(PointPx cursor) {
 }
 
 bool AnnotationController::On_primary_release(UndoStack &undo_stack) {
+    if (line_endpoint_dragging_) {
+        return Commit_selected_line_endpoint_drag(undo_stack);
+    }
     if (annotation_dragging_) {
         return Commit_annotation_drag(undo_stack);
     }
@@ -154,6 +211,9 @@ bool AnnotationController::On_primary_release(UndoStack &undo_stack) {
 }
 
 bool AnnotationController::On_cancel() {
+    if (Cancel_selected_line_endpoint_drag()) {
+        return true;
+    }
     if (Cancel_annotation_drag()) {
         return true;
     }
@@ -165,14 +225,12 @@ bool AnnotationController::On_cancel() {
 }
 
 bool AnnotationController::Delete_selected_annotation(UndoStack &undo_stack) {
-    if (annotation_dragging_ || !document_.selected_annotation_id.has_value()) {
+    if (annotation_dragging_ || line_endpoint_dragging_ ||
+        !document_.selected_annotation_id.has_value()) {
         return false;
     }
-    std::optional<size_t> const index = Index_of_annotation_id(
-        document_.annotations, *document_.selected_annotation_id);
+    std::optional<size_t> const index = Selected_annotation_index();
     if (!index.has_value()) {
-        // The selection became stale relative to the document; clear it and let the
-        // caller repaint even though there is no delete command to record.
         document_.selected_annotation_id = std::nullopt;
         return true;
     }
@@ -187,11 +245,17 @@ void AnnotationController::Clear_annotations() noexcept {
     document_.annotations.clear();
     document_.selected_annotation_id = std::nullopt;
     freehand_drawing_ = false;
+    line_drawing_ = false;
     annotation_dragging_ = false;
+    line_endpoint_dragging_ = false;
     freehand_points_.clear();
+    line_start_ = {};
+    line_end_ = {};
     annotation_drag_start_ = {};
     annotation_drag_before_ = {};
-    freehand_preview_.reset();
+    annotation_edit_before_ = {};
+    active_line_endpoint_drag_.reset();
+    draft_annotation_cache_.reset();
 }
 
 void AnnotationController::Reset_for_selection_mode() noexcept {
@@ -226,7 +290,7 @@ void AnnotationController::Begin_freehand_stroke(PointPx start) {
     freehand_drawing_ = true;
     freehand_points_.clear();
     freehand_points_.push_back(start);
-    freehand_preview_.reset();
+    draft_annotation_cache_.reset();
 }
 
 bool AnnotationController::Append_freehand_point(PointPx point) {
@@ -237,7 +301,7 @@ bool AnnotationController::Append_freehand_point(PointPx point) {
         return false;
     }
     freehand_points_.push_back(point);
-    freehand_preview_.reset();
+    draft_annotation_cache_.reset();
     return true;
 }
 
@@ -246,7 +310,7 @@ bool AnnotationController::Commit_freehand_stroke(UndoStack &undo_stack) {
         return false;
     }
     freehand_drawing_ = false;
-    freehand_preview_.reset();
+    draft_annotation_cache_.reset();
     if (freehand_points_.empty()) {
         return true;
     }
@@ -254,8 +318,6 @@ bool AnnotationController::Commit_freehand_stroke(UndoStack &undo_stack) {
     Annotation annotation = Build_freehand_annotation(freehand_points_);
     freehand_points_.clear();
     size_t const insert_index = document_.annotations.size();
-    // Drawing a stroke does not change selection. Preserve the pre-existing
-    // selection across both undo and redo.
     undo_stack.Push(std::make_unique<AddAnnotationCommand>(
         this, insert_index, std::move(annotation), document_.selected_annotation_id,
         document_.selected_annotation_id));
@@ -268,12 +330,58 @@ bool AnnotationController::Cancel_freehand_stroke() {
     }
     freehand_drawing_ = false;
     freehand_points_.clear();
-    freehand_preview_.reset();
+    draft_annotation_cache_.reset();
+    return true;
+}
+
+void AnnotationController::Begin_line(PointPx start) {
+    line_drawing_ = true;
+    line_start_ = start;
+    line_end_ = start;
+    draft_annotation_cache_.reset();
+}
+
+bool AnnotationController::Update_line(PointPx point) {
+    if (!line_drawing_ || line_end_ == point) {
+        return false;
+    }
+    line_end_ = point;
+    draft_annotation_cache_.reset();
+    return true;
+}
+
+bool AnnotationController::Commit_line(UndoStack &undo_stack) {
+    if (!line_drawing_) {
+        return false;
+    }
+
+    line_drawing_ = false;
+    draft_annotation_cache_.reset();
+    Annotation annotation = Build_line_annotation(line_start_, line_end_);
+    line_start_ = {};
+    line_end_ = {};
+
+    size_t const insert_index = document_.annotations.size();
+    undo_stack.Push(std::make_unique<AddAnnotationCommand>(
+        this, insert_index, std::move(annotation), document_.selected_annotation_id,
+        document_.selected_annotation_id));
+    return true;
+}
+
+bool AnnotationController::Cancel_line() {
+    if (!line_drawing_) {
+        return false;
+    }
+    line_drawing_ = false;
+    line_start_ = {};
+    line_end_ = {};
+    draft_annotation_cache_.reset();
     return true;
 }
 
 bool AnnotationController::Begin_annotation_drag(uint64_t id, PointPx cursor) {
-    if (active_tool_.has_value() || freehand_drawing_ || annotation_dragging_) {
+    if (active_tool_.has_value() || Has_active_tool_gesture() || annotation_dragging_ ||
+        line_endpoint_dragging_) {
         return false;
     }
     std::optional<size_t> const index =
@@ -292,8 +400,7 @@ bool AnnotationController::Update_annotation_drag(PointPx cursor) {
     if (!annotation_dragging_ || !document_.selected_annotation_id.has_value()) {
         return false;
     }
-    std::optional<size_t> const index = Index_of_annotation_id(
-        document_.annotations, *document_.selected_annotation_id);
+    std::optional<size_t> const index = Selected_annotation_index();
     if (!index.has_value()) {
         annotation_dragging_ = false;
         return false;
@@ -314,8 +421,7 @@ bool AnnotationController::Commit_annotation_drag(UndoStack &undo_stack) {
     if (!annotation_dragging_ || !document_.selected_annotation_id.has_value()) {
         return false;
     }
-    std::optional<size_t> const index = Index_of_annotation_id(
-        document_.annotations, *document_.selected_annotation_id);
+    std::optional<size_t> const index = Selected_annotation_index();
     annotation_dragging_ = false;
     if (!index.has_value()) {
         return false;
@@ -326,9 +432,9 @@ bool AnnotationController::Commit_annotation_drag(UndoStack &undo_stack) {
         return false;
     }
 
-    undo_stack.Push(std::make_unique<MoveAnnotationCommand>(
+    undo_stack.Push(std::make_unique<UpdateAnnotationCommand>(
         this, *index, annotation_drag_before_, after, document_.selected_annotation_id,
-        document_.selected_annotation_id));
+        document_.selected_annotation_id, "Move annotation"));
     return true;
 }
 
@@ -336,14 +442,106 @@ bool AnnotationController::Cancel_annotation_drag() {
     if (!annotation_dragging_ || !document_.selected_annotation_id.has_value()) {
         return false;
     }
-    std::optional<size_t> const index = Index_of_annotation_id(
-        document_.annotations, *document_.selected_annotation_id);
+    std::optional<size_t> const index = Selected_annotation_index();
     annotation_dragging_ = false;
     if (!index.has_value()) {
         return false;
     }
 
     Update_annotation_at(*index, annotation_drag_before_,
+                         document_.selected_annotation_id);
+    return true;
+}
+
+bool AnnotationController::Begin_selected_line_endpoint_drag(
+    AnnotationLineEndpoint endpoint) {
+    if (active_tool_.has_value() || Has_active_tool_gesture() || annotation_dragging_ ||
+        line_endpoint_dragging_) {
+        return false;
+    }
+    std::optional<size_t> const index = Selected_annotation_index();
+    if (!index.has_value()) {
+        return false;
+    }
+    Annotation const &selected = document_.annotations[*index];
+    if (selected.kind != AnnotationKind::Line) {
+        return false;
+    }
+
+    line_endpoint_dragging_ = true;
+    active_line_endpoint_drag_ = endpoint;
+    annotation_edit_before_ = selected;
+    return true;
+}
+
+bool AnnotationController::Update_selected_line_endpoint_drag(PointPx cursor) {
+    if (!line_endpoint_dragging_ || !active_line_endpoint_drag_.has_value() ||
+        !document_.selected_annotation_id.has_value()) {
+        return false;
+    }
+    std::optional<size_t> const index = Selected_annotation_index();
+    if (!index.has_value()) {
+        line_endpoint_dragging_ = false;
+        active_line_endpoint_drag_.reset();
+        return false;
+    }
+
+    Annotation edited = annotation_edit_before_;
+    if (edited.kind != AnnotationKind::Line) {
+        line_endpoint_dragging_ = false;
+        active_line_endpoint_drag_.reset();
+        return false;
+    }
+
+    if (*active_line_endpoint_drag_ == AnnotationLineEndpoint::Start) {
+        edited.line.start = cursor;
+    } else {
+        edited.line.end = cursor;
+    }
+    edited.line.raster =
+        Rasterize_line_segment(edited.line.start, edited.line.end, edited.line.style);
+    if (document_.annotations[*index] == edited) {
+        return false;
+    }
+
+    Update_annotation_at(*index, edited, document_.selected_annotation_id);
+    return true;
+}
+
+bool AnnotationController::Commit_selected_line_endpoint_drag(UndoStack &undo_stack) {
+    if (!line_endpoint_dragging_ || !document_.selected_annotation_id.has_value()) {
+        return false;
+    }
+    std::optional<size_t> const index = Selected_annotation_index();
+    line_endpoint_dragging_ = false;
+    active_line_endpoint_drag_.reset();
+    if (!index.has_value()) {
+        return false;
+    }
+
+    Annotation const after = document_.annotations[*index];
+    if (after == annotation_edit_before_) {
+        return false;
+    }
+
+    undo_stack.Push(std::make_unique<UpdateAnnotationCommand>(
+        this, *index, annotation_edit_before_, after, document_.selected_annotation_id,
+        document_.selected_annotation_id, "Edit line annotation"));
+    return true;
+}
+
+bool AnnotationController::Cancel_selected_line_endpoint_drag() {
+    if (!line_endpoint_dragging_ || !document_.selected_annotation_id.has_value()) {
+        return false;
+    }
+    std::optional<size_t> const index = Selected_annotation_index();
+    line_endpoint_dragging_ = false;
+    active_line_endpoint_drag_.reset();
+    if (!index.has_value()) {
+        return false;
+    }
+
+    Update_annotation_at(*index, annotation_edit_before_,
                          document_.selected_annotation_id);
     return true;
 }
@@ -411,6 +609,19 @@ Annotation AnnotationController::Build_freehand_annotation(
     annotation.freehand.points = smoother_.Smooth(raw_points);
     annotation.freehand.raster = Rasterize_freehand_stroke(annotation.freehand.points,
                                                            annotation.freehand.style);
+    return annotation;
+}
+
+Annotation AnnotationController::Build_line_annotation(PointPx start,
+                                                       PointPx end) const {
+    Annotation annotation{};
+    annotation.id = document_.next_annotation_id;
+    annotation.kind = AnnotationKind::Line;
+    annotation.line.start = start;
+    annotation.line.end = end;
+    annotation.line.style = brush_style_;
+    annotation.line.raster = Rasterize_line_segment(
+        annotation.line.start, annotation.line.end, annotation.line.style);
     return annotation;
 }
 

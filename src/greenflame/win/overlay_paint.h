@@ -35,9 +35,12 @@ struct PaintOverlayInput {
     std::span<uint8_t> paint_buffer = {};
     PaintResources const *resources = nullptr;
     std::span<const core::Annotation> annotations = {};
+    core::Annotation const *draft_annotation = nullptr;
     std::span<const core::PointPx> draft_freehand_points = {};
     std::optional<core::StrokeStyle> draft_freehand_style = std::nullopt;
     std::optional<int32_t> brush_cursor_preview_width_px = std::nullopt;
+    std::optional<int32_t> line_cursor_preview_width_px = std::nullopt;
+    std::optional<double> line_cursor_preview_angle_radians = std::nullopt;
     bool dragging = false;
     bool handle_dragging = false;
     bool move_dragging = false;
@@ -45,6 +48,7 @@ struct PaintOverlayInput {
     bool show_selection_size_side_labels = true;
     bool show_selection_size_center_label = true;
     std::optional<core::SelectionHandle> highlight_handle = std::nullopt;
+    core::Annotation const *selected_annotation = nullptr;
     std::optional<core::RectPx> selected_annotation_bounds = std::nullopt;
     std::wstring_view transient_center_label_text = {};
     std::span<IOverlayButton *const> toolbar_buttons = {};

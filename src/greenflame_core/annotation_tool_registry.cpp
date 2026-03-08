@@ -45,10 +45,45 @@ class BrushTool final : public IAnnotationTool {
     AnnotationToolDescriptor descriptor_;
 };
 
+class LineTool final : public IAnnotationTool {
+  public:
+    LineTool()
+        : descriptor_{AnnotationToolId::Line, L"Line tool", L'L', L"L",
+                      AnnotationToolbarGlyph::Line} {}
+
+    [[nodiscard]] AnnotationToolDescriptor const &Descriptor() const noexcept override {
+        return descriptor_;
+    }
+
+    [[nodiscard]] bool On_primary_press(AnnotationController &controller,
+                                        PointPx cursor) override {
+        controller.Begin_line(cursor);
+        return true;
+    }
+
+    [[nodiscard]] bool On_pointer_move(AnnotationController &controller,
+                                       PointPx cursor) override {
+        return controller.Update_line(cursor);
+    }
+
+    [[nodiscard]] bool On_primary_release(AnnotationController &controller,
+                                          UndoStack &undo_stack) override {
+        return controller.Commit_line(undo_stack);
+    }
+
+    [[nodiscard]] bool On_cancel(AnnotationController &controller) override {
+        return controller.Cancel_line();
+    }
+
+  private:
+    AnnotationToolDescriptor descriptor_;
+};
+
 } // namespace
 
 AnnotationToolRegistry::AnnotationToolRegistry() {
     tools_.push_back(std::make_unique<BrushTool>());
+    tools_.push_back(std::make_unique<LineTool>());
 }
 
 IAnnotationTool const *

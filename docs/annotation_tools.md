@@ -41,22 +41,26 @@ The annotation system applies only to the interactive overlay flow.
 - When no annotation tool is selected, the overlay is in its default interaction
   mode:
   - click and drag an annotation to select it and move it
+  - if the selected annotation is a line, drag either endpoint handle to edit it
   - click and drag empty space inside the selection to move the selection
   - clicking empty space outside the selection clears the selected annotation
-- When the Brush tool is active, ordinary clicks are routed to that tool instead of
-  the default selection/move behavior.
+- When an annotation tool is active, ordinary clicks are routed to that tool instead
+  of the default selection/move behavior.
 - If a gesture is already in progress, competing resize, selection-move, and
-  annotation-move interactions do not steal that gesture.
+  annotation-move, and line-endpoint interactions do not steal that gesture.
 
 ### Tool interaction
 
 - Default mode: no tool selected
 - Registered tools:
   - `Brush tool` hotkey `B`
+  - `Line tool` hotkey `L`
 - The toolbar is anchored to the current selection border.
 - Toolbar buttons display a tool glyph when one is available.
 - Hovering a toolbar button shows a tooltip with the full tool name.
 - Pressing `B` or clicking the `Brush tool` toolbar button toggles that tool on or
+  off.
+- Pressing `L` or clicking the `Line tool` toolbar button toggles that tool on or
   off.
 - While an annotation tool is active, right-click opens a color wheel centered on
   the cursor.
@@ -65,13 +69,15 @@ The annotation system applies only to the interactive overlay flow.
   - left-clicking a slot selects that color for future annotations and closes the
     wheel
   - `Esc` closes the wheel without changing color
-- While the Brush tool is active, mouse-wheel up/down or `Ctrl+=` / `Ctrl+-`
-  increases or decreases brush width within the `1..50` range.
+- While the Brush or Line tool is active, mouse-wheel up/down or `Ctrl+=` /
+  `Ctrl+-` increases or decreases stroke width within the `1..50` range.
 - While the Brush tool is active, the overlay draws an anti-aliased circular size
   preview around the cursor hotspot.
-- Brush-width changes show a temporary centered size overlay inside the current
+- While the Line tool is active, the overlay draws an anti-aliased square size
+  preview around the cursor hotspot aligned to the current line direction.
+- Stroke-width changes show a temporary centered size overlay inside the current
   selection using the same visual treatment as the center selection-size label.
-- Brush width persists in the INI file at `[tools] brush_width`.
+- Stroke width persists in the INI file at `[tools] brush_width`.
 - The color wheel palette persists in `[tools] color_0` through `[tools] color_7`
   using `#rrggbb`.
 - The currently selected palette slot persists in `[tools] current_color`.
@@ -86,7 +92,10 @@ The annotation system applies only to the interactive overlay flow.
 - Hit-testing is pixel-accurate against the annotation's rendered coverage.
 - In default mode, clicking a covered pixel both selects the topmost annotation and
   begins moving it immediately.
-- Selected annotations are shown by drawing the corners of their bounding box.
+- Selected freehand annotations are shown by drawing the corners of their bounding
+  box.
+- Selected line annotations are shown by drawing 5px hollow endpoint handles with a
+  1px white inner and outer halo.
 - `Delete` removes the selected annotation.
 - Deletion is undoable and redoable.
 
@@ -131,6 +140,7 @@ The registry lives in core.
   - interface implemented by each tool object
   - current concrete tools:
     - `BrushTool`
+    - `LineTool`
 
 Tools are objects so behavior remains encapsulated and future tools can be added
 without pushing per-tool logic into the Win32 layer.
@@ -144,7 +154,9 @@ without pushing per-tool logic into the Win32 layer.
 
 - `Annotation`
   - tagged type for future extensibility
-  - current kind: `Freehand`
+  - current kinds:
+    - `Freehand`
+    - `Line`
 
 - `FreehandStrokeAnnotation`
   - raw/smoothed points in physical pixels
@@ -156,6 +168,12 @@ without pushing per-tool logic into the Win32 layer.
   - raw draft points live in `AnnotationController`
   - draft style is exposed separately from committed annotations
   - committed raster coverage is built only when the stroke is finalized
+
+- `LineAnnotation`
+  - start/end points in physical pixels
+  - stroke style
+  - cached raster coverage with square end caps
+  - committed on mouse-up, then becomes undoable
 
 ## Rasterization, preview, and hit-testing
 
@@ -192,6 +210,14 @@ Important rule: committed annotations must not gain a separate Win32-only paint 
 that diverges from core hit-testing. Paint, hit-testing, and output must agree on
 coverage once an annotation is committed.
 
+### Draft line preview
+
+The in-progress line preview reuses the committed core raster path:
+
+- the draft line is rasterized in core during the gesture
+- the overlay composites that draft raster above committed annotations
+- hit-testing and save/copy still ignore the draft until mouse-up commits it
+
 ## Freehand smoothing
 
 Smoothing is intentionally abstracted.
@@ -216,7 +242,7 @@ Current command types:
 - selection move / resize via `ModificationCommand<RectPx>`
 - annotation add via `AddAnnotationCommand`
 - annotation delete via `DeleteAnnotationCommand`
-- annotation move via `MoveAnnotationCommand`
+- annotation move / edit via `UpdateAnnotationCommand`
 
 Tool switching is **not** currently part of undo history.
 
@@ -231,8 +257,11 @@ The overlay paint path draws in this order:
 3. committed annotations
 4. in-progress annotation preview
    - freehand preview is drawn directly from draft points for responsiveness
+   - line preview is composited from the draft core raster
 5. selection labels / crosshair / region handles
-6. selected-annotation corner markers
+6. selected-annotation markers
+   - freehand uses bounding-box corners
+   - line uses endpoint handles
 7. toolbar buttons and tooltip
 8. color wheel, when visible
 

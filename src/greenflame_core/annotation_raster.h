@@ -6,6 +6,7 @@ namespace greenflame::core {
 
 enum class AnnotationKind : uint8_t {
     Freehand,
+    Line,
 };
 
 struct StrokeStyle final {
@@ -42,10 +43,31 @@ struct FreehandStrokeAnnotation final {
     operator==(FreehandStrokeAnnotation const &) const noexcept = default;
 };
 
+struct LineAnnotation final {
+    PointPx start = {};
+    PointPx end = {};
+    StrokeStyle style = {};
+    AnnotationRaster raster = {};
+
+    constexpr bool operator==(LineAnnotation const &) const noexcept = default;
+};
+
+enum class AnnotationLineEndpoint : uint8_t {
+    Start,
+    End,
+};
+
+inline constexpr int32_t kAnnotationHandleBodySizePx = 10;
+inline constexpr int32_t kAnnotationHandleHaloSizePx = 1;
+inline constexpr int32_t kAnnotationHandleOuterSizePx =
+    kAnnotationHandleBodySizePx + (kAnnotationHandleHaloSizePx * 2);
+inline constexpr int32_t kAnnotationHandleHitSizePx = 11;
+
 struct Annotation final {
     uint64_t id = 0;
     AnnotationKind kind = AnnotationKind::Freehand;
     FreehandStrokeAnnotation freehand = {};
+    LineAnnotation line = {};
 
     constexpr bool operator==(Annotation const &) const noexcept = default;
 };
@@ -60,6 +82,8 @@ struct AnnotationDocument final {
 
 [[nodiscard]] AnnotationRaster
 Rasterize_freehand_stroke(std::span<const PointPx> points, StrokeStyle style);
+[[nodiscard]] AnnotationRaster Rasterize_line_segment(PointPx start, PointPx end,
+                                                      StrokeStyle style);
 [[nodiscard]] RectPx Annotation_bounds(Annotation const &annotation) noexcept;
 [[nodiscard]] bool Annotation_hits_point(Annotation const &annotation,
                                          PointPx point) noexcept;
@@ -68,6 +92,8 @@ Index_of_topmost_annotation_at(std::span<const Annotation> annotations,
                                PointPx point) noexcept;
 [[nodiscard]] std::optional<size_t>
 Index_of_annotation_id(std::span<const Annotation> annotations, uint64_t id) noexcept;
+[[nodiscard]] std::optional<AnnotationLineEndpoint>
+Hit_test_line_endpoint_handles(PointPx start, PointPx end, PointPx cursor) noexcept;
 [[nodiscard]] Annotation Translate_annotation(Annotation annotation,
                                               PointPx delta) noexcept;
 

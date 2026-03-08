@@ -45,16 +45,17 @@ class DeleteAnnotationCommand final : public ICommand {
     std::optional<uint64_t> selection_after_ = std::nullopt;
 };
 
-class MoveAnnotationCommand final : public ICommand {
+class UpdateAnnotationCommand final : public ICommand {
   public:
-    MoveAnnotationCommand(AnnotationController *controller, size_t index,
-                          Annotation annotation_before, Annotation annotation_after,
-                          std::optional<uint64_t> selection_before,
-                          std::optional<uint64_t> selection_after);
+    UpdateAnnotationCommand(AnnotationController *controller, size_t index,
+                            Annotation annotation_before, Annotation annotation_after,
+                            std::optional<uint64_t> selection_before,
+                            std::optional<uint64_t> selection_after,
+                            std::string_view description);
 
     void Undo() override;
     void Redo() override;
-    std::string_view Description() const override { return "Move annotation"; }
+    std::string_view Description() const override { return description_; }
 
   private:
     AnnotationController *controller_ = nullptr;
@@ -63,6 +64,7 @@ class MoveAnnotationCommand final : public ICommand {
     Annotation annotation_after_ = {};
     std::optional<uint64_t> selection_before_ = std::nullopt;
     std::optional<uint64_t> selection_after_ = std::nullopt;
+    std::string_view description_ = {};
 };
 
 } // namespace greenflame::core

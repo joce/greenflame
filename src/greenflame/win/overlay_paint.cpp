@@ -391,6 +391,33 @@ void Draw_annotations_to_buffer(
               reinterpret_cast<BITMAPINFO *>(&bmi), DIB_RGB_COLORS);
 }
 
+void Draw_draft_annotation_to_buffer(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
+                                     std::span<uint8_t> pixels,
+                                     greenflame::core::Annotation const &annotation) {
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+    int const row_bytes = greenflame::Row_bytes32(w);
+    size_t const size = static_cast<size_t>(row_bytes) * static_cast<size_t>(h);
+    if (pixels.size() < size) {
+        return;
+    }
+
+    BITMAPINFOHEADER bmi{};
+    greenflame::Fill_bmi32_top_down(bmi, w, h);
+    if (GetDIBits(buf_dc, buf_bmp, 0, static_cast<UINT>(h), pixels.data(),
+                  reinterpret_cast<BITMAPINFO *>(&bmi), DIB_RGB_COLORS) == 0) {
+        return;
+    }
+
+    greenflame::core::RectPx const target_bounds =
+        greenflame::core::RectPx::From_ltrb(0, 0, w, h);
+    greenflame::core::Blend_annotation_onto_pixels(pixels, w, h, row_bytes, annotation,
+                                                   target_bounds);
+    SetDIBits(buf_dc, buf_bmp, 0, static_cast<UINT>(h), pixels.data(),
+              reinterpret_cast<BITMAPINFO *>(&bmi), DIB_RGB_COLORS);
+}
+
 void Draw_draft_freehand_stroke(HDC dc,
                                 std::span<const greenflame::core::PointPx> points,
                                 greenflame::core::StrokeStyle style) {
@@ -448,6 +475,47 @@ void Draw_draft_freehand_stroke(HDC dc,
     if (brush != nullptr) {
         DeleteObject(brush);
     }
+}
+
+void Draw_square_outline(HDC dc, greenflame::core::RectPx rect,
+                         COLORREF color) noexcept {
+    if (dc == nullptr || rect.Is_empty()) {
+        return;
+    }
+    rect = rect.Normalized();
+    for (int32_t x = rect.left; x < rect.right; ++x) {
+        (void)SetPixelV(dc, x, rect.top, color);
+        (void)SetPixelV(dc, x, rect.bottom - 1, color);
+    }
+    for (int32_t y = rect.top; y < rect.bottom; ++y) {
+        (void)SetPixelV(dc, rect.left, y, color);
+        (void)SetPixelV(dc, rect.right - 1, y, color);
+    }
+}
+
+[[nodiscard]] greenflame::core::RectPx
+Centered_square_bounds(greenflame::core::PointPx center, int32_t size) noexcept {
+    int32_t const left = center.x - (size / 2);
+    int32_t const top = center.y - (size / 2);
+    return greenflame::core::RectPx::From_ltrb(left, top, left + size, top + size);
+}
+
+void Draw_line_endpoint_handle(HDC dc, greenflame::core::PointPx center) noexcept {
+    int32_t constexpr kBodySize = greenflame::core::kAnnotationHandleBodySizePx;
+    int32_t constexpr kHalo = greenflame::core::kAnnotationHandleHaloSizePx;
+    int32_t constexpr kOuterSize = greenflame::core::kAnnotationHandleOuterSizePx;
+    greenflame::core::RectPx const outer_bounds =
+        Centered_square_bounds(center, kOuterSize);
+    greenflame::core::RectPx const body_bounds =
+        Centered_square_bounds(center, kBodySize);
+    greenflame::core::RectPx const inner_bounds =
+        Centered_square_bounds(center, kBodySize - (kHalo * 2));
+    COLORREF constexpr kBlack = RGB(0, 0, 0);
+    COLORREF constexpr kWhite = RGB(255, 255, 255);
+
+    Draw_square_outline(dc, outer_bounds, kWhite);
+    Draw_square_outline(dc, body_bounds, kBlack);
+    Draw_square_outline(dc, inner_bounds, kWhite);
 }
 
 void Draw_annotation_selection_corners(HDC dc, HPEN pen,
@@ -514,6 +582,38 @@ void Draw_brush_cursor_preview(HDC dc, int cx, int cy,
                                preview_path_diameter);
     (void)graphics.DrawEllipse(&black_pen, left, top, preview_path_diameter,
                                preview_path_diameter);
+}
+
+void Draw_line_cursor_preview(
+    HDC dc, int cx, int cy, int32_t line_width_px,
+    std::optional<double> angle_radians = std::nullopt) noexcept {
+    if (dc == nullptr || !Ensure_gdiplus()) {
+        return;
+    }
+
+    Gdiplus::REAL const inner_size = static_cast<Gdiplus::REAL>(
+        std::max<int32_t>(greenflame::core::StrokeStyle::kMinWidthPx, line_width_px));
+    Gdiplus::Graphics graphics(dc);
+    graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+
+    Gdiplus::GraphicsState const state = graphics.Save();
+    graphics.TranslateTransform(static_cast<Gdiplus::REAL>(cx),
+                                static_cast<Gdiplus::REAL>(cy));
+    if (angle_radians.has_value()) {
+        double constexpr kRadiansToDegrees = 57.29577951308232;
+        graphics.RotateTransform(
+            static_cast<Gdiplus::REAL>(*angle_radians * kRadiansToDegrees));
+    }
+
+    Gdiplus::REAL const half_size = inner_size * 0.5f;
+    Gdiplus::RectF const rect(-half_size, -half_size, inner_size, inner_size);
+    Gdiplus::Pen white_pen(Gdiplus::Color(255, 255, 255, 255),
+                           kBrushPreviewWhiteStrokeWidth);
+    Gdiplus::Pen black_pen(Gdiplus::Color(255, 0, 0, 0), kBrushPreviewBlackStrokeWidth);
+    (void)graphics.DrawRectangle(&white_pen, rect);
+    (void)graphics.DrawRectangle(&black_pen, rect);
+    graphics.Restore(state);
 }
 
 [[nodiscard]] Gdiplus::Color To_gdiplus_color(COLORREF color,
@@ -1383,6 +1483,10 @@ void Paint_overlay(HDC hdc, HWND hwnd, const RECT &rc, const PaintOverlayInput &
     if (in.draft_freehand_style.has_value()) {
         Draw_draft_freehand_stroke(buf_dc, in.draft_freehand_points,
                                    *in.draft_freehand_style);
+    } else if (in.draft_annotation != nullptr &&
+               in.draft_annotation->kind == core::AnnotationKind::Line) {
+        Draw_draft_annotation_to_buffer(buf_dc, buf_bmp, w, h, in.paint_buffer,
+                                        *in.draft_annotation);
     }
 
     bool const interacting =
@@ -1418,13 +1522,22 @@ void Paint_overlay(HDC hdc, HWND hwnd, const RECT &rc, const PaintOverlayInput &
                                   *in.highlight_handle, core::kMaxCornerSizePx);
         }
     }
-    if (in.selected_annotation_bounds.has_value() && in.resources &&
-        in.resources->handle_pen) {
-        Draw_annotation_selection_corners(buf_dc, in.resources->handle_pen,
-                                          *in.selected_annotation_bounds);
+    if (in.selected_annotation != nullptr) {
+        if (in.selected_annotation->kind == core::AnnotationKind::Line) {
+            Draw_line_endpoint_handle(buf_dc, in.selected_annotation->line.start);
+            Draw_line_endpoint_handle(buf_dc, in.selected_annotation->line.end);
+        } else if (in.selected_annotation_bounds.has_value() && in.resources &&
+                   in.resources->handle_pen) {
+            Draw_annotation_selection_corners(buf_dc, in.resources->handle_pen,
+                                              *in.selected_annotation_bounds);
+        }
     }
     if (in.brush_cursor_preview_width_px.has_value()) {
         Draw_brush_cursor_preview(buf_dc, cx, cy, *in.brush_cursor_preview_width_px);
+    }
+    if (in.line_cursor_preview_width_px.has_value()) {
+        Draw_line_cursor_preview(buf_dc, cx, cy, *in.line_cursor_preview_width_px,
+                                 in.line_cursor_preview_angle_radians);
     }
 
     if (!in.toolbar_buttons.empty()) {

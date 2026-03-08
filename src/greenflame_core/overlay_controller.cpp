@@ -111,13 +111,35 @@ std::optional<StrokeStyle> OverlayController::Draft_freehand_style() const noexc
     return annotation_controller_.Draft_freehand_style();
 }
 
+std::optional<double> OverlayController::Draft_line_angle_radians() const noexcept {
+    return annotation_controller_.Draft_line_angle_radians();
+}
+
+Annotation const *OverlayController::Selected_annotation() const noexcept {
+    return annotation_controller_.Selected_annotation();
+}
+
 std::optional<RectPx> OverlayController::Selected_annotation_bounds() const noexcept {
     return annotation_controller_.Selected_annotation_bounds();
+}
+
+std::optional<AnnotationLineEndpoint>
+OverlayController::Selected_line_handle_at(PointPx cursor) const noexcept {
+    return annotation_controller_.Selected_line_handle_at(cursor);
 }
 
 std::optional<AnnotationToolId>
 OverlayController::Active_annotation_tool() const noexcept {
     return annotation_controller_.Active_tool();
+}
+
+bool OverlayController::Is_line_endpoint_dragging() const noexcept {
+    return annotation_controller_.Is_line_endpoint_dragging();
+}
+
+std::optional<AnnotationLineEndpoint>
+OverlayController::Active_line_endpoint_drag() const noexcept {
+    return annotation_controller_.Active_line_endpoint_drag();
 }
 
 int32_t OverlayController::Brush_width_px() const noexcept {
@@ -137,9 +159,12 @@ void OverlayController::Set_annotation_color(COLORREF color) noexcept {
 }
 
 std::optional<int32_t> OverlayController::Adjust_brush_width(int32_t delta_steps) {
+    std::optional<AnnotationToolId> const active_tool =
+        annotation_controller_.Active_tool();
     if (delta_steps == 0 || state_.final_selection.Is_empty() ||
-        annotation_controller_.Active_tool() !=
-            std::optional<AnnotationToolId>{AnnotationToolId::Freehand}) {
+        !active_tool.has_value() ||
+        (*active_tool != AnnotationToolId::Freehand &&
+         *active_tool != AnnotationToolId::Line)) {
         return std::nullopt;
     }
     int32_t const updated_width = annotation_controller_.Brush_width_px() + delta_steps;
@@ -152,7 +177,8 @@ std::optional<int32_t> OverlayController::Adjust_brush_width(int32_t delta_steps
 bool OverlayController::Should_show_annotation_toolbar() const noexcept {
     return !state_.final_selection.Is_empty() && !state_.dragging &&
            !state_.handle_dragging && !state_.move_dragging &&
-           !annotation_controller_.Is_annotation_dragging();
+           !annotation_controller_.Is_annotation_dragging() &&
+           !annotation_controller_.Is_line_endpoint_dragging();
 }
 
 bool OverlayController::Can_interact_with_annotation_toolbar() const noexcept {
@@ -332,6 +358,15 @@ OverlayAction OverlayController::On_primary_press(
 
         if (annotation_controller_.Has_active_tool()) {
             return annotation_controller_.On_primary_press(cursor_client)
+                       ? OverlayAction::Repaint
+                       : OverlayAction::None;
+        }
+
+        if (std::optional<AnnotationLineEndpoint> const line_handle =
+                annotation_controller_.Selected_line_handle_at(cursor_client);
+            line_handle.has_value()) {
+            return annotation_controller_.Begin_selected_line_endpoint_drag(
+                       *line_handle)
                        ? OverlayAction::Repaint
                        : OverlayAction::None;
         }

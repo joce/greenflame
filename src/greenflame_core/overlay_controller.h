@@ -115,7 +115,9 @@ class OverlayController final {
     [[nodiscard]] std::optional<AnnotationToolId>
     Active_annotation_tool() const noexcept;
     [[nodiscard]] int32_t Brush_width_px() const noexcept;
+    [[nodiscard]] COLORREF Annotation_color() const noexcept;
     void Set_brush_width_px(int32_t width_px) noexcept;
+    void Set_annotation_color(COLORREF color) noexcept;
     [[nodiscard]] std::optional<int32_t> Adjust_brush_width(int32_t delta_steps);
     [[nodiscard]] bool Should_show_annotation_toolbar() const noexcept;
     [[nodiscard]] bool Can_interact_with_annotation_toolbar() const noexcept;

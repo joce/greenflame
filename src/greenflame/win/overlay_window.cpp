@@ -343,6 +343,8 @@ bool OverlayWindow::Create_and_show(HINSTANCE hinstance) {
     resources_->Reset();
     mouse_wheel_delta_remainder_ = 0;
     brush_size_overlay_text_.clear();
+    suppress_next_lbutton_up_ = false;
+    color_wheel_ = {};
 
     core::RectPx const bounds = Get_virtual_desktop_bounds_px();
     HWND const hwnd = CreateWindowExW(
@@ -363,6 +365,8 @@ bool OverlayWindow::Create_and_show(HINSTANCE hinstance) {
     controller_.Set_brush_width_px(config_ != nullptr
                                        ? config_->brush_width_px
                                        : core::StrokeStyle::kDefaultWidthPx);
+    controller_.Set_annotation_color(
+        Current_annotation_palette()[Current_annotation_color_index()]);
     ShowWindow(hwnd, SW_SHOW);
     return true;
 }
@@ -419,6 +423,83 @@ void OverlayWindow::Clear_brush_size_overlay(bool repaint) {
     }
 }
 
+bool OverlayWindow::Can_show_color_wheel() const noexcept {
+    auto const &s = controller_.State();
+    return controller_.Active_annotation_tool().has_value() &&
+           !s.final_selection.Is_empty() && !s.dragging && !s.handle_dragging &&
+           !s.move_dragging && !s.modifier_preview &&
+           !controller_.Has_active_annotation_gesture() &&
+           !hotkey_help_overlay_.Is_visible();
+}
+
+std::span<const COLORREF> OverlayWindow::Current_annotation_palette() const noexcept {
+    if (config_ != nullptr) {
+        return std::span<const COLORREF>(config_->annotation_colors);
+    }
+    return std::span<const COLORREF>(core::kDefaultAnnotationColorPalette);
+}
+
+size_t OverlayWindow::Current_annotation_color_index() const noexcept {
+    if (config_ != nullptr) {
+        return static_cast<size_t>(core::Clamp_annotation_color_index(
+            config_->current_annotation_color_index));
+    }
+    return static_cast<size_t>(core::kDefaultAnnotationColorIndex);
+}
+
+void OverlayWindow::Show_color_wheel(core::PointPx center) {
+    if (!Can_show_color_wheel()) {
+        return;
+    }
+    color_wheel_.visible = true;
+    color_wheel_.center = center;
+    color_wheel_.hovered_segment = std::nullopt;
+    last_hover_handle_ = std::nullopt;
+    (void)Clear_toolbar_hover_states();
+    Refresh_cursor();
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void OverlayWindow::Dismiss_color_wheel(bool repaint) {
+    if (!color_wheel_.visible) {
+        return;
+    }
+    color_wheel_ = {};
+    if (hwnd_ != nullptr) {
+        Refresh_cursor();
+    }
+    if (repaint && hwnd_ != nullptr) {
+        InvalidateRect(hwnd_, nullptr, FALSE);
+    }
+}
+
+bool OverlayWindow::Update_color_wheel_hover(core::PointPx cursor) {
+    if (!color_wheel_.visible) {
+        return false;
+    }
+    std::optional<size_t> const hovered =
+        core::Hit_test_color_wheel_segment(color_wheel_.center, cursor);
+    if (hovered == color_wheel_.hovered_segment) {
+        return false;
+    }
+    color_wheel_.hovered_segment = hovered;
+    return true;
+}
+
+void OverlayWindow::Select_color_wheel_segment(size_t index) {
+    std::span<const COLORREF> const palette = Current_annotation_palette();
+    if (index >= palette.size()) {
+        return;
+    }
+
+    controller_.Set_annotation_color(palette[index]);
+    if (config_ != nullptr) {
+        config_->current_annotation_color_index = static_cast<int32_t>(index);
+        config_->Normalize();
+        (void)Save_app_config(*config_);
+    }
+}
+
 bool OverlayWindow::Clear_toolbar_hover_states() {
     bool changed = false;
     for (auto const &entry : toolbar_buttons_) {
@@ -431,6 +512,9 @@ bool OverlayWindow::Clear_toolbar_hover_states() {
 }
 
 bool OverlayWindow::Should_show_brush_cursor_preview() const {
+    if (color_wheel_.visible) {
+        return false;
+    }
     auto const &s = controller_.State();
     return controller_.Active_annotation_tool() ==
                std::optional<core::AnnotationToolId>{
@@ -447,6 +531,9 @@ bool OverlayWindow::Is_selection_stable_for_help() const {
 }
 
 std::wstring_view OverlayWindow::Hovered_toolbar_tooltip_text() const noexcept {
+    if (color_wheel_.visible) {
+        return {};
+    }
     if (!controller_.Can_interact_with_annotation_toolbar()) {
         return {};
     }
@@ -459,6 +546,9 @@ std::wstring_view OverlayWindow::Hovered_toolbar_tooltip_text() const noexcept {
 }
 
 std::optional<core::RectPx> OverlayWindow::Hovered_toolbar_button_bounds() const {
+    if (color_wheel_.visible) {
+        return std::nullopt;
+    }
     if (!controller_.Can_interact_with_annotation_toolbar()) {
         return std::nullopt;
     }
@@ -500,6 +590,9 @@ void OverlayWindow::Apply_action(core::OverlayAction action) {
     if (action != core::OverlayAction::None) {
         Rebuild_toolbar_buttons();
     }
+    if (color_wheel_.visible && !Can_show_color_wheel()) {
+        Dismiss_color_wheel(false);
+    }
     switch (action) {
     case core::OverlayAction::Repaint:
         InvalidateRect(hwnd_, nullptr, TRUE);
@@ -537,12 +630,19 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
     bool const eff_alt = alt || (wparam == VK_MENU);
 
     if (wparam == VK_ESCAPE) {
+        if (color_wheel_.visible) {
+            Dismiss_color_wheel(true);
+            return 0;
+        }
         if (hotkey_help_overlay_.Is_visible()) {
             hotkey_help_overlay_.Hide();
             InvalidateRect(hwnd_, nullptr, TRUE);
             return 0;
         }
         Apply_action(controller_.On_cancel());
+        return 0;
+    }
+    if (color_wheel_.visible) {
         return 0;
     }
     if (eff_ctrl && wparam == L'H') {
@@ -640,6 +740,9 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
 }
 
 LRESULT OverlayWindow::On_key_up(WPARAM wparam, LPARAM lparam) {
+    if (color_wheel_.visible) {
+        return 0;
+    }
     if (hotkey_help_overlay_.Is_visible()) {
         return 0;
     }
@@ -663,6 +766,18 @@ LRESULT OverlayWindow::On_key_up(WPARAM wparam, LPARAM lparam) {
 
 LRESULT OverlayWindow::On_l_button_down() {
     if (!resources_->capture.Is_valid()) {
+        return 0;
+    }
+    if (color_wheel_.visible) {
+        suppress_next_lbutton_up_ = true;
+        std::optional<size_t> const segment = core::Hit_test_color_wheel_segment(
+            color_wheel_.center, Get_client_cursor_pos_px(hwnd_));
+        Dismiss_color_wheel(false);
+        if (segment.has_value()) {
+            Select_color_wheel_segment(*segment);
+        }
+        Refresh_cursor();
+        InvalidateRect(hwnd_, nullptr, FALSE);
         return 0;
     }
     if (hotkey_help_overlay_.Is_visible()) {
@@ -742,6 +857,19 @@ LRESULT OverlayWindow::On_l_button_down() {
 }
 
 LRESULT OverlayWindow::On_mouse_move() {
+    if (color_wheel_.visible) {
+        bool const hover_changed =
+            Update_color_wheel_hover(Get_client_cursor_pos_px(hwnd_));
+        bool const toolbar_changed = Clear_toolbar_hover_states();
+        if (last_hover_handle_.has_value()) {
+            last_hover_handle_ = std::nullopt;
+        }
+        if (hover_changed || toolbar_changed) {
+            InvalidateRect(hwnd_, nullptr, FALSE);
+        }
+        Refresh_cursor();
+        return 0;
+    }
     if (hotkey_help_overlay_.Is_visible()) {
         return 0;
     }
@@ -817,6 +945,9 @@ LRESULT OverlayWindow::On_mouse_move() {
 }
 
 LRESULT OverlayWindow::On_mouse_wheel(WPARAM wparam) {
+    if (color_wheel_.visible) {
+        return 0;
+    }
     if (hotkey_help_overlay_.Is_visible()) {
         return 0;
     }
@@ -843,6 +974,10 @@ LRESULT OverlayWindow::On_mouse_wheel(WPARAM wparam) {
 }
 
 LRESULT OverlayWindow::On_l_button_up() {
+    if (suppress_next_lbutton_up_) {
+        suppress_next_lbutton_up_ = false;
+        return 0;
+    }
     // Route release to any hovered toolbar button.
     if (controller_.Can_interact_with_annotation_toolbar() &&
         !toolbar_buttons_.empty()) {
@@ -905,6 +1040,16 @@ LRESULT OverlayWindow::On_l_button_up() {
     return 0;
 }
 
+LRESULT OverlayWindow::On_r_button_down() {
+    if (!resources_->capture.Is_valid()) {
+        return 0;
+    }
+    if (Can_show_color_wheel()) {
+        Show_color_wheel(Get_client_cursor_pos_px(hwnd_));
+    }
+    return 0;
+}
+
 LRESULT OverlayWindow::On_timer(WPARAM wparam) {
     if (wparam == kBrushSizeOverlayTimerId) {
         Clear_brush_size_overlay(true);
@@ -950,6 +1095,10 @@ LRESULT OverlayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
         return On_mouse_wheel(wparam);
     case WM_LBUTTONUP:
         return On_l_button_up();
+    case WM_RBUTTONDOWN:
+        return On_r_button_down();
+    case WM_CONTEXTMENU:
+        return 0;
     case WM_PAINT:
         return On_paint();
     case WM_SETCURSOR:
@@ -1353,10 +1502,16 @@ LRESULT OverlayWindow::On_paint() {
         input.transient_center_label_text = brush_size_overlay_text_;
         input.toolbar_tooltip_text = Hovered_toolbar_tooltip_text();
         input.hovered_toolbar_bounds = Hovered_toolbar_button_bounds();
+        input.show_color_wheel = color_wheel_.visible;
+        input.color_wheel_center_px = color_wheel_.center;
+        input.color_wheel_colors = Current_annotation_palette();
+        input.color_wheel_selected_segment = Current_annotation_color_index();
+        input.color_wheel_hovered_segment = color_wheel_.hovered_segment;
         if (s.handle_dragging && s.resize_handle.has_value()) {
             input.highlight_handle = s.resize_handle;
         } else if (!s.move_dragging && !s.dragging && !s.modifier_preview &&
-                   !controller_.Has_active_annotation_gesture()) {
+                   !controller_.Has_active_annotation_gesture() &&
+                   !color_wheel_.visible) {
             input.highlight_handle = last_hover_handle_;
         }
         if (Should_show_brush_cursor_preview()) {
@@ -1378,6 +1533,8 @@ LRESULT OverlayWindow::On_paint() {
 LRESULT OverlayWindow::On_destroy() {
     Clear_brush_size_overlay(false);
     mouse_wheel_delta_remainder_ = 0;
+    suppress_next_lbutton_up_ = false;
+    color_wheel_ = {};
     toolbar_buttons_.clear();
     resources_->Reset();
     controller_.Reset_for_session({});
@@ -1393,6 +1550,10 @@ LRESULT OverlayWindow::On_close() {
 }
 
 void OverlayWindow::Refresh_cursor() {
+    if (color_wheel_.visible) {
+        SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+        return;
+    }
     if (hotkey_help_overlay_.Is_visible()) {
         SetCursor(LoadCursorW(nullptr, IDC_ARROW));
         return;

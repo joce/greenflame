@@ -47,6 +47,10 @@ class AnnotationController final {
         return brush_style_.width_px;
     }
     [[nodiscard]] bool Set_brush_width_px(int32_t width_px) noexcept;
+    [[nodiscard]] COLORREF Annotation_color() const noexcept {
+        return brush_style_.color;
+    }
+    [[nodiscard]] bool Set_annotation_color(COLORREF color) noexcept;
 
     [[nodiscard]] std::span<const Annotation> Annotations() const noexcept {
         return document_.annotations;

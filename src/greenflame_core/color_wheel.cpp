@@ -1,0 +1,94 @@
+#include "greenflame_core/color_wheel.h"
+
+namespace greenflame::core {
+
+namespace {
+
+constexpr float kPi = 3.14159265358979323846f;
+constexpr float kDegreesPerTurn = 360.0f;
+constexpr float kDegreesPerSegment =
+    kDegreesPerTurn / static_cast<float>(kColorWheelSegmentCount);
+constexpr float kTopGapCenterDegrees = 270.0f;
+constexpr float kFirstSegmentCenterDegrees =
+    kTopGapCenterDegrees + kDegreesPerSegment / 2.0f;
+
+[[nodiscard]] constexpr float Color_wheel_outer_radius_px() noexcept {
+    return static_cast<float>(kColorWheelOuterDiameterPx) / 2.0f;
+}
+
+[[nodiscard]] constexpr float Color_wheel_inner_radius_px() noexcept {
+    return Color_wheel_outer_radius_px() - kColorWheelWidthPx;
+}
+
+[[nodiscard]] constexpr float Color_wheel_mid_radius_px() noexcept {
+    return (Color_wheel_outer_radius_px() + Color_wheel_inner_radius_px()) / 2.0f;
+}
+
+[[nodiscard]] constexpr float Color_wheel_gap_degrees() noexcept {
+    return (kColorWheelSegmentGapPx / Color_wheel_mid_radius_px()) *
+           (kDegreesPerTurn / (2.0f * kPi));
+}
+
+[[nodiscard]] constexpr float Normalize_degrees(float angle) noexcept {
+    while (angle < 0.0f) {
+        angle += kDegreesPerTurn;
+    }
+    while (angle >= kDegreesPerTurn) {
+        angle -= kDegreesPerTurn;
+    }
+    return angle;
+}
+
+[[nodiscard]] constexpr float Smallest_angle_delta_degrees(float from,
+                                                           float to) noexcept {
+    float delta = Normalize_degrees(to - from);
+    if (delta > kDegreesPerTurn / 2.0f) {
+        delta -= kDegreesPerTurn;
+    }
+    return delta;
+}
+
+} // namespace
+
+ColorWheelSegmentGeometry Get_color_wheel_segment_geometry(size_t index) noexcept {
+    ColorWheelSegmentGeometry geometry{};
+    if (index >= kAnnotationColorSlotCount) {
+        return geometry;
+    }
+
+    geometry.center_angle_degrees = Normalize_degrees(
+        kFirstSegmentCenterDegrees + static_cast<float>(index) * kDegreesPerSegment);
+    geometry.sweep_angle_degrees = kDegreesPerSegment - Color_wheel_gap_degrees();
+    geometry.start_angle_degrees = Normalize_degrees(
+        geometry.center_angle_degrees - geometry.sweep_angle_degrees / 2.0f);
+    return geometry;
+}
+
+std::optional<size_t> Hit_test_color_wheel_segment(PointPx center,
+                                                   PointPx point) noexcept {
+    float const dx = static_cast<float>(point.x - center.x);
+    float const dy = static_cast<float>(point.y - center.y);
+    float const distance_sq = dx * dx + dy * dy;
+    float const inner_radius = Color_wheel_inner_radius_px();
+    float const outer_radius = Color_wheel_outer_radius_px();
+    if (distance_sq < inner_radius * inner_radius ||
+        distance_sq > outer_radius * outer_radius) {
+        return std::nullopt;
+    }
+
+    float const angle =
+        Normalize_degrees(std::atan2(dy, dx) * (kDegreesPerTurn / (2.0f * kPi)));
+    for (size_t index = 0; index < kAnnotationColorSlotCount; ++index) {
+        ColorWheelSegmentGeometry const geometry =
+            Get_color_wheel_segment_geometry(index);
+        float const half_sweep = geometry.sweep_angle_degrees / 2.0f;
+        if (std::fabs(Smallest_angle_delta_degrees(geometry.center_angle_degrees,
+                                                   angle)) <= half_sweep) {
+            return index;
+        }
+    }
+
+    return std::nullopt;
+}
+
+} // namespace greenflame::core

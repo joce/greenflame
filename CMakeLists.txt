@@ -96,6 +96,8 @@ add_library(greenflame_core STATIC
     src/greenflame_core/annotation_tool.h
     src/greenflame_core/annotation_tool_registry.cpp
     src/greenflame_core/annotation_tool_registry.h
+    src/greenflame_core/color_wheel.cpp
+    src/greenflame_core/color_wheel.h
     src/greenflame_core/overlay_controller.cpp
     src/greenflame_core/overlay_controller.h
     src/greenflame_core/overlay_help_content.h
@@ -161,7 +163,7 @@ endif()
 # Tests
 # -----------------------------
 include(CTest)
-if (BUILD_TESTING)
+if(BUILD_TESTING)
     add_subdirectory(tests)
 endif()
 
@@ -209,14 +211,14 @@ target_include_directories(greenflame PRIVATE
 )
 
 target_compile_definitions(greenflame PRIVATE
-        NOMINMAX
-        WIN32_LEAN_AND_MEAN
-        UNICODE
-        _UNICODE
-        GREENFLAME_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
-        GREENFLAME_VERSION_MINOR=${PROJECT_VERSION_MINOR}
-        GREENFLAME_VERSION_PATCH=${PROJECT_VERSION_PATCH}
-        $<$<CONFIG:Debug>:DEBUG>
+    NOMINMAX
+    WIN32_LEAN_AND_MEAN
+    UNICODE
+    _UNICODE
+    GREENFLAME_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
+    GREENFLAME_VERSION_MINOR=${PROJECT_VERSION_MINOR}
+    GREENFLAME_VERSION_PATCH=${PROJECT_VERSION_PATCH}
+    $<$<CONFIG:Debug>:DEBUG>
 )
 
 target_precompile_headers(greenflame PRIVATE
@@ -259,18 +261,18 @@ endif()
 target_link_libraries(greenflame PRIVATE
     greenflame_core
 
-        # Win32 basics
-        user32
-        gdi32
-        shcore
-        shell32
-        advapi32
-        dwmapi
-        comdlg32
-        Windowscodecs
-        ole32
-        gdiplus
-        msimg32
+    # Win32 basics
+    user32
+    gdi32
+    shcore
+    shell32
+    advapi32
+    dwmapi
+    comdlg32
+    Windowscodecs
+    ole32
+    gdiplus
+    msimg32
 )
 
 # -----------------------------

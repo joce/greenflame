@@ -57,6 +57,7 @@ class OverlayWindow final {
     LRESULT On_mouse_move();
     LRESULT On_mouse_wheel(WPARAM wparam);
     LRESULT On_l_button_up();
+    LRESULT On_r_button_down();
     LRESULT On_timer(WPARAM wparam);
 
     void Build_default_save_name(std::wstring_view save_dir_for_num_scan,
@@ -82,6 +83,13 @@ class OverlayWindow final {
     [[nodiscard]] bool Handle_brush_width_delta(int32_t delta_steps);
     void Show_brush_size_overlay(int32_t width_px);
     void Clear_brush_size_overlay(bool repaint);
+    [[nodiscard]] bool Can_show_color_wheel() const noexcept;
+    [[nodiscard]] std::span<const COLORREF> Current_annotation_palette() const noexcept;
+    [[nodiscard]] size_t Current_annotation_color_index() const noexcept;
+    void Show_color_wheel(core::PointPx center);
+    void Dismiss_color_wheel(bool repaint);
+    [[nodiscard]] bool Update_color_wheel_hover(core::PointPx cursor);
+    void Select_color_wheel_segment(size_t index);
     [[nodiscard]] bool Clear_toolbar_hover_states();
     [[nodiscard]] bool Should_show_brush_cursor_preview() const;
     [[nodiscard]] bool Is_selection_stable_for_help() const;
@@ -104,6 +112,12 @@ class OverlayWindow final {
         ToolbarButtonEntry &operator=(ToolbarButtonEntry &&) noexcept = default;
     };
 
+    struct ColorWheelState final {
+        bool visible = false;
+        core::PointPx center = {};
+        std::optional<size_t> hovered_segment = std::nullopt;
+    };
+
     IOverlayEvents *events_ = nullptr;
     core::AppConfig *config_ = nullptr;
     IWindowQuery *window_query_ = nullptr;
@@ -116,7 +130,9 @@ class OverlayWindow final {
     bool testing_toolbar_ = false;
     int mouse_wheel_delta_remainder_ = 0;
     std::wstring brush_size_overlay_text_ = {};
+    bool suppress_next_lbutton_up_ = false;
     std::vector<ToolbarButtonEntry> toolbar_buttons_;
+    ColorWheelState color_wheel_ = {};
 };
 
 } // namespace greenflame

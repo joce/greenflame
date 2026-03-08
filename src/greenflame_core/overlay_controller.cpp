@@ -124,8 +124,16 @@ int32_t OverlayController::Brush_width_px() const noexcept {
     return annotation_controller_.Brush_width_px();
 }
 
+COLORREF OverlayController::Annotation_color() const noexcept {
+    return annotation_controller_.Annotation_color();
+}
+
 void OverlayController::Set_brush_width_px(int32_t width_px) noexcept {
     (void)annotation_controller_.Set_brush_width_px(width_px);
+}
+
+void OverlayController::Set_annotation_color(COLORREF color) noexcept {
+    (void)annotation_controller_.Set_annotation_color(color);
 }
 
 std::optional<int32_t> OverlayController::Adjust_brush_width(int32_t delta_steps) {

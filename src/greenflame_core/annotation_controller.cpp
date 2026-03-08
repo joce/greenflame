@@ -76,6 +76,15 @@ bool AnnotationController::Set_brush_width_px(int32_t width_px) noexcept {
     return true;
 }
 
+bool AnnotationController::Set_annotation_color(COLORREF color) noexcept {
+    if (brush_style_.color == color) {
+        return false;
+    }
+    brush_style_.color = color;
+    freehand_preview_.reset();
+    return true;
+}
+
 Annotation const *AnnotationController::Draft_annotation() const noexcept {
     if (!freehand_drawing_ || freehand_points_.empty()) {
         return nullptr;

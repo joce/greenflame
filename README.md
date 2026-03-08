@@ -32,6 +32,7 @@ Once a region is selected:
 - With **no annotation tool selected** (the default mode), **click and drag inside the selection** to **move** it (hold **Alt** to disable snapping).
 - With **no annotation tool selected**, **click and drag an annotation** to **select** and **move** it.
 - Press **P** or use the toolbar to toggle the **Brush tool** on or off.
+- With an annotation tool active, **right-click** anywhere to open the **color wheel** at the cursor. **Left-click** a segment to select that color, or press **Escape** to dismiss the wheel.
 - With the **Brush tool** active, use **mouse-wheel up/down** or **Ctrl+= / Ctrl+-** to change brush width from **1** to **50**.
 - With the **Brush tool** active, the overlay shows an anti-aliased circular size preview around the cursor hotspot.
 - **Ctrl-S** ➜ save directly (no dialog) to the configured default save folder as the configured format (default PNG), then close.
@@ -145,6 +146,8 @@ Greenflame reads `~/.config/greenflame/greenflame.ini` (i.e. `%USERPROFILE%\.con
 | `[ui]` | `show_selection_size_center_label` | `true` | Show centered `W x H` selection-size label inside the selection. |
 | `[ui]` | `tool_size_overlay_duration_ms` | `800` | How long the centered Brush tool size overlay stays visible after a size change. `0` disables it. |
 | `[tools]` | `brush_width` | `2` | Default Brush tool stroke width in physical pixels. Runtime adjustments are clamped to `1..50` and persisted here. |
+| `[tools]` | `current_color` | `0` | Current annotation color slot index, clamped to `0..7`. |
+| `[tools]` | `color_0` ... `color_7` | `#000000`, `#ff0000`, `#00ff00`, `#0000ff`, `#ffff00`, `#ff00ff`, `#00ffff`, `#ffffff` | Annotation color wheel slots, starting at the top-right segment and moving clockwise. Values use `#rrggbb`. |
 | `[save]` | `default_save_dir` | `%USERPROFILE%\Pictures\greenflame` (runtime fallback when unset) | Folder used by **Ctrl-S**, **Ctrl-Alt-S**, and CLI captures when `--output` is not provided. |
 | `[save]` | `last_save_as_dir` | Falls back to `default_save_dir`, then `%USERPROFILE%\Pictures\greenflame` | Initial folder used by **Ctrl-Shift-S** and **Ctrl-Shift-Alt-S** (Save As). |
 | `[save]` | `default_save_format` | `png` | Default image format for **Ctrl-S**, **Ctrl-Alt-S**, and CLI output paths without explicit extension. Accepted values: `png`, `jpg`/`jpeg`, `bmp`. |
@@ -164,6 +167,15 @@ tool_size_overlay_duration_ms=800
 
 [tools]
 brush_width=2
+current_color=0
+color_0=#000000
+color_1=#ff0000
+color_2=#00ff00
+color_3=#0000ff
+color_4=#ffff00
+color_5=#ff00ff
+color_6=#00ffff
+color_7=#ffffff
 
 [save]
 default_save_dir=C:\Users\you\Pictures\greenflame

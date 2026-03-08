@@ -6,6 +6,7 @@
 // accessors.
 
 #include "greenflame_core/annotation_raster.h"
+#include "greenflame_core/color_wheel.h"
 #include "greenflame_core/rect_px.h"
 #include "greenflame_core/selection_handles.h"
 
@@ -49,6 +50,11 @@ struct PaintOverlayInput {
     std::span<IOverlayButton *const> toolbar_buttons = {};
     std::wstring_view toolbar_tooltip_text = {};
     std::optional<core::RectPx> hovered_toolbar_bounds = std::nullopt;
+    bool show_color_wheel = false;
+    core::PointPx color_wheel_center_px = {};
+    std::span<const COLORREF> color_wheel_colors = {};
+    std::optional<size_t> color_wheel_selected_segment = std::nullopt;
+    std::optional<size_t> color_wheel_hovered_segment = std::nullopt;
 };
 
 void Paint_overlay(HDC hdc, HWND hwnd, const RECT &rc, const PaintOverlayInput &in);

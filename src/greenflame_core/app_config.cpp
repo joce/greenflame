@@ -29,6 +29,8 @@ void AppConfig::Normalize() {
     clamp_pattern(filename_pattern_monitor);
     clamp_pattern(filename_pattern_window);
     brush_width_px = std::clamp(brush_width_px, kMinBrushWidthPx, kMaxBrushWidthPx);
+    current_annotation_color_index =
+        Clamp_annotation_color_index(current_annotation_color_index);
     tool_size_overlay_duration_ms = std::max(tool_size_overlay_duration_ms, 0);
 
     if (default_save_format.empty()) {

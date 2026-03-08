@@ -33,6 +33,7 @@ constexpr COLORREF kMagnifierCheckerLight = RGB(224, 224, 224);
 constexpr COLORREF kMagnifierCheckerDark = RGB(168, 168, 168);
 constexpr int kColorChannelMax = 255;
 constexpr float kColorChannelMaxF = static_cast<float>(kColorChannelMax);
+constexpr BYTE kOpaqueAlpha = 0xFF;
 constexpr Gdiplus::REAL kBrushPreviewWhiteStrokeWidth = 3.0f;
 constexpr Gdiplus::REAL kBrushPreviewBlackStrokeWidth = 1.0f;
 
@@ -513,6 +514,113 @@ void Draw_brush_cursor_preview(HDC dc, int cx, int cy,
                                preview_path_diameter);
     (void)graphics.DrawEllipse(&black_pen, left, top, preview_path_diameter,
                                preview_path_diameter);
+}
+
+[[nodiscard]] Gdiplus::Color To_gdiplus_color(COLORREF color,
+                                              BYTE alpha = kOpaqueAlpha) noexcept {
+    return Gdiplus::Color(alpha, GetRValue(color), GetGValue(color), GetBValue(color));
+}
+
+[[nodiscard]] Gdiplus::RectF Circle_bounds(greenflame::core::PointPx center,
+                                           float radius) noexcept {
+    float const diameter = radius * 2.0f;
+    return {static_cast<Gdiplus::REAL>(center.x) - radius,
+            static_cast<Gdiplus::REAL>(center.y) - radius, diameter, diameter};
+}
+
+void Add_color_wheel_segment_path(
+    Gdiplus::GraphicsPath &path, greenflame::core::PointPx center, float outer_radius,
+    float inner_radius,
+    greenflame::core::ColorWheelSegmentGeometry const &geometry) noexcept {
+    Gdiplus::RectF const outer_bounds = Circle_bounds(center, outer_radius);
+    Gdiplus::RectF const inner_bounds = Circle_bounds(center, inner_radius);
+
+    path.StartFigure();
+    path.AddArc(outer_bounds, geometry.start_angle_degrees,
+                geometry.sweep_angle_degrees);
+    path.AddArc(inner_bounds,
+                geometry.start_angle_degrees + geometry.sweep_angle_degrees,
+                -geometry.sweep_angle_degrees);
+    path.CloseFigure();
+}
+
+void Draw_color_wheel_halo(Gdiplus::Graphics &graphics,
+                           greenflame::core::PointPx center,
+                           greenflame::core::ColorWheelSegmentGeometry const &geometry,
+                           float inner_width, float outer_width) {
+    float const outer_radius =
+        static_cast<float>(greenflame::core::kColorWheelOuterDiameterPx) / 2.0f;
+    float const inner_halo_radius =
+        outer_radius + greenflame::core::kColorWheelSegmentBorderWidthPx / 2.0f +
+        greenflame::core::kColorWheelSelectionHaloGapPx + inner_width / 2.0f;
+    float const outer_halo_radius =
+        inner_halo_radius + inner_width / 2.0f + outer_width / 2.0f;
+
+    Gdiplus::RectF const inner_halo_bounds = Circle_bounds(center, inner_halo_radius);
+    Gdiplus::RectF const outer_halo_bounds = Circle_bounds(center, outer_halo_radius);
+
+    Gdiplus::Pen inner_pen(To_gdiplus_color(static_cast<COLORREF>(0x00000000u)),
+                           inner_width);
+    inner_pen.SetStartCap(Gdiplus::LineCapRound);
+    inner_pen.SetEndCap(Gdiplus::LineCapRound);
+    (void)graphics.DrawArc(&inner_pen, inner_halo_bounds, geometry.start_angle_degrees,
+                           geometry.sweep_angle_degrees);
+
+    Gdiplus::Pen outer_pen(To_gdiplus_color(greenflame::kBorderColor), outer_width);
+    outer_pen.SetStartCap(Gdiplus::LineCapRound);
+    outer_pen.SetEndCap(Gdiplus::LineCapRound);
+    (void)graphics.DrawArc(&outer_pen, outer_halo_bounds, geometry.start_angle_degrees,
+                           geometry.sweep_angle_degrees);
+}
+
+void Draw_color_wheel(HDC dc, greenflame::PaintOverlayInput const &in) {
+    if (dc == nullptr || !in.show_color_wheel || !Ensure_gdiplus() ||
+        in.color_wheel_colors.size() < greenflame::core::kAnnotationColorSlotCount) {
+        return;
+    }
+
+    float const outer_radius =
+        static_cast<float>(greenflame::core::kColorWheelOuterDiameterPx) / 2.0f;
+    float const inner_radius = outer_radius - greenflame::core::kColorWheelWidthPx;
+
+    Gdiplus::Graphics graphics(dc);
+    graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+    graphics.SetCompositingQuality(Gdiplus::CompositingQualityHighQuality);
+
+    Gdiplus::Pen border_pen(To_gdiplus_color(static_cast<COLORREF>(0x00000000u)),
+                            greenflame::core::kColorWheelSegmentBorderWidthPx);
+    border_pen.SetLineJoin(Gdiplus::LineJoinRound);
+
+    for (size_t index = 0; index < greenflame::core::kAnnotationColorSlotCount;
+         ++index) {
+        greenflame::core::ColorWheelSegmentGeometry const geometry =
+            greenflame::core::Get_color_wheel_segment_geometry(index);
+        Gdiplus::GraphicsPath path(Gdiplus::FillModeWinding);
+        Add_color_wheel_segment_path(path, in.color_wheel_center_px, outer_radius,
+                                     inner_radius, geometry);
+        Gdiplus::SolidBrush fill_brush(To_gdiplus_color(in.color_wheel_colors[index]));
+        (void)graphics.FillPath(&fill_brush, &path);
+        (void)graphics.DrawPath(&border_pen, &path);
+    }
+
+    if (in.color_wheel_selected_segment.has_value() &&
+        *in.color_wheel_selected_segment <
+            greenflame::core::kAnnotationColorSlotCount) {
+        Draw_color_wheel_halo(graphics, in.color_wheel_center_px,
+                              greenflame::core::Get_color_wheel_segment_geometry(
+                                  *in.color_wheel_selected_segment),
+                              greenflame::core::kColorWheelSelectionHaloInnerWidthPx,
+                              greenflame::core::kColorWheelSelectionHaloOuterWidthPx);
+    }
+    if (in.color_wheel_hovered_segment.has_value() &&
+        *in.color_wheel_hovered_segment < greenflame::core::kAnnotationColorSlotCount) {
+        Draw_color_wheel_halo(graphics, in.color_wheel_center_px,
+                              greenflame::core::Get_color_wheel_segment_geometry(
+                                  *in.color_wheel_hovered_segment),
+                              greenflame::core::kColorWheelHoverHaloInnerWidthPx,
+                              greenflame::core::kColorWheelHoverHaloOuterWidthPx);
+    }
 }
 
 void Draw_toolbar_tooltip(HDC buf_dc, HBITMAP buf_bmp, int w, int h,
@@ -1329,6 +1437,7 @@ void Paint_overlay(HDC hdc, HWND hwnd, const RECT &rc, const PaintOverlayInput &
     }
     Draw_toolbar_tooltip(buf_dc, buf_bmp, w, h, in.paint_buffer, in.resources,
                          in.toolbar_tooltip_text, in.hovered_toolbar_bounds);
+    Draw_color_wheel(buf_dc, in);
 
     BitBlt(hdc, 0, 0, w, h, buf_dc, 0, 0, SRCCOPY);
     SelectObject(buf_dc, old_buf);

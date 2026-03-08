@@ -213,6 +213,7 @@ core::OverlayHelpContent AppController::Build_overlay_help_content() const {
     tools.title = L"Annotation Tools";
     tools.entries = {
         {L"P", L"Toggle Brush tool"},
+        {L"Right Click", L"Open color wheel at cursor"},
         {L"Wheel Up / Ctrl + =", L"Increase Brush tool width"},
         {L"Wheel Down / Ctrl + -", L"Decrease Brush tool width"},
     };

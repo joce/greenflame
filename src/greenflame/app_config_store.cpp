@@ -6,6 +6,13 @@ namespace {
 
 constexpr int64_t kInt32MaxValue = std::numeric_limits<int32_t>::max();
 constexpr int64_t kInt32MinMagnitude = kInt32MaxValue + 1;
+constexpr size_t kHexColorTextLength = 7;
+constexpr size_t kHexColorComponentLength = 2;
+constexpr size_t kHexColorRedOffset = 1;
+constexpr size_t kHexColorGreenOffset = 3;
+constexpr size_t kHexColorBlueOffset = 5;
+constexpr COLORREF kColorChannelMask = 0xFF;
+constexpr uint8_t kHexLowNibbleMask = 0x0F;
 
 [[nodiscard]] std::filesystem::path Get_config_path() {
     wchar_t home[MAX_PATH];
@@ -102,6 +109,83 @@ constexpr int64_t kInt32MinMagnitude = kInt32MaxValue + 1;
     return true;
 }
 
+[[nodiscard]] bool Try_parse_hex_digit(char ch, uint8_t &value) {
+    if (ch >= '0' && ch <= '9') {
+        value = static_cast<uint8_t>(ch - '0');
+        return true;
+    }
+    if (ch >= 'a' && ch <= 'f') {
+        value = static_cast<uint8_t>(10 + (ch - 'a'));
+        return true;
+    }
+    if (ch >= 'A' && ch <= 'F') {
+        value = static_cast<uint8_t>(10 + (ch - 'A'));
+        return true;
+    }
+    return false;
+}
+
+[[nodiscard]] bool Try_parse_hex_byte(std::string_view value, uint8_t &out) {
+    if (value.size() != 2) {
+        return false;
+    }
+    uint8_t high = 0;
+    uint8_t low = 0;
+    if (!Try_parse_hex_digit(value[0], high) || !Try_parse_hex_digit(value[1], low)) {
+        return false;
+    }
+    out = static_cast<uint8_t>((high << 4u) | low);
+    return true;
+}
+
+[[nodiscard]] bool Try_parse_color(std::string_view value, COLORREF &out) {
+    std::string_view const trimmed = Trim(value);
+    if (trimmed.size() != kHexColorTextLength || trimmed[0] != '#') {
+        return false;
+    }
+
+    uint8_t red = 0;
+    uint8_t green = 0;
+    uint8_t blue = 0;
+    if (!Try_parse_hex_byte(
+            trimmed.substr(kHexColorRedOffset, kHexColorComponentLength), red) ||
+        !Try_parse_hex_byte(
+            trimmed.substr(kHexColorGreenOffset, kHexColorComponentLength), green) ||
+        !Try_parse_hex_byte(
+            trimmed.substr(kHexColorBlueOffset, kHexColorComponentLength), blue)) {
+        return false;
+    }
+
+    out = core::Make_colorref(red, green, blue);
+    return true;
+}
+
+[[nodiscard]] char Hex_digit(uint8_t value) {
+    return static_cast<char>((value < 10) ? ('0' + value) : ('a' + (value - 10)));
+}
+
+[[nodiscard]] std::string To_hex_color(COLORREF color) {
+    auto channel = [&](unsigned shift) {
+        return static_cast<uint8_t>((color >> shift) & kColorChannelMask);
+    };
+
+    uint8_t const red = channel(0);
+    uint8_t const green = channel(8);
+    uint8_t const blue = channel(16);
+
+    std::string value(kHexColorTextLength, '#');
+    value[kHexColorRedOffset] = Hex_digit(static_cast<uint8_t>(red >> 4u));
+    value[kHexColorRedOffset + 1] =
+        Hex_digit(static_cast<uint8_t>(red & kHexLowNibbleMask));
+    value[kHexColorGreenOffset] = Hex_digit(static_cast<uint8_t>(green >> 4u));
+    value[kHexColorGreenOffset + 1] =
+        Hex_digit(static_cast<uint8_t>(green & kHexLowNibbleMask));
+    value[kHexColorBlueOffset] = Hex_digit(static_cast<uint8_t>(blue >> 4u));
+    value[kHexColorBlueOffset + 1] =
+        Hex_digit(static_cast<uint8_t>(blue & kHexLowNibbleMask));
+    return value;
+}
+
 } // namespace
 
 std::filesystem::path Get_app_config_dir() {
@@ -165,6 +249,23 @@ core::AppConfig Load_app_config() {
                     int32_t parsed = 0;
                     if (Try_parse_int32(value, parsed)) {
                         config.brush_width_px = parsed;
+                    }
+                } else if (key == "current_color") {
+                    int32_t parsed = 0;
+                    if (Try_parse_int32(value, parsed)) {
+                        config.current_annotation_color_index = parsed;
+                    }
+                } else {
+                    for (size_t index = 0; index < core::kAnnotationColorSlotCount;
+                         ++index) {
+                        if (key != ("color_" + std::to_string(index))) {
+                            continue;
+                        }
+                        COLORREF parsed = 0;
+                        if (Try_parse_color(value, parsed)) {
+                            config.annotation_colors[index] = parsed;
+                        }
+                        break;
                     }
                 }
             } else if (section == "save") {
@@ -230,10 +331,28 @@ bool Save_app_config(core::AppConfig const &config) {
         }
 
         bool wrote_tools_header = false;
-        if (config.brush_width_px != defaults.brush_width_px) {
+        bool const write_tools_header =
+            config.brush_width_px != defaults.brush_width_px ||
+            config.current_annotation_color_index !=
+                defaults.current_annotation_color_index ||
+            config.annotation_colors != defaults.annotation_colors;
+        if (write_tools_header) {
             file << (wrote_ui_header ? "\n" : "") << "[tools]\n";
             wrote_tools_header = true;
+        }
+        if (config.brush_width_px != defaults.brush_width_px) {
             file << "brush_width=" << config.brush_width_px << "\n";
+        }
+        for (size_t index = 0; index < core::kAnnotationColorSlotCount; ++index) {
+            if (config.annotation_colors[index] == defaults.annotation_colors[index]) {
+                continue;
+            }
+            file << "color_" << index << "="
+                 << To_hex_color(config.annotation_colors[index]) << "\n";
+        }
+        if (config.current_annotation_color_index !=
+            defaults.current_annotation_color_index) {
+            file << "current_color=" << config.current_annotation_color_index << "\n";
         }
 
         // Save section: only write non-default values.

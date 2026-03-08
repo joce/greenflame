@@ -58,6 +58,13 @@ The annotation system applies only to the interactive overlay flow.
 - Hovering a toolbar button shows a tooltip with the full tool name.
 - Pressing `P` or clicking the `Brush tool` toolbar button toggles that tool on or
   off.
+- While an annotation tool is active, right-click opens a color wheel centered on
+  the cursor.
+- While the color wheel is visible:
+  - moving the mouse highlights the hovered color slot
+  - left-clicking a slot selects that color for future annotations and closes the
+    wheel
+  - `Esc` closes the wheel without changing color
 - While the Brush tool is active, mouse-wheel up/down or `Ctrl+=` / `Ctrl+-`
   increases or decreases brush width within the `1..50` range.
 - While the Brush tool is active, the overlay draws an anti-aliased circular size
@@ -65,6 +72,9 @@ The annotation system applies only to the interactive overlay flow.
 - Brush-width changes show a temporary centered size overlay inside the current
   selection using the same visual treatment as the center selection-size label.
 - Brush width persists in the INI file at `[tools] brush_width`.
+- The color wheel palette persists in `[tools] color_0` through `[tools] color_7`
+  using `#rrggbb`.
+- The currently selected palette slot persists in `[tools] current_color`.
 - The size-overlay duration persists in the INI file at
   `[ui] tool_size_overlay_duration_ms`.
 - Completing an annotation does not change the active tool.
@@ -224,6 +234,7 @@ The overlay paint path draws in this order:
 5. selection labels / crosshair / region handles
 6. selected-annotation corner markers
 7. toolbar buttons and tooltip
+8. color wheel, when visible
 
 ### Saved/copied image
 

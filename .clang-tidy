@@ -69,6 +69,10 @@ CheckOptions:
       value: "0;1;2;3;10;100"
     - key: cppcoreguidelines-avoid-magic-numbers.IgnoredIntegerValues
       value: "0;1;2;3;10;100"
+    - key: readability-magic-numbers.IgnoredFloatingPointValues
+      value: "1.0;2.0;100.0"
+    - key: cppcoreguidelines-avoid-magic-numbers.IgnoredFloatingPointValues
+      value: "1.0;2.0;100.0"
     - key: readability-magic-numbers.IgnorePowersOf2IntegerValues
       value: "true"
     - key: cppcoreguidelines-avoid-magic-numbers.IgnorePowersOf2IntegerValues

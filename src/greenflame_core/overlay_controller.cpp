@@ -176,8 +176,7 @@ std::optional<int32_t> OverlayController::Adjust_brush_width(int32_t delta_steps
 
 bool OverlayController::Should_show_annotation_toolbar() const noexcept {
     return !state_.final_selection.Is_empty() && !state_.dragging &&
-           !state_.handle_dragging && !state_.move_dragging &&
-           !annotation_controller_.Has_active_edit_interaction();
+           !state_.handle_dragging && !state_.move_dragging;
 }
 
 bool OverlayController::Can_interact_with_annotation_toolbar() const noexcept {
@@ -280,6 +279,15 @@ OverlayAction OverlayController::On_cancel() {
         state_.dragging = false;
         state_.live_rect = {};
         return OverlayAction::Repaint;
+    }
+    if (std::optional<AnnotationToolId> const active_tool =
+            annotation_controller_.Active_tool();
+        active_tool.has_value()) {
+        bool const canceled_gesture = annotation_controller_.On_cancel();
+        bool const deselected_tool = annotation_controller_.Toggle_tool(*active_tool);
+        if (canceled_gesture || deselected_tool) {
+            return OverlayAction::Repaint;
+        }
     }
     if (annotation_controller_.On_cancel()) {
         return OverlayAction::Repaint;

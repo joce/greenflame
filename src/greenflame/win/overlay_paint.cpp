@@ -501,21 +501,22 @@ Centered_square_bounds(greenflame::core::PointPx center, int32_t size) noexcept 
 }
 
 void Draw_line_endpoint_handle(HDC dc, greenflame::core::PointPx center) noexcept {
-    int32_t constexpr kBodySize = greenflame::core::kAnnotationHandleBodySizePx;
-    int32_t constexpr kHalo = greenflame::core::kAnnotationHandleHaloSizePx;
-    int32_t constexpr kOuterSize = greenflame::core::kAnnotationHandleOuterSizePx;
+    int32_t constexpr body_size_px = greenflame::core::kAnnotationHandleBodySizePx;
+    int32_t constexpr halo_size_px = greenflame::core::kAnnotationHandleHaloSizePx;
+    int32_t constexpr outer_size_px = greenflame::core::kAnnotationHandleOuterSizePx;
     greenflame::core::RectPx const outer_bounds =
-        Centered_square_bounds(center, kOuterSize);
+        Centered_square_bounds(center, outer_size_px);
     greenflame::core::RectPx const body_bounds =
-        Centered_square_bounds(center, kBodySize);
+        Centered_square_bounds(center, body_size_px);
     greenflame::core::RectPx const inner_bounds =
-        Centered_square_bounds(center, kBodySize - (kHalo * 2));
-    COLORREF constexpr kBlack = RGB(0, 0, 0);
-    COLORREF constexpr kWhite = RGB(255, 255, 255);
+        Centered_square_bounds(center, body_size_px - (halo_size_px * 2));
+    COLORREF constexpr black = RGB(0, 0, 0);
+    COLORREF constexpr white =
+        RGB(kColorChannelMax, kColorChannelMax, kColorChannelMax);
 
-    Draw_square_outline(dc, outer_bounds, kWhite);
-    Draw_square_outline(dc, body_bounds, kBlack);
-    Draw_square_outline(dc, inner_bounds, kWhite);
+    Draw_square_outline(dc, outer_bounds, white);
+    Draw_square_outline(dc, body_bounds, black);
+    Draw_square_outline(dc, inner_bounds, white);
 }
 
 void Draw_annotation_selection_corners(HDC dc, HPEN pen,
@@ -601,19 +602,45 @@ void Draw_line_cursor_preview(
     graphics.TranslateTransform(static_cast<Gdiplus::REAL>(cx),
                                 static_cast<Gdiplus::REAL>(cy));
     if (angle_radians.has_value()) {
-        double constexpr kRadiansToDegrees = 57.29577951308232;
+        double constexpr radians_to_degrees = 57.29577951308232;
         graphics.RotateTransform(
-            static_cast<Gdiplus::REAL>(*angle_radians * kRadiansToDegrees));
+            static_cast<Gdiplus::REAL>(*angle_radians * radians_to_degrees));
     }
 
     Gdiplus::REAL const half_size = inner_size * 0.5f;
     Gdiplus::RectF const rect(-half_size, -half_size, inner_size, inner_size);
-    Gdiplus::Pen white_pen(Gdiplus::Color(255, 255, 255, 255),
-                           kBrushPreviewWhiteStrokeWidth);
-    Gdiplus::Pen black_pen(Gdiplus::Color(255, 0, 0, 0), kBrushPreviewBlackStrokeWidth);
+    Gdiplus::Pen white_pen(
+        Gdiplus::Color(kOpaqueAlpha, kColorChannelMax, kColorChannelMax,
+                       kColorChannelMax),
+        kBrushPreviewWhiteStrokeWidth);
+    Gdiplus::Pen black_pen(Gdiplus::Color(kOpaqueAlpha, 0, 0, 0),
+                           kBrushPreviewBlackStrokeWidth);
     (void)graphics.DrawRectangle(&white_pen, rect);
     (void)graphics.DrawRectangle(&black_pen, rect);
     graphics.Restore(state);
+}
+
+template <typename DrawFn>
+void Draw_clipped_to_selection(HDC dc, greenflame::core::RectPx selection,
+                               DrawFn &&draw) noexcept {
+    if (dc == nullptr) {
+        return;
+    }
+    if (selection.Is_empty()) {
+        draw();
+        return;
+    }
+
+    greenflame::core::RectPx const clip = selection.Normalized();
+    int const saved_dc = SaveDC(dc);
+    if (saved_dc == 0) {
+        draw();
+        return;
+    }
+
+    (void)IntersectClipRect(dc, clip.left, clip.top, clip.right, clip.bottom);
+    draw();
+    (void)RestoreDC(dc, saved_dc);
 }
 
 [[nodiscard]] Gdiplus::Color To_gdiplus_color(COLORREF color,
@@ -1532,13 +1559,16 @@ void Paint_overlay(HDC hdc, HWND hwnd, const RECT &rc, const PaintOverlayInput &
                                               *in.selected_annotation_bounds);
         }
     }
-    if (in.brush_cursor_preview_width_px.has_value()) {
-        Draw_brush_cursor_preview(buf_dc, cx, cy, *in.brush_cursor_preview_width_px);
-    }
-    if (in.line_cursor_preview_width_px.has_value()) {
-        Draw_line_cursor_preview(buf_dc, cx, cy, *in.line_cursor_preview_width_px,
-                                 in.line_cursor_preview_angle_radians);
-    }
+    Draw_clipped_to_selection(buf_dc, in.final_selection, [&]() noexcept {
+        if (in.brush_cursor_preview_width_px.has_value()) {
+            Draw_brush_cursor_preview(buf_dc, cx, cy,
+                                      *in.brush_cursor_preview_width_px);
+        }
+        if (in.line_cursor_preview_width_px.has_value()) {
+            Draw_line_cursor_preview(buf_dc, cx, cy, *in.line_cursor_preview_width_px,
+                                     in.line_cursor_preview_angle_radians);
+        }
+    });
 
     if (!in.toolbar_buttons.empty()) {
         ButtonDrawContext const btn_ctx{kCoordTooltipBg, kCoordTooltipText};

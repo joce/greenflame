@@ -1,10 +1,22 @@
 #include "greenflame_core/freehand_annotation_tool.h"
 #include "greenflame_core/line_annotation_tool.h"
+#include "greenflame_core/rectangle_annotation_tool.h"
 #include "greenflame_core/undo_stack.h"
 
 using namespace greenflame::core;
 
 namespace {
+
+[[nodiscard]] AnnotationToolDescriptor Rectangle_tool_descriptor() {
+    return AnnotationToolDescriptor{AnnotationToolId::Rectangle, L"Rectangle tool",
+                                    L'R', L"R", AnnotationToolbarGlyph::Rectangle};
+}
+
+[[nodiscard]] AnnotationToolDescriptor Filled_rectangle_tool_descriptor() {
+    return AnnotationToolDescriptor{AnnotationToolId::FilledRectangle,
+                                    L"Filled rectangle tool", L'F', L"F",
+                                    AnnotationToolbarGlyph::FilledRectangle};
+}
 
 class RecordingAnnotationToolHost final : public IAnnotationToolHost {
   public:
@@ -132,4 +144,76 @@ TEST(annotation_tool, LineTool_RefreshesDraftAfterStyleChangeNotification) {
 
     ASSERT_NE(tool.Draft_annotation(host), nullptr);
     EXPECT_EQ(tool.Draft_annotation(host)->line.style, host.stroke_style);
+}
+
+TEST(annotation_tool, RectangleTool_UsesHostStyleAndCommit) {
+    RecordingAnnotationToolHost host;
+    UndoStack undo_stack;
+    RectangleAnnotationTool tool(Rectangle_tool_descriptor(), false);
+
+    host.next_annotation_id = 11;
+    host.stroke_style = StrokeStyle{6, RGB(0x20, 0x40, 0x60)};
+
+    EXPECT_TRUE(tool.On_primary_press(host, {15, 20}));
+    EXPECT_TRUE(tool.On_pointer_move(host, {45, 60}));
+    ASSERT_NE(tool.Draft_annotation(host), nullptr);
+    EXPECT_EQ(tool.Draft_annotation(host)->kind, AnnotationKind::Rectangle);
+    EXPECT_FALSE(tool.Draft_annotation(host)->rectangle.filled);
+    EXPECT_EQ(tool.Draft_annotation(host)->id, 11u);
+    EXPECT_EQ(tool.Draft_annotation(host)->rectangle.style, host.stroke_style);
+    EXPECT_EQ(tool.Draft_annotation(host)->rectangle.outer_bounds,
+              (RectPx::From_ltrb(15, 20, 46, 61)));
+
+    EXPECT_TRUE(tool.On_primary_release(host, undo_stack));
+    EXPECT_FALSE(tool.Has_active_gesture());
+    EXPECT_EQ(tool.Draft_annotation(host), nullptr);
+    ASSERT_EQ(host.committed_annotations.size(), 1u);
+    EXPECT_EQ(host.committed_annotations[0].kind, AnnotationKind::Rectangle);
+    EXPECT_FALSE(host.committed_annotations[0].rectangle.filled);
+    EXPECT_EQ(host.committed_annotations[0].rectangle.style, host.stroke_style);
+    EXPECT_EQ(host.committed_annotations[0].rectangle.outer_bounds,
+              (RectPx::From_ltrb(15, 20, 46, 61)));
+}
+
+TEST(annotation_tool, RectangleTool_RefreshesDraftAfterStyleChangeNotification) {
+    RecordingAnnotationToolHost host;
+    RectangleAnnotationTool tool(Rectangle_tool_descriptor(), false);
+
+    host.stroke_style = StrokeStyle{3, RGB(0x01, 0x02, 0x03)};
+    EXPECT_TRUE(tool.On_primary_press(host, {30, 30}));
+    EXPECT_TRUE(tool.On_pointer_move(host, {60, 30}));
+    ASSERT_NE(tool.Draft_annotation(host), nullptr);
+    EXPECT_EQ(tool.Draft_annotation(host)->rectangle.style.width_px, 3);
+
+    host.stroke_style = StrokeStyle{12, RGB(0x10, 0x20, 0x30)};
+    tool.On_stroke_style_changed();
+
+    ASSERT_NE(tool.Draft_annotation(host), nullptr);
+    EXPECT_EQ(tool.Draft_annotation(host)->rectangle.style, host.stroke_style);
+}
+
+TEST(annotation_tool, FilledRectangleTool_UsesCurrentColorAndCommit) {
+    RecordingAnnotationToolHost host;
+    UndoStack undo_stack;
+    RectangleAnnotationTool tool(Filled_rectangle_tool_descriptor(), true);
+
+    host.next_annotation_id = 17;
+    host.stroke_style = StrokeStyle{9, RGB(0xAA, 0x44, 0x11)};
+
+    EXPECT_TRUE(tool.On_primary_press(host, {50, 40}));
+    EXPECT_TRUE(tool.On_pointer_move(host, {70, 60}));
+    ASSERT_NE(tool.Draft_annotation(host), nullptr);
+    EXPECT_EQ(tool.Draft_annotation(host)->kind, AnnotationKind::Rectangle);
+    EXPECT_TRUE(tool.Draft_annotation(host)->rectangle.filled);
+    EXPECT_EQ(tool.Draft_annotation(host)->rectangle.style.color,
+              host.stroke_style.color);
+    EXPECT_EQ(tool.Draft_annotation(host)->rectangle.outer_bounds,
+              (RectPx::From_ltrb(50, 40, 71, 61)));
+
+    EXPECT_TRUE(tool.On_primary_release(host, undo_stack));
+    EXPECT_FALSE(tool.Has_active_gesture());
+    ASSERT_EQ(host.committed_annotations.size(), 1u);
+    EXPECT_TRUE(host.committed_annotations[0].rectangle.filled);
+    EXPECT_EQ(host.committed_annotations[0].rectangle.style.color,
+              host.stroke_style.color);
 }

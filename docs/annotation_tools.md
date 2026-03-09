@@ -55,6 +55,8 @@ The annotation system applies only to the interactive overlay flow.
 - Registered tools:
   - `Brush tool` hotkey `B`
   - `Line tool` hotkey `L`
+  - `Rectangle tool` hotkey `R`
+  - `Filled rectangle tool` hotkey `F`
 - The toolbar is anchored to the current selection border.
 - Toolbar buttons display a tool glyph when one is available.
 - Hovering a toolbar button shows a tooltip with the full tool name.
@@ -62,6 +64,10 @@ The annotation system applies only to the interactive overlay flow.
   off.
 - Pressing `L` or clicking the `Line tool` toolbar button toggles that tool on or
   off.
+- Pressing `R` or clicking the `Rectangle tool` toolbar button toggles that tool on
+  or off.
+- Pressing `F` or clicking the `Filled rectangle tool` toolbar button toggles that
+  tool on or off.
 - While an annotation tool is active, right-click opens a color wheel centered on
   the cursor.
 - While the color wheel is visible:
@@ -69,12 +75,15 @@ The annotation system applies only to the interactive overlay flow.
   - left-clicking a slot selects that color for future annotations and closes the
     wheel
   - `Esc` closes the wheel without changing color
-- While the Brush or Line tool is active, mouse-wheel up/down or `Ctrl+=` /
-  `Ctrl+-` increases or decreases stroke width within the `1..50` range.
+- While the Brush, Line, or Rectangle tool is active, mouse-wheel up/down or
+  `Ctrl+=` / `Ctrl+-` increases or decreases stroke width within the `1..50`
+  range.
 - While the Brush tool is active, the overlay draws an anti-aliased circular size
   preview around the cursor hotspot.
 - While the Line tool is active, the overlay draws an anti-aliased square size
   preview around the cursor hotspot aligned to the current line direction.
+- The Rectangle and Filled rectangle tools do not draw a cursor size preview
+  overlay.
 - Stroke-width changes show a temporary centered size overlay inside the current
   selection using the same visual treatment as the center selection-size label.
 - Stroke width persists in the INI file at `[tools] brush_width`.
@@ -96,6 +105,9 @@ The annotation system applies only to the interactive overlay flow.
   box.
 - Selected line annotations are shown by drawing 5px hollow endpoint handles with a
   1px white inner and outer halo.
+- Selected rectangle annotations are shown by drawing eight resize handles when
+  space permits; corner handles take precedence over side handles when the bounds
+  are too small to show all handles without overlap.
 - `Delete` removes the selected annotation.
 - Deletion is undoable and redoable.
 
@@ -141,6 +153,8 @@ The registry lives in core.
   - current concrete tools:
     - `BrushTool`
     - `LineTool`
+    - `RectangleTool`
+    - `FilledRectangleTool`
 
 Tools are objects so behavior remains encapsulated and future tools can be added
 without pushing per-tool logic into the Win32 layer.
@@ -157,6 +171,7 @@ without pushing per-tool logic into the Win32 layer.
   - current kinds:
     - `Freehand`
     - `Line`
+    - `Rectangle`
 
 - `FreehandStrokeAnnotation`
   - raw/smoothed points in physical pixels
@@ -173,6 +188,14 @@ without pushing per-tool logic into the Win32 layer.
   - start/end points in physical pixels
   - stroke style
   - cached raster coverage with square end caps
+  - committed on mouse-up, then becomes undoable
+
+- `RectangleAnnotation`
+  - outer bounds in physical pixels using inclusive-dragged corners mapped to an
+    exclusive right/bottom rect
+  - stroke style and fill flag
+  - outlined rectangles draw their border fully inward from the dragged outer edge
+  - cached raster coverage
   - committed on mouse-up, then becomes undoable
 
 ## Rasterization, preview, and hit-testing
@@ -218,6 +241,14 @@ The in-progress line preview reuses the committed core raster path:
 - the overlay composites that draft raster above committed annotations
 - hit-testing and save/copy still ignore the draft until mouse-up commits it
 
+### Draft rectangle preview
+
+The Rectangle and Filled rectangle tools also reuse the committed core raster path:
+
+- the draft rectangle is rasterized in core during the gesture
+- the overlay composites that draft raster above committed annotations
+- hit-testing and save/copy still ignore the draft until mouse-up commits it
+
 ## Freehand smoothing
 
 Smoothing is intentionally abstracted.
@@ -258,10 +289,13 @@ The overlay paint path draws in this order:
 4. in-progress annotation preview
    - freehand preview is drawn directly from draft points for responsiveness
    - line preview is composited from the draft core raster
+   - rectangle and filled-rectangle previews are composited from the draft core
+     raster
 5. selection labels / crosshair / region handles
 6. selected-annotation markers
    - freehand uses bounding-box corners
    - line uses endpoint handles
+   - rectangle uses corner/side resize handles
 7. toolbar buttons and tooltip
 8. color wheel, when visible
 

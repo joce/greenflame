@@ -84,6 +84,22 @@ constexpr int kLineRasterSamplesPerAxis = 4;
     return Centered_square_bounds(endpoint, kAnnotationHandleHitSizePx);
 }
 
+[[nodiscard]] RectPx Rectangle_handle_hit_bounds(RectPx outer_bounds,
+                                                 SelectionHandle handle) noexcept {
+    return Centered_square_bounds(Rectangle_resize_handle_center(outer_bounds, handle),
+                                  kAnnotationHandleHitSizePx);
+}
+
+[[nodiscard]] RectPx Rectangle_handle_visual_bounds(RectPx outer_bounds,
+                                                    SelectionHandle handle) noexcept {
+    return Centered_square_bounds(Rectangle_resize_handle_center(outer_bounds, handle),
+                                  kAnnotationHandleOuterSizePx);
+}
+
+[[nodiscard]] bool Rects_overlap(RectPx a, RectPx b) noexcept {
+    return RectPx::Intersect(a, b).has_value();
+}
+
 [[nodiscard]] int64_t Distance_sq(PointPx a, PointPx b) noexcept {
     int64_t const dx = static_cast<int64_t>(a.x) - static_cast<int64_t>(b.x);
     int64_t const dy = static_cast<int64_t>(a.y) - static_cast<int64_t>(b.y);
@@ -255,12 +271,45 @@ AnnotationRaster Rasterize_line_segment(PointPx start, PointPx end, StrokeStyle 
     return Rasterize_line_frame(Build_line_raster_frame(start, end, style));
 }
 
+AnnotationRaster Rasterize_rectangle(RectPx outer_bounds, StrokeStyle style,
+                                     bool filled) noexcept {
+    AnnotationRaster raster{};
+    raster.bounds = outer_bounds.Normalized();
+    if (raster.bounds.Is_empty()) {
+        return raster;
+    }
+
+    size_t const width = static_cast<size_t>(raster.Width());
+    size_t const height = static_cast<size_t>(raster.Height());
+    raster.coverage.assign(width * height, 0);
+
+    int32_t const inset = std::max<int32_t>(StrokeStyle::kMinWidthPx, style.width_px);
+    RectPx const inner =
+        RectPx::From_ltrb(raster.bounds.left + inset, raster.bounds.top + inset,
+                          raster.bounds.right - inset, raster.bounds.bottom - inset);
+
+    for (int32_t y = raster.bounds.top; y < raster.bounds.bottom; ++y) {
+        for (int32_t x = raster.bounds.left; x < raster.bounds.right; ++x) {
+            bool const covered = filled || inner.Is_empty() || x < inner.left ||
+                                 x >= inner.right || y < inner.top || y >= inner.bottom;
+            if (!covered) {
+                continue;
+            }
+            raster.coverage[Coverage_index(raster, {x, y})] = kFullOpacity;
+        }
+    }
+
+    return raster;
+}
+
 RectPx Annotation_bounds(Annotation const &annotation) noexcept {
     switch (annotation.kind) {
     case AnnotationKind::Freehand:
         return annotation.freehand.raster.bounds;
     case AnnotationKind::Line:
         return annotation.line.raster.bounds;
+    case AnnotationKind::Rectangle:
+        return annotation.rectangle.outer_bounds.Normalized();
     }
     return {};
 }
@@ -273,6 +322,9 @@ bool Annotation_hits_point(Annotation const &annotation, PointPx point) noexcept
         break;
     case AnnotationKind::Line:
         raster = &annotation.line.raster;
+        break;
+    case AnnotationKind::Rectangle:
+        raster = &annotation.rectangle.raster;
         break;
     }
     if (raster == nullptr || !raster->bounds.Contains(point) ||
@@ -322,6 +374,158 @@ Hit_test_line_endpoint_handles(PointPx start, PointPx end, PointPx cursor) noexc
                : std::optional<AnnotationLineEndpoint>{AnnotationLineEndpoint::End};
 }
 
+RectPx Rectangle_outer_bounds_from_corners(PointPx a, PointPx b) noexcept {
+    int32_t const left = std::min(a.x, b.x);
+    int32_t const top = std::min(a.y, b.y);
+    int32_t const right = std::max(a.x, b.x) + 1;
+    int32_t const bottom = std::max(a.y, b.y) + 1;
+    return RectPx::From_ltrb(left, top, right, bottom);
+}
+
+PointPx Rectangle_resize_handle_center(RectPx outer_bounds,
+                                       SelectionHandle handle) noexcept {
+    RectPx const r = outer_bounds.Normalized();
+    int32_t const right = r.right - 1;
+    int32_t const bottom = r.bottom - 1;
+    int32_t const center_x = (r.left + right) / 2;
+    int32_t const center_y = (r.top + bottom) / 2;
+
+    switch (handle) {
+    case SelectionHandle::TopLeft:
+        return {r.left, r.top};
+    case SelectionHandle::TopRight:
+        return {right, r.top};
+    case SelectionHandle::BottomRight:
+        return {right, bottom};
+    case SelectionHandle::BottomLeft:
+        return {r.left, bottom};
+    case SelectionHandle::Top:
+        return {center_x, r.top};
+    case SelectionHandle::Right:
+        return {right, center_y};
+    case SelectionHandle::Bottom:
+        return {center_x, bottom};
+    case SelectionHandle::Left:
+        return {r.left, center_y};
+    }
+    return {r.left, r.top};
+}
+
+std::array<bool, 8> Visible_rectangle_resize_handles(RectPx outer_bounds) noexcept {
+    std::array<bool, 8> visible{};
+    visible.fill(true);
+
+    RectPx const top_left =
+        Rectangle_handle_visual_bounds(outer_bounds, SelectionHandle::TopLeft);
+    RectPx const top_right =
+        Rectangle_handle_visual_bounds(outer_bounds, SelectionHandle::TopRight);
+    RectPx const bottom_right =
+        Rectangle_handle_visual_bounds(outer_bounds, SelectionHandle::BottomRight);
+    RectPx const bottom_left =
+        Rectangle_handle_visual_bounds(outer_bounds, SelectionHandle::BottomLeft);
+
+    RectPx const top =
+        Rectangle_handle_visual_bounds(outer_bounds, SelectionHandle::Top);
+    if (Rects_overlap(top, top_left) || Rects_overlap(top, top_right)) {
+        visible[static_cast<size_t>(SelectionHandle::Top)] = false;
+    }
+
+    RectPx const right =
+        Rectangle_handle_visual_bounds(outer_bounds, SelectionHandle::Right);
+    if (Rects_overlap(right, top_right) || Rects_overlap(right, bottom_right)) {
+        visible[static_cast<size_t>(SelectionHandle::Right)] = false;
+    }
+
+    RectPx const bottom =
+        Rectangle_handle_visual_bounds(outer_bounds, SelectionHandle::Bottom);
+    if (Rects_overlap(bottom, bottom_left) || Rects_overlap(bottom, bottom_right)) {
+        visible[static_cast<size_t>(SelectionHandle::Bottom)] = false;
+    }
+
+    RectPx const left =
+        Rectangle_handle_visual_bounds(outer_bounds, SelectionHandle::Left);
+    if (Rects_overlap(left, top_left) || Rects_overlap(left, bottom_left)) {
+        visible[static_cast<size_t>(SelectionHandle::Left)] = false;
+    }
+
+    return visible;
+}
+
+std::optional<SelectionHandle>
+Hit_test_rectangle_resize_handles(RectPx outer_bounds, PointPx cursor) noexcept {
+    std::array<bool, 8> const visible = Visible_rectangle_resize_handles(outer_bounds);
+    for (size_t i = 0; i < visible.size(); ++i) {
+        if (!visible[i]) {
+            continue;
+        }
+        SelectionHandle const handle = static_cast<SelectionHandle>(i);
+        if (Rectangle_handle_hit_bounds(outer_bounds, handle).Contains(cursor)) {
+            return handle;
+        }
+    }
+    return std::nullopt;
+}
+
+RectPx Resize_rectangle_from_handle(RectPx outer_bounds, SelectionHandle handle,
+                                    PointPx cursor) noexcept {
+    constexpr int32_t kMinSizePx = 1;
+
+    RectPx r = outer_bounds.Normalized();
+    if (r.Is_empty()) {
+        return r;
+    }
+
+    switch (handle) {
+    case SelectionHandle::TopLeft:
+        r.left = cursor.x;
+        r.top = cursor.y;
+        break;
+    case SelectionHandle::TopRight:
+        r.right = cursor.x + 1;
+        r.top = cursor.y;
+        break;
+    case SelectionHandle::BottomRight:
+        r.right = cursor.x + 1;
+        r.bottom = cursor.y + 1;
+        break;
+    case SelectionHandle::BottomLeft:
+        r.left = cursor.x;
+        r.bottom = cursor.y + 1;
+        break;
+    case SelectionHandle::Top:
+        r.top = cursor.y;
+        break;
+    case SelectionHandle::Right:
+        r.right = cursor.x + 1;
+        break;
+    case SelectionHandle::Bottom:
+        r.bottom = cursor.y + 1;
+        break;
+    case SelectionHandle::Left:
+        r.left = cursor.x;
+        break;
+    }
+
+    r = r.Normalized();
+    if (r.Width() < kMinSizePx) {
+        if (handle == SelectionHandle::Left || handle == SelectionHandle::TopLeft ||
+            handle == SelectionHandle::BottomLeft) {
+            r.left = r.right - kMinSizePx;
+        } else {
+            r.right = r.left + kMinSizePx;
+        }
+    }
+    if (r.Height() < kMinSizePx) {
+        if (handle == SelectionHandle::Top || handle == SelectionHandle::TopLeft ||
+            handle == SelectionHandle::TopRight) {
+            r.top = r.bottom - kMinSizePx;
+        } else {
+            r.bottom = r.top + kMinSizePx;
+        }
+    }
+    return r.Normalized();
+}
+
 Annotation Translate_annotation(Annotation annotation, PointPx delta) noexcept {
     switch (annotation.kind) {
     case AnnotationKind::Freehand:
@@ -345,6 +549,18 @@ Annotation Translate_annotation(Annotation annotation, PointPx delta) noexcept {
                               annotation.line.raster.bounds.top + delta.y,
                               annotation.line.raster.bounds.right + delta.x,
                               annotation.line.raster.bounds.bottom + delta.y);
+        break;
+    case AnnotationKind::Rectangle:
+        annotation.rectangle.outer_bounds =
+            RectPx::From_ltrb(annotation.rectangle.outer_bounds.left + delta.x,
+                              annotation.rectangle.outer_bounds.top + delta.y,
+                              annotation.rectangle.outer_bounds.right + delta.x,
+                              annotation.rectangle.outer_bounds.bottom + delta.y);
+        annotation.rectangle.raster.bounds =
+            RectPx::From_ltrb(annotation.rectangle.raster.bounds.left + delta.x,
+                              annotation.rectangle.raster.bounds.top + delta.y,
+                              annotation.rectangle.raster.bounds.right + delta.x,
+                              annotation.rectangle.raster.bounds.bottom + delta.y);
         break;
     }
     return annotation;
@@ -381,6 +597,10 @@ void Blend_annotation_onto_pixels(std::span<uint8_t> pixels, int width, int heig
     case AnnotationKind::Line:
         raster = &annotation.line.raster;
         style = annotation.line.style;
+        break;
+    case AnnotationKind::Rectangle:
+        raster = &annotation.rectangle.raster;
+        style = annotation.rectangle.style;
         break;
     }
     if (raster == nullptr || raster->Is_empty()) {

@@ -50,6 +50,16 @@ set(GREENFLAME_LINE_TOOL_GLYPH_PATH
 )
 file(TO_CMAKE_PATH "${GREENFLAME_LINE_TOOL_GLYPH_PATH}"
      GREENFLAME_LINE_TOOL_GLYPH_PATH)
+set(GREENFLAME_RECTANGLE_TOOL_GLYPH_PATH
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/rectangle-mask.png"
+)
+file(TO_CMAKE_PATH "${GREENFLAME_RECTANGLE_TOOL_GLYPH_PATH}"
+     GREENFLAME_RECTANGLE_TOOL_GLYPH_PATH)
+set(GREENFLAME_FILLED_RECTANGLE_TOOL_GLYPH_PATH
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/filled_rectangle-mask.png"
+)
+file(TO_CMAKE_PATH "${GREENFLAME_FILLED_RECTANGLE_TOOL_GLYPH_PATH}"
+     GREENFLAME_FILLED_RECTANGLE_TOOL_GLYPH_PATH)
 
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/app.manifest.in"
@@ -110,6 +120,8 @@ add_library(greenflame_core STATIC
     src/greenflame_core/freehand_annotation_tool.h
     src/greenflame_core/line_annotation_tool.cpp
     src/greenflame_core/line_annotation_tool.h
+    src/greenflame_core/rectangle_annotation_tool.cpp
+    src/greenflame_core/rectangle_annotation_tool.h
     src/greenflame_core/annotation_tool_registry.cpp
     src/greenflame_core/annotation_tool_registry.h
     src/greenflame_core/color_wheel.cpp

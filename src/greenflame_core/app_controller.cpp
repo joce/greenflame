@@ -214,9 +214,11 @@ core::OverlayHelpContent AppController::Build_overlay_help_content() const {
     tools.entries = {
         {L"B", L"Toggle Brush tool"},
         {L"L", L"Toggle Line tool"},
+        {L"R", L"Toggle Rectangle tool"},
+        {L"F", L"Toggle Filled rectangle tool"},
         {L"Right Click", L"Open color wheel at cursor"},
-        {L"Wheel Up / Ctrl + =", L"Increase Brush/Line width"},
-        {L"Wheel Down / Ctrl + -", L"Decrease Brush/Line width"},
+        {L"Wheel Up / Ctrl + =", L"Increase Brush/Line/Rectangle width"},
+        {L"Wheel Down / Ctrl + -", L"Decrease Brush/Line/Rectangle width"},
     };
     content.sections.push_back(std::move(tools));
 

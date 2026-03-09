@@ -8,6 +8,14 @@ enum class AnnotationEditTargetKind : uint8_t {
     Body,
     LineStartHandle,
     LineEndHandle,
+    RectangleTopLeftHandle,
+    RectangleTopRightHandle,
+    RectangleBottomRightHandle,
+    RectangleBottomLeftHandle,
+    RectangleTopHandle,
+    RectangleRightHandle,
+    RectangleBottomHandle,
+    RectangleLeftHandle,
 };
 
 struct AnnotationEditTarget final {
@@ -20,6 +28,14 @@ struct AnnotationEditTarget final {
 enum class AnnotationEditHandleKind : uint8_t {
     LineStart,
     LineEnd,
+    RectangleTopLeft,
+    RectangleTopRight,
+    RectangleBottomRight,
+    RectangleBottomLeft,
+    RectangleTop,
+    RectangleRight,
+    RectangleBottom,
+    RectangleLeft,
 };
 
 struct AnnotationEditCommandData final {

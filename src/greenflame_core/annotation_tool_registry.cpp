@@ -2,6 +2,7 @@
 
 #include "greenflame_core/freehand_annotation_tool.h"
 #include "greenflame_core/line_annotation_tool.h"
+#include "greenflame_core/rectangle_annotation_tool.h"
 
 namespace greenflame::core {
 
@@ -16,6 +17,15 @@ namespace {
 AnnotationToolRegistry::AnnotationToolRegistry() {
     tools_.push_back(std::make_unique<FreehandAnnotationTool>());
     tools_.push_back(std::make_unique<LineAnnotationTool>());
+    tools_.push_back(std::make_unique<RectangleAnnotationTool>(
+        AnnotationToolDescriptor{AnnotationToolId::Rectangle, L"Rectangle tool", L'R',
+                                 L"R", AnnotationToolbarGlyph::Rectangle},
+        false));
+    tools_.push_back(std::make_unique<RectangleAnnotationTool>(
+        AnnotationToolDescriptor{AnnotationToolId::FilledRectangle,
+                                 L"Filled rectangle tool", L'F', L"F",
+                                 AnnotationToolbarGlyph::FilledRectangle},
+        true));
 }
 
 IAnnotationTool const *

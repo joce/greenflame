@@ -1,12 +1,14 @@
 #pragma once
 
 #include "greenflame_core/rect_px.h"
+#include "greenflame_core/selection_handles.h"
 
 namespace greenflame::core {
 
 enum class AnnotationKind : uint8_t {
     Freehand,
     Line,
+    Rectangle,
 };
 
 struct StrokeStyle final {
@@ -52,6 +54,15 @@ struct LineAnnotation final {
     constexpr bool operator==(LineAnnotation const &) const noexcept = default;
 };
 
+struct RectangleAnnotation final {
+    RectPx outer_bounds = {};
+    StrokeStyle style = {};
+    bool filled = false;
+    AnnotationRaster raster = {};
+
+    constexpr bool operator==(RectangleAnnotation const &) const noexcept = default;
+};
+
 enum class AnnotationLineEndpoint : uint8_t {
     Start,
     End,
@@ -68,6 +79,7 @@ struct Annotation final {
     AnnotationKind kind = AnnotationKind::Freehand;
     FreehandStrokeAnnotation freehand = {};
     LineAnnotation line = {};
+    RectangleAnnotation rectangle = {};
 
     constexpr bool operator==(Annotation const &) const noexcept = default;
 };
@@ -84,6 +96,8 @@ struct AnnotationDocument final {
 Rasterize_freehand_stroke(std::span<const PointPx> points, StrokeStyle style);
 [[nodiscard]] AnnotationRaster Rasterize_line_segment(PointPx start, PointPx end,
                                                       StrokeStyle style);
+[[nodiscard]] AnnotationRaster
+Rasterize_rectangle(RectPx outer_bounds, StrokeStyle style, bool filled) noexcept;
 [[nodiscard]] RectPx Annotation_bounds(Annotation const &annotation) noexcept;
 [[nodiscard]] bool Annotation_hits_point(Annotation const &annotation,
                                          PointPx point) noexcept;
@@ -94,6 +108,16 @@ Index_of_topmost_annotation_at(std::span<const Annotation> annotations,
 Index_of_annotation_id(std::span<const Annotation> annotations, uint64_t id) noexcept;
 [[nodiscard]] std::optional<AnnotationLineEndpoint>
 Hit_test_line_endpoint_handles(PointPx start, PointPx end, PointPx cursor) noexcept;
+[[nodiscard]] RectPx Rectangle_outer_bounds_from_corners(PointPx a, PointPx b) noexcept;
+[[nodiscard]] PointPx Rectangle_resize_handle_center(RectPx outer_bounds,
+                                                     SelectionHandle handle) noexcept;
+[[nodiscard]] std::array<bool, 8>
+Visible_rectangle_resize_handles(RectPx outer_bounds) noexcept;
+[[nodiscard]] std::optional<SelectionHandle>
+Hit_test_rectangle_resize_handles(RectPx outer_bounds, PointPx cursor) noexcept;
+[[nodiscard]] RectPx Resize_rectangle_from_handle(RectPx outer_bounds,
+                                                  SelectionHandle handle,
+                                                  PointPx cursor) noexcept;
 [[nodiscard]] Annotation Translate_annotation(Annotation annotation,
                                               PointPx delta) noexcept;
 

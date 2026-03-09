@@ -519,6 +519,20 @@ void Draw_line_endpoint_handle(HDC dc, greenflame::core::PointPx center) noexcep
     Draw_square_outline(dc, inner_bounds, white);
 }
 
+void Draw_rectangle_resize_handles(HDC dc,
+                                   greenflame::core::RectPx outer_bounds) noexcept {
+    std::array<bool, 8> const visible =
+        greenflame::core::Visible_rectangle_resize_handles(outer_bounds);
+    for (size_t i = 0; i < visible.size(); ++i) {
+        if (!visible[i]) {
+            continue;
+        }
+        Draw_line_endpoint_handle(
+            dc, greenflame::core::Rectangle_resize_handle_center(
+                    outer_bounds, static_cast<greenflame::core::SelectionHandle>(i)));
+    }
+}
+
 void Draw_annotation_selection_corners(HDC dc, HPEN pen,
                                        greenflame::core::RectPx const &bounds) {
     if (pen == nullptr || bounds.Is_empty()) {
@@ -609,10 +623,9 @@ void Draw_line_cursor_preview(
 
     Gdiplus::REAL const half_size = inner_size * 0.5f;
     Gdiplus::RectF const rect(-half_size, -half_size, inner_size, inner_size);
-    Gdiplus::Pen white_pen(
-        Gdiplus::Color(kOpaqueAlpha, kColorChannelMax, kColorChannelMax,
-                       kColorChannelMax),
-        kBrushPreviewWhiteStrokeWidth);
+    Gdiplus::Pen white_pen(Gdiplus::Color(kOpaqueAlpha, kColorChannelMax,
+                                          kColorChannelMax, kColorChannelMax),
+                           kBrushPreviewWhiteStrokeWidth);
     Gdiplus::Pen black_pen(Gdiplus::Color(kOpaqueAlpha, 0, 0, 0),
                            kBrushPreviewBlackStrokeWidth);
     (void)graphics.DrawRectangle(&white_pen, rect);
@@ -1511,7 +1524,7 @@ void Paint_overlay(HDC hdc, HWND hwnd, const RECT &rc, const PaintOverlayInput &
         Draw_draft_freehand_stroke(buf_dc, in.draft_freehand_points,
                                    *in.draft_freehand_style);
     } else if (in.draft_annotation != nullptr &&
-               in.draft_annotation->kind == core::AnnotationKind::Line) {
+               in.draft_annotation->kind != core::AnnotationKind::Freehand) {
         Draw_draft_annotation_to_buffer(buf_dc, buf_bmp, w, h, in.paint_buffer,
                                         *in.draft_annotation);
     }
@@ -1553,6 +1566,9 @@ void Paint_overlay(HDC hdc, HWND hwnd, const RECT &rc, const PaintOverlayInput &
         if (in.selected_annotation->kind == core::AnnotationKind::Line) {
             Draw_line_endpoint_handle(buf_dc, in.selected_annotation->line.start);
             Draw_line_endpoint_handle(buf_dc, in.selected_annotation->line.end);
+        } else if (in.selected_annotation->kind == core::AnnotationKind::Rectangle) {
+            Draw_rectangle_resize_handles(
+                buf_dc, in.selected_annotation->rectangle.outer_bounds);
         } else if (in.selected_annotation_bounds.has_value() && in.resources &&
                    in.resources->handle_pen) {
             Draw_annotation_selection_corners(buf_dc, in.resources->handle_pen,

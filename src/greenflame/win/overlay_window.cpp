@@ -30,6 +30,8 @@ constexpr int kToolbarButtonSeparatorPx = 9; // size / 4
 constexpr int kAnnotationToolCursorResourceId = 102;
 constexpr int kBrushToolGlyphResourceId = 103;
 constexpr int kLineToolGlyphResourceId = 104;
+constexpr int kRectangleToolGlyphResourceId = 105;
+constexpr int kFilledRectangleToolGlyphResourceId = 106;
 constexpr UINT_PTR kBrushSizeOverlayTimerId = 1;
 
 constexpr int kThumbnailMaxWidth = 320;
@@ -150,6 +152,67 @@ Create_thumbnail_from_capture(greenflame::GdiCaptureResult const &capture) {
 }
 
 [[nodiscard]] HCURSOR Move_mode_cursor() { return LoadCursorW(nullptr, IDC_SIZEALL); }
+
+[[nodiscard]] std::optional<greenflame::core::SelectionHandle>
+Selection_handle_for_annotation_edit_target(
+    greenflame::core::AnnotationEditTargetKind kind) noexcept {
+    using Kind = greenflame::core::AnnotationEditTargetKind;
+    using Handle = greenflame::core::SelectionHandle;
+
+    switch (kind) {
+    case Kind::RectangleTopLeftHandle:
+        return Handle::TopLeft;
+    case Kind::RectangleTopRightHandle:
+        return Handle::TopRight;
+    case Kind::RectangleBottomRightHandle:
+        return Handle::BottomRight;
+    case Kind::RectangleBottomLeftHandle:
+        return Handle::BottomLeft;
+    case Kind::RectangleTopHandle:
+        return Handle::Top;
+    case Kind::RectangleRightHandle:
+        return Handle::Right;
+    case Kind::RectangleBottomHandle:
+        return Handle::Bottom;
+    case Kind::RectangleLeftHandle:
+        return Handle::Left;
+    case Kind::Body:
+    case Kind::LineStartHandle:
+    case Kind::LineEndHandle:
+        return std::nullopt;
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] std::optional<greenflame::core::SelectionHandle>
+Selection_handle_for_active_annotation_edit(
+    greenflame::core::AnnotationEditHandleKind kind) noexcept {
+    using Kind = greenflame::core::AnnotationEditHandleKind;
+    using Handle = greenflame::core::SelectionHandle;
+
+    switch (kind) {
+    case Kind::RectangleTopLeft:
+        return Handle::TopLeft;
+    case Kind::RectangleTopRight:
+        return Handle::TopRight;
+    case Kind::RectangleBottomRight:
+        return Handle::BottomRight;
+    case Kind::RectangleBottomLeft:
+        return Handle::BottomLeft;
+    case Kind::RectangleTop:
+        return Handle::Top;
+    case Kind::RectangleRight:
+        return Handle::Right;
+    case Kind::RectangleBottom:
+        return Handle::Bottom;
+    case Kind::RectangleLeft:
+        return Handle::Left;
+    case Kind::LineStart:
+    case Kind::LineEnd:
+        return std::nullopt;
+    }
+    return std::nullopt;
+}
 
 [[nodiscard]] HCURSOR Load_annotation_tool_cursor(HINSTANCE hinstance) {
     if (hinstance != nullptr) {
@@ -325,6 +388,8 @@ struct OverlayWindow::OverlayResources {
     PaintResources paint = {};
     std::shared_ptr<OverlayButtonGlyph const> brush_tool_glyph = {};
     std::shared_ptr<OverlayButtonGlyph const> line_tool_glyph = {};
+    std::shared_ptr<OverlayButtonGlyph const> rectangle_tool_glyph = {};
+    std::shared_ptr<OverlayButtonGlyph const> filled_rectangle_tool_glyph = {};
 
     OverlayResources() = default;
     ~OverlayResources() { Reset(); }
@@ -364,6 +429,10 @@ struct OverlayWindow::OverlayResources {
             Load_png_resource_alpha_mask(hinstance, kBrushToolGlyphResourceId);
         line_tool_glyph =
             Load_png_resource_alpha_mask(hinstance, kLineToolGlyphResourceId);
+        rectangle_tool_glyph =
+            Load_png_resource_alpha_mask(hinstance, kRectangleToolGlyphResourceId);
+        filled_rectangle_tool_glyph = Load_png_resource_alpha_mask(
+            hinstance, kFilledRectangleToolGlyphResourceId);
         return true;
     }
 
@@ -372,6 +441,8 @@ struct OverlayWindow::OverlayResources {
         paint_buffer.clear();
         brush_tool_glyph.reset();
         line_tool_glyph.reset();
+        rectangle_tool_glyph.reset();
+        filled_rectangle_tool_glyph.reset();
         if (paint.font_dim) {
             DeleteObject(paint.font_dim);
             paint.font_dim = nullptr;
@@ -455,6 +526,10 @@ OverlayButtonGlyph const *OverlayWindow::Resolve_toolbar_button_glyph(
         return resources_->brush_tool_glyph.get();
     case core::AnnotationToolbarGlyph::Line:
         return resources_->line_tool_glyph.get();
+    case core::AnnotationToolbarGlyph::Rectangle:
+        return resources_->rectangle_tool_glyph.get();
+    case core::AnnotationToolbarGlyph::FilledRectangle:
+        return resources_->filled_rectangle_tool_glyph.get();
     case core::AnnotationToolbarGlyph::None:
         return nullptr;
     }
@@ -1148,8 +1223,10 @@ LRESULT OverlayWindow::On_mouse_wheel(WPARAM wparam) {
     }
     std::optional<core::AnnotationToolId> const active_tool =
         controller_.Active_annotation_tool();
-    if (!active_tool.has_value() || (*active_tool != core::AnnotationToolId::Freehand &&
-                                     *active_tool != core::AnnotationToolId::Line)) {
+    if (!active_tool.has_value() ||
+        (*active_tool != core::AnnotationToolId::Freehand &&
+         *active_tool != core::AnnotationToolId::Line &&
+         *active_tool != core::AnnotationToolId::Rectangle)) {
         mouse_wheel_delta_remainder_ = 0;
         return 0;
     }
@@ -1772,6 +1849,18 @@ void OverlayWindow::Refresh_cursor() {
         SetCursor(Move_mode_cursor());
         return;
     }
+    if (std::optional<core::AnnotationEditHandleKind> const active_handle =
+            controller_.Active_annotation_edit_handle();
+        active_handle.has_value()) {
+        if (std::optional<core::SelectionHandle> const selection_handle =
+                Selection_handle_for_active_annotation_edit(*active_handle);
+            selection_handle.has_value()) {
+            SetCursor(Cursor_for_handle(*selection_handle));
+        } else {
+            SetCursor(Load_annotation_tool_cursor(hinstance_));
+        }
+        return;
+    }
     if (controller_.Has_active_annotation_gesture()) {
         SetCursor(Load_annotation_tool_cursor(hinstance_));
         return;
@@ -1795,11 +1884,20 @@ void OverlayWindow::Refresh_cursor() {
         if (!controller_.Active_annotation_tool().has_value()) {
             if (std::optional<core::AnnotationEditTarget> const edit_target =
                     controller_.Annotation_edit_target_at(cursor);
-                edit_target.has_value() &&
-                (edit_target->kind == core::AnnotationEditTargetKind::LineStartHandle ||
-                 edit_target->kind == core::AnnotationEditTargetKind::LineEndHandle)) {
-                SetCursor(Load_annotation_tool_cursor(hinstance_));
-                return;
+                edit_target.has_value()) {
+                if (std::optional<core::SelectionHandle> const selection_handle =
+                        Selection_handle_for_annotation_edit_target(edit_target->kind);
+                    selection_handle.has_value()) {
+                    SetCursor(Cursor_for_handle(*selection_handle));
+                    return;
+                }
+                if (edit_target->kind ==
+                        core::AnnotationEditTargetKind::LineStartHandle ||
+                    edit_target->kind ==
+                        core::AnnotationEditTargetKind::LineEndHandle) {
+                    SetCursor(Load_annotation_tool_cursor(hinstance_));
+                    return;
+                }
             }
         }
         std::optional<core::AnnotationToolId> const active_tool =
@@ -1809,7 +1907,9 @@ void OverlayWindow::Refresh_cursor() {
             return;
         }
         if (*active_tool == core::AnnotationToolId::Freehand ||
-            *active_tool == core::AnnotationToolId::Line) {
+            *active_tool == core::AnnotationToolId::Line ||
+            *active_tool == core::AnnotationToolId::Rectangle ||
+            *active_tool == core::AnnotationToolId::FilledRectangle) {
             SetCursor(Load_annotation_tool_cursor(hinstance_));
         } else {
             SetCursor(LoadCursorW(nullptr, IDC_ARROW));

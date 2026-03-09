@@ -804,6 +804,32 @@ TEST(overlay_controller, AnnotationToolHotkey_TogglesLine) {
     EXPECT_EQ(c.Active_annotation_tool(), std::nullopt);
 }
 
+TEST(overlay_controller, AnnotationToolHotkey_TogglesRectangle) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+
+    EXPECT_EQ(c.Active_annotation_tool(), std::nullopt);
+    EXPECT_EQ(c.On_annotation_tool_hotkey(L'R'), OverlayAction::Repaint);
+    EXPECT_EQ(c.Active_annotation_tool(),
+              std::optional<AnnotationToolId>{AnnotationToolId::Rectangle});
+    EXPECT_EQ(c.On_annotation_tool_hotkey(L'R'), OverlayAction::Repaint);
+    EXPECT_EQ(c.Active_annotation_tool(), std::nullopt);
+}
+
+TEST(overlay_controller, AnnotationToolHotkey_TogglesFilledRectangle) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+
+    EXPECT_EQ(c.Active_annotation_tool(), std::nullopt);
+    EXPECT_EQ(c.On_annotation_tool_hotkey(L'F'), OverlayAction::Repaint);
+    EXPECT_EQ(c.Active_annotation_tool(),
+              std::optional<AnnotationToolId>{AnnotationToolId::FilledRectangle});
+    EXPECT_EQ(c.On_annotation_tool_hotkey(L'F'), OverlayAction::Repaint);
+    EXPECT_EQ(c.Active_annotation_tool(), std::nullopt);
+}
+
 TEST(overlay_controller, BrushWidthAdjust_IgnoresInactiveBrushTool) {
     auto c = Make_controller();
 
@@ -835,6 +861,26 @@ TEST(overlay_controller, BrushWidthAdjust_AppliesToLineTool) {
     EXPECT_EQ(c.Brush_width_px(), StrokeStyle::kDefaultWidthPx);
     EXPECT_EQ(c.Adjust_brush_width(1), std::optional<int32_t>{3});
     EXPECT_EQ(c.Adjust_brush_width(-2), std::optional<int32_t>{1});
+}
+
+TEST(overlay_controller, BrushWidthAdjust_AppliesToRectangleTool) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'R'), OverlayAction::Repaint);
+
+    EXPECT_EQ(c.Brush_width_px(), StrokeStyle::kDefaultWidthPx);
+    EXPECT_EQ(c.Adjust_brush_width(2), std::optional<int32_t>{4});
+    EXPECT_EQ(c.Adjust_brush_width(-3), std::optional<int32_t>{1});
+}
+
+TEST(overlay_controller, BrushWidthAdjust_IgnoresFilledRectangleTool) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'F'), OverlayAction::Repaint);
+
+    EXPECT_EQ(c.Adjust_brush_width(1), std::nullopt);
 }
 
 TEST(overlay_controller,

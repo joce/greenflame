@@ -35,18 +35,31 @@ Current convention:
 - white pixels become transparent
 - gray pixels become intermediate alpha
 
-For the brush glyph, the source file is:
+Examples of source files:
 
 - `resources/brush.png`
+- `resources/line.png`
+- `resources/rectangle.png`
+- `resources/filled_rectangle.png`
 
-The derived embedded asset is:
+Derived embedded assets follow the same naming pattern:
 
 - `resources/brush-mask.png`
+- `resources/line-mask.png`
+- `resources/rectangle-mask.png`
+- `resources/filled_rectangle-mask.png`
 
 Generate the derived asset once with ImageMagick:
 
 ```bat
 magick resources\brush.png -colorspace Gray -negate -alpha copy -fill white -colorize 100 -strip resources\brush-mask.png
+```
+
+For example:
+
+```bat
+magick resources\rectangle.png -colorspace Gray -negate -alpha copy -fill white -colorize 100 -strip resources\rectangle-mask.png
+magick resources\filled_rectangle.png -colorspace Gray -negate -alpha copy -fill white -colorize 100 -strip resources\filled_rectangle-mask.png
 ```
 
 What this does:

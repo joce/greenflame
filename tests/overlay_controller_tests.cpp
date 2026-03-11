@@ -737,6 +737,19 @@ TEST(overlay_controller, I_AfterPress_SnapEdgesPopulated) {
     EXPECT_FALSE(c.State().horizontal_edges.empty());
 }
 
+TEST(overlay_controller, I_RefreshSnapEdges_PopulatesBeforeAnyPress) {
+    auto c = Make_controller();
+    std::vector<RectPx> win_rects = {RectPx::From_ltrb(200, 200, 400, 400)};
+    for (auto const &m : c.State().cached_monitors) {
+        win_rects.push_back(m.bounds);
+    }
+
+    c.Refresh_snap_edges(std::move(win_rects), 0, 0);
+
+    EXPECT_FALSE(c.State().vertical_edges.empty());
+    EXPECT_FALSE(c.State().horizontal_edges.empty());
+}
+
 TEST(overlay_controller, I_SnapEdgesIncludeWindowEdges) {
     auto c = Make_controller();
     std::vector<RectPx> win_rects = {RectPx::From_ltrb(200, 100, 400, 300)};

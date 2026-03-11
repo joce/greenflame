@@ -61,6 +61,8 @@ class OverlayController final {
     OverlayController &operator=(OverlayController &&) = default;
 
     void Reset_for_session(std::vector<MonitorWithBounds> monitors);
+    void Refresh_snap_edges(std::vector<RectPx> visible_window_rects, int32_t origin_x,
+                            int32_t origin_y);
 
     // WM_LBUTTONDOWN: all Win32 queries are pre-resolved by caller.
     [[nodiscard]] OverlayAction On_primary_press(

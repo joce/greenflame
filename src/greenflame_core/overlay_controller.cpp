@@ -49,6 +49,11 @@ void OverlayController::Reset_for_session(std::vector<MonitorWithBounds> monitor
     state_.horizontal_edges.reserve(128);
 }
 
+void OverlayController::Refresh_snap_edges(std::vector<RectPx> visible_window_rects,
+                                           int32_t origin_x, int32_t origin_y) {
+    Rebuild_snap_edges(std::move(visible_window_rects), origin_x, origin_y);
+}
+
 void OverlayController::Set_final_selection(RectPx r) {
     state_.final_selection = r;
     if (r.Is_empty()) {

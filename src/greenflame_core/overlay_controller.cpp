@@ -29,7 +29,6 @@ void OverlaySessionData::Reset_for_session() {
     selection_window = std::nullopt;
     selection_monitor_index = std::nullopt;
     last_invalidate_tick = 0;
-    window_rects.clear();
     vertical_edges.clear();
     horizontal_edges.clear();
     cached_monitors.clear();
@@ -44,14 +43,13 @@ void OverlayController::Reset_for_session(std::vector<MonitorWithBounds> monitor
     undo_stack_.Clear();
     annotation_controller_.Reset_for_session();
     state_.cached_monitors = std::move(monitors);
-    state_.window_rects.reserve(64);
     state_.vertical_edges.reserve(128);
     state_.horizontal_edges.reserve(128);
 }
 
-void OverlayController::Refresh_snap_edges(std::vector<RectPx> visible_window_rects,
+void OverlayController::Refresh_snap_edges(SnapEdges const &visible_snap_edges,
                                            int32_t origin_x, int32_t origin_y) {
-    Rebuild_snap_edges(std::move(visible_window_rects), origin_x, origin_y);
+    Rebuild_snap_edges(visible_snap_edges, origin_x, origin_y);
 }
 
 void OverlayController::Set_final_selection(RectPx r) {
@@ -207,11 +205,10 @@ bool OverlayController::Has_annotation_at(PointPx cursor) const noexcept {
     return annotation_controller_.Annotation_id_at(cursor).has_value();
 }
 
-void OverlayController::Rebuild_snap_edges(std::vector<RectPx> window_rects,
+void OverlayController::Rebuild_snap_edges(SnapEdges const &screen_edges,
                                            int32_t origin_x, int32_t origin_y) {
     SnapEdges const edges =
-        Build_snap_edges_from_screen_rects(window_rects, origin_x, origin_y);
-    state_.window_rects = std::move(window_rects);
+        Screen_snap_edges_to_client_snap_edges(screen_edges, origin_x, origin_y);
     state_.vertical_edges = edges.vertical;
     state_.horizontal_edges = edges.horizontal;
 }
@@ -338,7 +335,7 @@ OverlayAction OverlayController::On_primary_press(
     std::optional<HWND> window_under_cursor,
     std::optional<size_t> monitor_index_under_cursor,
     std::optional<RectPx> /*window_rect_screen*/, RectPx /*virtual_desktop_bounds*/,
-    std::vector<RectPx> visible_window_rects, int32_t origin_x, int32_t origin_y) {
+    SnapEdges const &visible_snap_edges, int32_t origin_x, int32_t origin_y) {
 
     // ---- Modifier-preview commit path ----
     if ((mods.shift || mods.ctrl) && state_.modifier_preview) {
@@ -373,7 +370,7 @@ OverlayAction OverlayController::On_primary_press(
             state_.resize_handle = hit;
             state_.resize_anchor_rect = state_.final_selection;
             state_.live_rect = state_.final_selection;
-            Rebuild_snap_edges(std::move(visible_window_rects), origin_x, origin_y);
+            Rebuild_snap_edges(visible_snap_edges, origin_x, origin_y);
             return OverlayAction::Repaint;
         }
 
@@ -401,7 +398,7 @@ OverlayAction OverlayController::On_primary_press(
                                        cursor_client.y - state_.final_selection.top};
             state_.move_anchor_rect = state_.final_selection;
             state_.live_rect = state_.final_selection;
-            Rebuild_snap_edges(std::move(visible_window_rects), origin_x, origin_y);
+            Rebuild_snap_edges(visible_snap_edges, origin_x, origin_y);
             return OverlayAction::Repaint;
         }
 
@@ -409,12 +406,13 @@ OverlayAction OverlayController::On_primary_press(
     }
 
     // ---- Fresh drag ----
-    Rebuild_snap_edges(std::move(visible_window_rects), origin_x, origin_y);
+    Rebuild_snap_edges(visible_snap_edges, origin_x, origin_y);
     bool const snap_enabled = !mods.alt;
     PointPx snapped_start = cursor_client;
     if (snap_enabled) {
-        snapped_start = Snap_point_to_edges(cursor_client, state_.vertical_edges,
-                                            state_.horizontal_edges, kSnapThresholdPx);
+        snapped_start = Snap_point_to_fullscreen_crosshair_edges(
+            cursor_client, state_.vertical_edges, state_.horizontal_edges,
+            kSnapThresholdPx);
     }
     state_.start_px = snapped_start;
     state_.dragging = true;

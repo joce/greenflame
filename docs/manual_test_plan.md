@@ -250,6 +250,8 @@ unless a real end-to-end bug escapes into the Win32 shell:
 - Expected:
   - Corner and side drags resize in the expected directions.
   - Dragging inside the selection moves the selection.
+  - Resize drags show the centered in-selection size label when that label is enabled.
+  - Move drags do not show the centered in-selection size label.
   - Cursor shapes match the hovered handle direction.
 
 ### GF-MAN-SEL-003 - Quick-Select Gestures

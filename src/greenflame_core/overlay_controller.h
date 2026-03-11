@@ -6,6 +6,7 @@
 #include "greenflame_core/rect_px.h"
 #include "greenflame_core/save_image_policy.h"
 #include "greenflame_core/selection_handles.h"
+#include "greenflame_core/snap_edge_builder.h"
 #include "greenflame_core/undo_stack.h"
 
 namespace greenflame::core {
@@ -36,9 +37,8 @@ struct OverlaySessionData {
     RectPx live_rect = {};
     RectPx final_selection = {};
     uint64_t last_invalidate_tick = 0;
-    std::vector<RectPx> window_rects = {};
-    std::vector<int32_t> vertical_edges = {};
-    std::vector<int32_t> horizontal_edges = {};
+    std::vector<SnapEdgeSegmentPx> vertical_edges = {};
+    std::vector<SnapEdgeSegmentPx> horizontal_edges = {};
     std::vector<MonitorWithBounds> cached_monitors = {};
     std::optional<HWND> selection_window = std::nullopt;
     std::optional<size_t> selection_monitor_index = std::nullopt;
@@ -61,16 +61,18 @@ class OverlayController final {
     OverlayController &operator=(OverlayController &&) = default;
 
     void Reset_for_session(std::vector<MonitorWithBounds> monitors);
-    void Refresh_snap_edges(std::vector<RectPx> visible_window_rects, int32_t origin_x,
+    void Refresh_snap_edges(SnapEdges const &visible_snap_edges, int32_t origin_x,
                             int32_t origin_y);
 
     // WM_LBUTTONDOWN: all Win32 queries are pre-resolved by caller.
-    [[nodiscard]] OverlayAction On_primary_press(
-        OverlayModifierState mods, PointPx cursor_client, PointPx cursor_screen,
-        std::optional<HWND> window_under_cursor,
-        std::optional<size_t> monitor_index_under_cursor,
-        std::optional<RectPx> window_rect_screen, RectPx virtual_desktop_bounds,
-        std::vector<RectPx> visible_window_rects, int32_t origin_x, int32_t origin_y);
+    [[nodiscard]] OverlayAction
+    On_primary_press(OverlayModifierState mods, PointPx cursor_client,
+                     PointPx cursor_screen, std::optional<HWND> window_under_cursor,
+                     std::optional<size_t> monitor_index_under_cursor,
+                     std::optional<RectPx> window_rect_screen,
+                     RectPx virtual_desktop_bounds,
+                     SnapEdges const &visible_snap_edges,
+                     int32_t origin_x, int32_t origin_y);
 
     // WM_MOUSEMOVE
     [[nodiscard]] OverlayAction
@@ -143,7 +145,7 @@ class OverlayController final {
     [[nodiscard]] bool Has_annotation_at(PointPx cursor) const noexcept;
 
   private:
-    void Rebuild_snap_edges(std::vector<RectPx> window_rects, int32_t origin_x,
+    void Rebuild_snap_edges(SnapEdges const &screen_edges, int32_t origin_x,
                             int32_t origin_y);
     void Apply_modifier_preview(OverlayModifierState mods, PointPx cursor_screen,
                                 std::optional<RectPx> window_rect_screen,

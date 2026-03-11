@@ -45,14 +45,14 @@ OverlayModifierState Ctrl_only() { return {false, true, false}; }
 OverlayModifierState Shift_ctrl() { return {true, true, false}; }
 OverlayModifierState Alt_only() { return {false, false, true}; }
 
-// Convenience: build vis_rects already including the monitor bounds (as Win32 layer
-// would).
-std::vector<RectPx> Make_vis_rects(OverlayController const &c,
-                                   std::vector<RectPx> window_rects = {}) {
+// Convenience: build screen-space snap edges already including the monitor bounds
+// (as the Win32 layer would).
+SnapEdges Make_snap_edges(OverlayController const &c,
+                          std::vector<RectPx> window_rects = {}) {
     for (auto const &m : c.State().cached_monitors) {
         window_rects.push_back(m.bounds);
     }
-    return window_rects;
+    return Build_snap_edges_from_screen_rects(window_rects, 0, 0);
 }
 
 // Shorthand for a fresh-drag press with no snap-relevant rects.
@@ -60,7 +60,7 @@ OverlayAction Press(OverlayController &c, PointPx pt,
                     OverlayModifierState mods = No_mods(), int32_t ox = 0,
                     int32_t oy = 0) {
     return c.On_primary_press(mods, pt, pt, std::nullopt, std::nullopt, std::nullopt,
-                              {}, Make_vis_rects(c), ox, oy);
+                              {}, Make_snap_edges(c), ox, oy);
 }
 
 OverlayAction Move(OverlayController &c, PointPx pt,
@@ -159,25 +159,21 @@ TEST(overlay_controller, B_Release_SelectionWindowIsNullopt) {
 
 TEST(overlay_controller, B_SnapOn_NearEdgeSnaps) {
     auto c = Make_controller();
-    // Window rect at screen coords 200,200..400,400, overlay origin at 0,0
-    std::vector<RectPx> win_rects = {RectPx::From_ltrb(200, 200, 400, 400)};
-    for (auto const &m : c.State().cached_monitors) {
-        win_rects.push_back(m.bounds);
-    }
-    // Press near left edge 200 (cursor at 207 — within threshold 10)
+    SnapEdges const snap_edges =
+        Make_snap_edges(c, {RectPx::From_ltrb(200, 200, 400, 400)});
+    // Fresh-drag start uses the fullscreen idle crosshair rule, so the window span
+    // on the opposite axis does not matter.
     std::ignore = c.On_primary_press(No_mods(), {207, 100}, {207, 100}, std::nullopt,
-                                     std::nullopt, std::nullopt, {}, win_rects, 0, 0);
+                                     std::nullopt, std::nullopt, {}, snap_edges, 0, 0);
     EXPECT_EQ(c.State().start_px.x, 200); // snapped to edge
 }
 
 TEST(overlay_controller, B_SnapOff_AltHeld_NearEdgeDoesNotSnap) {
     auto c = Make_controller();
-    std::vector<RectPx> win_rects = {RectPx::From_ltrb(200, 200, 400, 400)};
-    for (auto const &m : c.State().cached_monitors) {
-        win_rects.push_back(m.bounds);
-    }
+    SnapEdges const snap_edges =
+        Make_snap_edges(c, {RectPx::From_ltrb(200, 200, 400, 400)});
     std::ignore = c.On_primary_press(Alt_only(), {207, 100}, {207, 100}, std::nullopt,
-                                     std::nullopt, std::nullopt, {}, win_rects, 0, 0);
+                                     std::nullopt, std::nullopt, {}, snap_edges, 0, 0);
     EXPECT_EQ(c.State().start_px.x, 207); // not snapped
 }
 
@@ -262,7 +258,7 @@ TEST(overlay_controller, C_NoPreviewWhileHandleDragging) {
     // Start handle drag at TopLeft corner
     std::ignore =
         c.On_primary_press(No_mods(), {100, 100}, {100, 100}, std::nullopt,
-                           std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0, 0);
+                           std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0, 0);
     ASSERT_TRUE(c.State().handle_dragging);
     std::ignore = c.On_modifier_changed(Shift_only(), {500, 300}, {}, {},
                                         std::optional<size_t>{0u}, 0, 0);
@@ -295,7 +291,7 @@ TEST(overlay_controller, D_CtrlPreview_PressCommitsWindow) {
     HWND fake_hwnd = reinterpret_cast<HWND>(static_cast<uintptr_t>(0xABCD));
     OverlayAction action = c.On_primary_press(
         Ctrl_only(), {200, 150}, {200, 150}, std::optional<HWND>{fake_hwnd},
-        std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0, 0);
+        std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0, 0);
 
     EXPECT_EQ(action, OverlayAction::Repaint);
     EXPECT_FALSE(c.State().modifier_preview);
@@ -313,7 +309,7 @@ TEST(overlay_controller, D_ShiftPreview_PressCommitsMonitor) {
 
     OverlayAction action = c.On_primary_press(
         Shift_only(), {500, 300}, {500, 300}, std::nullopt, std::optional<size_t>{0u},
-        std::nullopt, {}, Make_vis_rects(c), 0, 0);
+        std::nullopt, {}, Make_snap_edges(c), 0, 0);
 
     EXPECT_EQ(action, OverlayAction::Repaint);
     EXPECT_EQ(c.State().selection_source, SaveSelectionSource::Monitor);
@@ -330,7 +326,7 @@ TEST(overlay_controller, D_ShiftCtrlPreview_PressCommitsDesktop) {
 
     OverlayAction action =
         c.On_primary_press(Shift_ctrl(), {1000, 500}, {1000, 500}, std::nullopt,
-                           std::nullopt, std::nullopt, vdesk, Make_vis_rects(c), 0, 0);
+                           std::nullopt, std::nullopt, vdesk, Make_snap_edges(c), 0, 0);
 
     EXPECT_EQ(action, OverlayAction::Repaint);
     EXPECT_EQ(c.State().selection_source, SaveSelectionSource::Desktop);
@@ -350,7 +346,7 @@ TEST(overlay_controller, E_PressNearHandle_StartsHandleDrag) {
     // Press exactly on TopLeft handle (100,100)
     OverlayAction action =
         c.On_primary_press(No_mods(), {100, 100}, {100, 100}, std::nullopt,
-                           std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0, 0);
+                           std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0, 0);
 
     EXPECT_EQ(action, OverlayAction::Repaint);
     EXPECT_TRUE(c.State().handle_dragging);
@@ -364,7 +360,7 @@ TEST(overlay_controller, E_HandleMove_UpdatesLiveRect) {
     Release(c, {300, 300});
     std::ignore =
         c.On_primary_press(No_mods(), {100, 100}, {100, 100}, std::nullopt,
-                           std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0, 0);
+                           std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0, 0);
     ASSERT_TRUE(c.State().handle_dragging);
 
     Move(c, {50, 50});
@@ -379,7 +375,7 @@ TEST(overlay_controller, E_HandleRelease_CommitsFinalSelection) {
     Release(c, {300, 300});
     std::ignore =
         c.On_primary_press(No_mods(), {100, 100}, {100, 100}, std::nullopt,
-                           std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0, 0);
+                           std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0, 0);
     Move(c, {50, 50});
     OverlayAction action = Release(c, {50, 50});
     EXPECT_EQ(action, OverlayAction::InvalidateFrozenCache);
@@ -395,7 +391,7 @@ TEST(overlay_controller, E_CancelHandleDrag_FinalSelectionUnchanged) {
 
     std::ignore =
         c.On_primary_press(No_mods(), {100, 100}, {100, 100}, std::nullopt,
-                           std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0, 0);
+                           std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0, 0);
     Move(c, {50, 50});
     OverlayAction action = c.On_cancel();
     EXPECT_EQ(action, OverlayAction::Repaint);
@@ -415,7 +411,7 @@ TEST(overlay_controller, F_ClickInsideSelection_StartsMoveDragInDefaultMode) {
 
     OverlayAction action =
         c.On_primary_press(No_mods(), {200, 200}, {200, 200}, std::nullopt,
-                           std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0, 0);
+                           std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0, 0);
 
     EXPECT_EQ(action, OverlayAction::Repaint);
     EXPECT_TRUE(c.State().move_dragging);
@@ -427,7 +423,7 @@ TEST(overlay_controller, F_MoveDoc_MovesRect) {
     Release(c, {300, 300});
     std::ignore =
         c.On_primary_press(No_mods(), {200, 200}, {200, 200}, std::nullopt,
-                           std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0, 0);
+                           std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0, 0);
 
     Move(c, {250, 250}, No_mods(), 100);
     auto const &s = c.State();
@@ -444,7 +440,7 @@ TEST(overlay_controller, F_MoveRelease_CommitsFinalSelection) {
     Release(c, {300, 300});
     std::ignore =
         c.On_primary_press(No_mods(), {200, 200}, {200, 200}, std::nullopt,
-                           std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0, 0);
+                           std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0, 0);
     Move(c, {250, 250}, No_mods(), 100);
     OverlayAction action = Release(c, {250, 250});
     EXPECT_EQ(action, OverlayAction::InvalidateFrozenCache);
@@ -460,7 +456,7 @@ TEST(overlay_controller, F_CancelMoveDrag_RestoresMoveAnchor) {
 
     std::ignore =
         c.On_primary_press(No_mods(), {200, 200}, {200, 200}, std::nullopt,
-                           std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0, 0);
+                           std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0, 0);
     Move(c, {400, 400}, No_mods(), 100);
 
     OverlayAction action = c.On_cancel();
@@ -476,7 +472,7 @@ TEST(overlay_controller, F_ClickOutsideSelection_DoesNotStartFreshDrag) {
 
     std::ignore =
         c.On_primary_press(No_mods(), {50, 50}, {50, 50}, std::nullopt, std::nullopt,
-                           std::nullopt, {}, Make_vis_rects(c), 0, 0);
+                           std::nullopt, {}, Make_snap_edges(c), 0, 0);
     // With annotation tools available outside the region, this no longer starts a
     // replacement capture drag.
     EXPECT_FALSE(c.State().dragging);
@@ -493,7 +489,7 @@ TEST(overlay_controller,
     EXPECT_EQ(c.On_annotation_tool_hotkey(L'B'), OverlayAction::Repaint);
     std::ignore =
         c.On_primary_press(No_mods(), {120, 120}, {120, 120}, std::nullopt,
-                           std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0, 0);
+                           std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0, 0);
     std::ignore = c.On_pointer_move(No_mods(), {140, 140}, {140, 140}, std::nullopt, {},
                                     std::nullopt, 0, 0, 100u);
     std::ignore = c.On_primary_release(No_mods(), {140, 140});
@@ -503,7 +499,7 @@ TEST(overlay_controller,
 
     OverlayAction action =
         c.On_primary_press(No_mods(), {130, 130}, {130, 130}, std::nullopt,
-                           std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0, 0);
+                           std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0, 0);
 
     EXPECT_EQ(action, OverlayAction::Repaint);
     EXPECT_FALSE(c.State().move_dragging);
@@ -520,7 +516,7 @@ TEST(overlay_controller, G_Cancel_MoveDragging_Restores) {
     Release(c, {300, 300});
     std::ignore =
         c.On_primary_press(No_mods(), {200, 200}, {200, 200}, std::nullopt,
-                           std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0, 0);
+                           std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0, 0);
     ASSERT_TRUE(c.State().move_dragging);
 
     OverlayAction action = c.On_cancel();
@@ -535,7 +531,7 @@ TEST(overlay_controller, G_Cancel_HandleDragging_ClearsDrag) {
     Release(c, {300, 300});
     std::ignore =
         c.On_primary_press(No_mods(), {100, 100}, {100, 100}, std::nullopt,
-                           std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0, 0);
+                           std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0, 0);
     ASSERT_TRUE(c.State().handle_dragging);
 
     OverlayAction action = c.On_cancel();
@@ -573,7 +569,7 @@ TEST(overlay_controller, G_Cancel_FinalSelectionAlsoClearsAnnotations) {
     EXPECT_EQ(c.On_annotation_tool_hotkey(L'B'), OverlayAction::Repaint);
     std::ignore =
         c.On_primary_press(No_mods(), {120, 120}, {120, 120}, std::nullopt,
-                           std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0, 0);
+                           std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0, 0);
     std::ignore = c.On_pointer_move(No_mods(), {140, 140}, {140, 140}, std::nullopt, {},
                                     std::nullopt, 0, 0, 100u);
     std::ignore = c.On_primary_release(No_mods(), {140, 140});
@@ -615,7 +611,7 @@ TEST(overlay_controller, G_Cancel_ActiveToolGesture_ClearsDraftAndDeselectsTool)
     ASSERT_EQ(c.On_annotation_tool_hotkey(L'B'), OverlayAction::Repaint);
 
     ASSERT_EQ(c.On_primary_press(No_mods(), {120, 120}, {120, 120}, std::nullopt,
-                                 std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
                                  0),
               OverlayAction::Repaint);
     ASSERT_TRUE(c.Has_active_annotation_gesture());
@@ -636,7 +632,7 @@ TEST(overlay_controller, G_Cancel_SelectedAnnotation_DeselectsWithoutClearingReg
     // Draw a freehand stroke inside the selection.
     ASSERT_EQ(c.On_annotation_tool_hotkey(L'B'), OverlayAction::Repaint);
     ASSERT_EQ(c.On_primary_press(No_mods(), {150, 150}, {150, 150}, std::nullopt,
-                                 std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
                                  0),
               OverlayAction::Repaint);
     std::ignore = c.On_pointer_move(No_mods(), {200, 150}, {200, 150}, std::nullopt, {},
@@ -648,7 +644,7 @@ TEST(overlay_controller, G_Cancel_SelectedAnnotation_DeselectsWithoutClearingReg
     ASSERT_EQ(c.On_annotation_tool_hotkey(L'B'), OverlayAction::Repaint);
     ASSERT_EQ(c.Active_annotation_tool(), std::nullopt);
     ASSERT_EQ(c.On_primary_press(No_mods(), {175, 150}, {175, 150}, std::nullopt,
-                                 std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
                                  0),
               OverlayAction::Repaint);
     std::ignore = c.On_primary_release(No_mods(), {175, 150});
@@ -727,24 +723,19 @@ TEST(overlay_controller, H_Copy_EmptySelection_ReturnsNone) {
 
 TEST(overlay_controller, I_AfterPress_SnapEdgesPopulated) {
     auto c = Make_controller();
-    std::vector<RectPx> win_rects = {RectPx::From_ltrb(200, 200, 400, 400)};
-    for (auto const &m : c.State().cached_monitors) {
-        win_rects.push_back(m.bounds);
-    }
+    SnapEdges const snap_edges =
+        Make_snap_edges(c, {RectPx::From_ltrb(200, 200, 400, 400)});
     std::ignore = c.On_primary_press(No_mods(), {50, 50}, {50, 50}, std::nullopt,
-                                     std::nullopt, std::nullopt, {}, win_rects, 0, 0);
+                                     std::nullopt, std::nullopt, {}, snap_edges, 0, 0);
     EXPECT_FALSE(c.State().vertical_edges.empty());
     EXPECT_FALSE(c.State().horizontal_edges.empty());
 }
 
 TEST(overlay_controller, I_RefreshSnapEdges_PopulatesBeforeAnyPress) {
     auto c = Make_controller();
-    std::vector<RectPx> win_rects = {RectPx::From_ltrb(200, 200, 400, 400)};
-    for (auto const &m : c.State().cached_monitors) {
-        win_rects.push_back(m.bounds);
-    }
+    SnapEdges snap_edges = Make_snap_edges(c, {RectPx::From_ltrb(200, 200, 400, 400)});
 
-    c.Refresh_snap_edges(std::move(win_rects), 0, 0);
+    c.Refresh_snap_edges(snap_edges, 0, 0);
 
     EXPECT_FALSE(c.State().vertical_edges.empty());
     EXPECT_FALSE(c.State().horizontal_edges.empty());
@@ -752,34 +743,45 @@ TEST(overlay_controller, I_RefreshSnapEdges_PopulatesBeforeAnyPress) {
 
 TEST(overlay_controller, I_SnapEdgesIncludeWindowEdges) {
     auto c = Make_controller();
-    std::vector<RectPx> win_rects = {RectPx::From_ltrb(200, 100, 400, 300)};
-    for (auto const &m : c.State().cached_monitors) {
-        win_rects.push_back(m.bounds);
-    }
+    SnapEdges const snap_edges =
+        Make_snap_edges(c, {RectPx::From_ltrb(200, 100, 400, 300)});
     std::ignore =
         c.On_primary_press(No_mods(), {50, 50}, {50, 50}, std::nullopt, std::nullopt,
-                           std::nullopt, {}, win_rects, 0, 0); // origin 0,0
+                           std::nullopt, {}, snap_edges, 0, 0); // origin 0,0
     auto const &ve = c.State().vertical_edges;
-    // Left (200) and right (400) of window should be in vertical edges
-    bool has_200 = std::find(ve.begin(), ve.end(), 200) != ve.end();
-    bool has_400 = std::find(ve.begin(), ve.end(), 400) != ve.end();
+    bool const has_200 =
+        std::any_of(ve.begin(), ve.end(),
+                    [](SnapEdgeSegmentPx const &edge) { return edge.line == 200; });
+    bool const has_400 =
+        std::any_of(ve.begin(), ve.end(),
+                    [](SnapEdgeSegmentPx const &edge) { return edge.line == 400; });
     EXPECT_TRUE(has_200);
     EXPECT_TRUE(has_400);
 }
 
 TEST(overlay_controller, I_DragSnapsToEdge_WithinThreshold) {
     auto c = Make_controller();
-    std::vector<RectPx> win_rects = {RectPx::From_ltrb(200, 0, 400, 1080)};
-    for (auto const &m : c.State().cached_monitors) {
-        win_rects.push_back(m.bounds);
-    }
+    SnapEdges const snap_edges =
+        Make_snap_edges(c, {RectPx::From_ltrb(200, 0, 400, 1080)});
     // Start drag far from edge
     std::ignore = c.On_primary_press(No_mods(), {50, 50}, {50, 50}, std::nullopt,
-                                     std::nullopt, std::nullopt, {}, win_rects, 0, 0);
+                                     std::nullopt, std::nullopt, {}, snap_edges, 0, 0);
     // Move right side near edge 200 (at 207 — within threshold 10)
     Move(c, {207, 300});
     Release(c, {207, 300});
     EXPECT_EQ(c.State().final_selection.right, 200); // snapped
+}
+
+TEST(overlay_controller, I_DragDoesNotSnapToSegmentOutsideVisibleSpan) {
+    auto c = Make_controller();
+    SnapEdges snap_edges = Make_snap_edges(c);
+    snap_edges.vertical.push_back({200, 0, 100});
+
+    std::ignore = c.On_primary_press(No_mods(), {50, 150}, {50, 150}, std::nullopt,
+                                     std::nullopt, std::nullopt, {}, snap_edges, 0, 0);
+    Move(c, {207, 300});
+    Release(c, {207, 300});
+    EXPECT_EQ(c.State().final_selection.right, 207);
 }
 
 // ===========================================================================
@@ -967,7 +969,7 @@ TEST(overlay_controller,
     EXPECT_TRUE(c.Can_interact_with_annotation_toolbar());
 
     ASSERT_EQ(c.On_primary_press(No_mods(), {120, 120}, {120, 120}, std::nullopt,
-                                 std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
                                  0),
               OverlayAction::Repaint);
     EXPECT_TRUE(c.Should_show_annotation_toolbar());
@@ -988,7 +990,7 @@ TEST(overlay_controller, AnnotationToolbar_MoveAndResizeHideToolbar) {
     ASSERT_TRUE(c.Can_interact_with_annotation_toolbar());
 
     ASSERT_EQ(c.On_primary_press(No_mods(), {200, 200}, {200, 200}, std::nullopt,
-                                 std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
                                  0),
               OverlayAction::Repaint);
     EXPECT_FALSE(c.Should_show_annotation_toolbar());
@@ -998,7 +1000,7 @@ TEST(overlay_controller, AnnotationToolbar_MoveAndResizeHideToolbar) {
     EXPECT_TRUE(c.Should_show_annotation_toolbar());
 
     ASSERT_EQ(c.On_primary_press(No_mods(), {100, 100}, {100, 100}, std::nullopt,
-                                 std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
                                  0),
               OverlayAction::Repaint);
     EXPECT_FALSE(c.Should_show_annotation_toolbar());
@@ -1016,7 +1018,7 @@ TEST(overlay_controller,
     Release(c, {300, 300});
     ASSERT_EQ(c.On_annotation_tool_hotkey(L'L'), OverlayAction::Repaint);
     ASSERT_EQ(c.On_primary_press(No_mods(), {140, 140}, {140, 140}, std::nullopt,
-                                 std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
                                  0),
               OverlayAction::Repaint);
     ASSERT_EQ(c.On_pointer_move(No_mods(), {220, 180}, {220, 180}, std::nullopt, {},
@@ -1030,7 +1032,7 @@ TEST(overlay_controller,
 
     ASSERT_TRUE(c.Should_show_annotation_toolbar());
     ASSERT_EQ(c.On_primary_press(No_mods(), {180, 160}, {180, 160}, std::nullopt,
-                                 std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
                                  0),
               OverlayAction::Repaint);
     EXPECT_TRUE(c.Is_annotation_dragging());
@@ -1048,7 +1050,7 @@ TEST(overlay_controller, ActiveAnnotationTool_BorderPressStillStartsResize) {
     ASSERT_EQ(c.On_annotation_tool_hotkey(L'L'), OverlayAction::Repaint);
 
     EXPECT_EQ(c.On_primary_press(No_mods(), {100, 100}, {100, 100}, std::nullopt,
-                                 std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
                                  0),
               OverlayAction::Repaint);
     EXPECT_TRUE(c.State().handle_dragging);
@@ -1062,7 +1064,7 @@ TEST(overlay_controller, SelectedLineHandleDragTakesPriorityOverAnnotationMove) 
 
     ASSERT_EQ(c.On_annotation_tool_hotkey(L'L'), OverlayAction::Repaint);
     ASSERT_EQ(c.On_primary_press(No_mods(), {140, 140}, {140, 140}, std::nullopt,
-                                 std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
                                  0),
               OverlayAction::Repaint);
     ASSERT_EQ(c.On_pointer_move(No_mods(), {200, 180}, {200, 180}, std::nullopt, {},
@@ -1077,7 +1079,7 @@ TEST(overlay_controller, SelectedLineHandleDragTakesPriorityOverAnnotationMove) 
     // First click selects the line and starts an ordinary annotation drag. Releasing
     // without movement preserves selection so the endpoint handles become active.
     ASSERT_EQ(c.On_primary_press(No_mods(), {170, 160}, {170, 160}, std::nullopt,
-                                 std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
                                  0),
               OverlayAction::Repaint);
     ASSERT_TRUE(c.Is_annotation_dragging());
@@ -1085,7 +1087,7 @@ TEST(overlay_controller, SelectedLineHandleDragTakesPriorityOverAnnotationMove) 
     ASSERT_FALSE(c.Is_annotation_dragging());
 
     ASSERT_EQ(c.On_primary_press(No_mods(), {140, 140}, {140, 140}, std::nullopt,
-                                 std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
                                  0),
               OverlayAction::Repaint);
     EXPECT_TRUE(c.Has_active_annotation_edit());
@@ -1102,7 +1104,7 @@ TEST(overlay_controller, ActiveAnnotationTool_DiscardsSelectedAnnotation) {
 
     ASSERT_EQ(c.On_annotation_tool_hotkey(L'L'), OverlayAction::Repaint);
     ASSERT_EQ(c.On_primary_press(No_mods(), {140, 140}, {140, 140}, std::nullopt,
-                                 std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
                                  0),
               OverlayAction::Repaint);
     ASSERT_EQ(c.On_pointer_move(No_mods(), {220, 180}, {220, 180}, std::nullopt, {},
@@ -1113,7 +1115,7 @@ TEST(overlay_controller, ActiveAnnotationTool_DiscardsSelectedAnnotation) {
     ASSERT_EQ(c.On_annotation_tool_hotkey(L'L'), OverlayAction::Repaint);
 
     ASSERT_EQ(c.On_primary_press(No_mods(), {180, 160}, {180, 160}, std::nullopt,
-                                 std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
                                  0),
               OverlayAction::Repaint);
     ASSERT_EQ(c.On_primary_release(No_mods(), {180, 160}), OverlayAction::None);
@@ -1132,7 +1134,7 @@ TEST(overlay_controller,
     Release(c, {300, 300});
     ASSERT_EQ(c.On_annotation_tool_hotkey(L'L'), OverlayAction::Repaint);
     ASSERT_EQ(c.On_primary_press(No_mods(), {140, 140}, {140, 140}, std::nullopt,
-                                 std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
                                  0),
               OverlayAction::Repaint);
     ASSERT_EQ(c.On_pointer_move(No_mods(), {220, 180}, {220, 180}, std::nullopt, {},
@@ -1144,14 +1146,14 @@ TEST(overlay_controller,
     ASSERT_EQ(c.On_annotation_tool_hotkey(L'L'), OverlayAction::Repaint);
 
     ASSERT_EQ(c.On_primary_press(No_mods(), {180, 160}, {180, 160}, std::nullopt,
-                                 std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
                                  0),
               OverlayAction::Repaint);
     ASSERT_EQ(c.On_primary_release(No_mods(), {180, 160}), OverlayAction::None);
 
     ASSERT_TRUE(c.Should_show_annotation_toolbar());
     ASSERT_EQ(c.On_primary_press(No_mods(), {140, 140}, {140, 140}, std::nullopt,
-                                 std::nullopt, std::nullopt, {}, Make_vis_rects(c), 0,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
                                  0),
               OverlayAction::Repaint);
     EXPECT_TRUE(c.Has_active_annotation_edit());

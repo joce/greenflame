@@ -1125,7 +1125,8 @@ void Draw_live_layer(ID2D1RenderTarget *rt, D2DOverlayResources &res,
     if (interacting && !disp_sel.Is_empty()) {
         Draw_dimension_labels(rt, res, disp_sel, vd_width, vd_height,
                               input.show_selection_size_side_labels,
-                              input.show_selection_size_center_label);
+                              input.show_selection_size_center_label &&
+                                  !input.move_dragging);
     }
 
     // Transient center label (e.g. brush size overlay).

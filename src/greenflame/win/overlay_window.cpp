@@ -582,7 +582,7 @@ bool OverlayWindow::Create_and_show(HINSTANCE hinstance) {
     }
 
     controller_.Reset_for_session(Get_monitors_with_bounds());
-    controller_.Refresh_snap_edges(Collect_visible_snap_rects(), bounds.left,
+    controller_.Refresh_snap_edges(Collect_visible_snap_edges(), bounds.left,
                                    bounds.top);
     controller_.Set_brush_width_px(config_ != nullptr
                                        ? config_->brush_width_px
@@ -602,15 +602,25 @@ void OverlayWindow::Destroy() {
 
 bool OverlayWindow::Is_open() const { return hwnd_ != nullptr && IsWindow(hwnd_) != 0; }
 
-std::vector<core::RectPx> OverlayWindow::Collect_visible_snap_rects() const {
-    std::vector<core::RectPx> vis_rects;
+core::SnapEdges OverlayWindow::Collect_visible_snap_edges() const {
+    core::SnapEdges snap_edges;
     if (window_query_ != nullptr && hwnd_ != nullptr) {
-        window_query_->Get_visible_top_level_window_rects(hwnd_, vis_rects);
+        window_query_->Get_visible_top_level_window_snap_edges(hwnd_, snap_edges);
     }
+    std::vector<core::RectPx> monitor_rects;
+    monitor_rects.reserve(controller_.State().cached_monitors.size());
     for (auto const &monitor : controller_.State().cached_monitors) {
-        vis_rects.push_back(monitor.bounds);
+        monitor_rects.push_back(monitor.bounds);
     }
-    return vis_rects;
+    core::SnapEdges const monitor_edges =
+        core::Build_snap_edges_from_screen_rects(monitor_rects, 0, 0);
+    snap_edges.vertical.insert(snap_edges.vertical.end(),
+                               monitor_edges.vertical.begin(),
+                               monitor_edges.vertical.end());
+    snap_edges.horizontal.insert(snap_edges.horizontal.end(),
+                                 monitor_edges.horizontal.begin(),
+                                 monitor_edges.horizontal.end());
+    return snap_edges;
 }
 
 bool OverlayWindow::Handle_brush_width_delta(int32_t delta_steps) {
@@ -1094,7 +1104,7 @@ LRESULT OverlayWindow::On_l_button_down() {
     Apply_action(
         controller_.On_primary_press(mods, cursor_client, cursor_screen, win_handle,
                                      monitor_idx, std::optional<core::RectPx>{}, vdesk,
-                                     Collect_visible_snap_rects(), wr.left, wr.top));
+                                     Collect_visible_snap_edges(), wr.left, wr.top));
     bool const hover_changed = Refresh_hover_handle();
     Refresh_cursor();
     if (hover_changed) {
@@ -1760,8 +1770,8 @@ LRESULT OverlayWindow::On_paint() {
     bool const crosshair_mode = s.final_selection.Is_empty() && !s.dragging &&
                                 !s.handle_dragging && !s.modifier_preview;
     if (crosshair_mode && snap_enabled) {
-        cursor = core::Snap_point_to_edges(cursor, s.vertical_edges, s.horizontal_edges,
-                                           kSnapThresholdPx);
+        cursor = core::Snap_point_to_fullscreen_crosshair_edges(
+            cursor, s.vertical_edges, s.horizontal_edges, kSnapThresholdPx);
         if (cursor.x >= rect.right) cursor.x = rect.right - 1;
         if (cursor.y >= rect.bottom) cursor.y = rect.bottom - 1;
     }

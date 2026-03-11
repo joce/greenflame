@@ -158,17 +158,16 @@ void Draw_rectangle(ID2D1RenderTarget *rt, D2DOverlayResources &res,
 
 void Draw_annotation(ID2D1RenderTarget *rt, D2DOverlayResources &res,
                      core::Annotation const &ann) {
-    switch (ann.kind) {
-    case core::AnnotationKind::Freehand:
-        Draw_freehand(rt, res, ann.freehand);
-        break;
-    case core::AnnotationKind::Line:
-        Draw_line(rt, res, ann.line);
-        break;
-    case core::AnnotationKind::Rectangle:
-        Draw_rectangle(rt, res, ann.rectangle);
-        break;
-    }
+    std::visit(core::Overloaded{
+                   [&](core::FreehandStrokeAnnotation const &fh) {
+                       Draw_freehand(rt, res, fh);
+                   },
+                   [&](core::LineAnnotation const &line) { Draw_line(rt, res, line); },
+                   [&](core::RectangleAnnotation const &rect) {
+                       Draw_rectangle(rt, res, rect);
+                   },
+               },
+               ann.data);
 }
 
 // ---------------------------------------------------------------------------
@@ -787,24 +786,26 @@ void Draw_annotation_handles(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         return;
     }
     // Type-specific interactive handles.
-    if (ann->kind == core::AnnotationKind::Line) {
-        Draw_endpoint_handle(rt, res, ann->line.start);
-        Draw_endpoint_handle(rt, res, ann->line.end);
-    } else if (ann->kind == core::AnnotationKind::Rectangle) {
+    if (core::LineAnnotation const *const line =
+            std::get_if<core::LineAnnotation>(&ann->data)) {
+        Draw_endpoint_handle(rt, res, line->start);
+        Draw_endpoint_handle(rt, res, line->end);
+    } else if (core::RectangleAnnotation const *const rect =
+                   std::get_if<core::RectangleAnnotation>(&ann->data)) {
         std::array<bool, 8> const visible =
-            core::Visible_rectangle_resize_handles(ann->rectangle.outer_bounds);
+            core::Visible_rectangle_resize_handles(rect->outer_bounds);
         for (size_t i = 0; i < visible.size(); ++i) {
             if (visible[i]) {
-                Draw_endpoint_handle(rt, res,
-                                     core::Rectangle_resize_handle_center(
-                                         ann->rectangle.outer_bounds,
-                                         static_cast<core::SelectionHandle>(i)));
+                Draw_endpoint_handle(
+                    rt, res,
+                    core::Rectangle_resize_handle_center(
+                        rect->outer_bounds, static_cast<core::SelectionHandle>(i)));
             }
         }
     }
     // L-bracket selection frame. ann_bounds is the tight axis-aligned bounding
     // box of the annotation's drawn geometry, not including interactive handles.
-    if (core::Annotation_shows_corner_brackets(ann->kind) && ann_bounds.has_value() &&
+    if (core::Annotation_shows_corner_brackets(ann->Kind()) && ann_bounds.has_value() &&
         !ann_bounds->Is_empty()) {
         core::RectPx const r = ann_bounds->Normalized();
         int const cw = std::min(core::kMaxCornerSizePx, r.Width() / 2);

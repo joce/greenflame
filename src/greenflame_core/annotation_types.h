@@ -48,6 +48,20 @@ struct RectangleAnnotation final {
     constexpr bool operator==(RectangleAnnotation const &) const noexcept = default;
 };
 
+using AnnotationData =
+    std::variant<FreehandStrokeAnnotation, LineAnnotation, RectangleAnnotation>;
+
+template <class... Ts> struct Overloaded : Ts... {
+    using Ts::operator()...;
+    constexpr explicit Overloaded(Ts... ts) : Ts(std::move(ts))... {}
+    Overloaded(Overloaded const &) = default;
+    Overloaded(Overloaded &&) = default;
+    Overloaded &operator=(Overloaded const &) = delete;
+    Overloaded &operator=(Overloaded &&) = delete;
+};
+
+template <class... Ts> Overloaded(Ts...) -> Overloaded<Ts...>;
+
 enum class AnnotationLineEndpoint : uint8_t {
     Start,
     End,
@@ -61,10 +75,9 @@ inline constexpr int32_t kAnnotationHandleHitSizePx = 11;
 
 struct Annotation final {
     uint64_t id = 0;
-    AnnotationKind kind = AnnotationKind::Freehand;
-    FreehandStrokeAnnotation freehand = {};
-    LineAnnotation line = {};
-    RectangleAnnotation rectangle = {};
+    AnnotationData data{};
+
+    [[nodiscard]] AnnotationKind Kind() const noexcept;
 
     constexpr bool operator==(Annotation const &) const noexcept = default;
 };

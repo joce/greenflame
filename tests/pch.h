@@ -13,6 +13,7 @@
 #include <string>
 #include <tuple>
 #include <utility>
+#include <variant>
 #include <vector>
 
 // Include windef.h for HWND without pulling in all of windows.h.

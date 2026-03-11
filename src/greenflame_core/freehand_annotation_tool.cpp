@@ -103,9 +103,10 @@ FreehandAnnotationTool::Build_annotation(IAnnotationToolHost const &host,
                                          std::span<const PointPx> raw_points) const {
     Annotation annotation{};
     annotation.id = host.Next_annotation_id();
-    annotation.kind = AnnotationKind::Freehand;
-    annotation.freehand.style = host.Current_stroke_style();
-    annotation.freehand.points = host.Smooth_points(raw_points);
+    annotation.data = FreehandStrokeAnnotation{
+        .points = host.Smooth_points(raw_points),
+        .style = host.Current_stroke_style(),
+    };
     return annotation;
 }
 

@@ -9,11 +9,12 @@ Annotation Make_line(uint64_t id, PointPx start, PointPx end,
                      bool arrow_head = false) {
     Annotation annotation{};
     annotation.id = id;
-    annotation.kind = AnnotationKind::Line;
-    annotation.line.start = start;
-    annotation.line.end = end;
-    annotation.line.style.width_px = width_px;
-    annotation.line.arrow_head = arrow_head;
+    annotation.data = LineAnnotation{
+        .start = start,
+        .end = end,
+        .style = {.width_px = width_px},
+        .arrow_head = arrow_head,
+    };
     return annotation;
 }
 
@@ -21,10 +22,11 @@ Annotation Make_rectangle(uint64_t id, RectPx outer_bounds, int32_t width_px,
                           bool filled = false) {
     Annotation annotation{};
     annotation.id = id;
-    annotation.kind = AnnotationKind::Rectangle;
-    annotation.rectangle.outer_bounds = outer_bounds;
-    annotation.rectangle.style.width_px = width_px;
-    annotation.rectangle.filled = filled;
+    annotation.data = RectangleAnnotation{
+        .outer_bounds = outer_bounds,
+        .style = {.width_px = width_px},
+        .filled = filled,
+    };
     return annotation;
 }
 
@@ -52,8 +54,9 @@ TEST(annotation_hit_test, TranslateAnnotation_LineMovesEndpoints) {
 
     Annotation const moved = Translate_annotation(line, {5, -3});
 
-    EXPECT_EQ(moved.line.start, (PointPx{25, 27}));
-    EXPECT_EQ(moved.line.end, (PointPx{45, 27}));
+    auto const &moved_line = std::get<LineAnnotation>(moved.data);
+    EXPECT_EQ(moved_line.start, (PointPx{25, 27}));
+    EXPECT_EQ(moved_line.end, (PointPx{45, 27}));
 }
 
 TEST(annotation_hit_test, TranslateAnnotation_ArrowMovesEndpoints) {
@@ -61,9 +64,10 @@ TEST(annotation_hit_test, TranslateAnnotation_ArrowMovesEndpoints) {
 
     Annotation const moved = Translate_annotation(arrow, {5, -3});
 
-    EXPECT_TRUE(moved.line.arrow_head);
-    EXPECT_EQ(moved.line.start, (PointPx{25, 27}));
-    EXPECT_EQ(moved.line.end, (PointPx{65, 42}));
+    auto const &moved_arrow = std::get<LineAnnotation>(moved.data);
+    EXPECT_TRUE(moved_arrow.arrow_head);
+    EXPECT_EQ(moved_arrow.start, (PointPx{25, 27}));
+    EXPECT_EQ(moved_arrow.end, (PointPx{65, 42}));
 }
 
 TEST(annotation_hit_test, HitTestLineEndpointHandles_FavorsNearestVisibleHandle) {
@@ -148,7 +152,8 @@ TEST(annotation_hit_test, TranslateAnnotation_RectangleMovesBounds) {
 
     Annotation const moved = Translate_annotation(rectangle, {5, -3});
 
-    EXPECT_EQ(moved.rectangle.outer_bounds, (RectPx::From_ltrb(15, 7, 26, 18)));
+    EXPECT_EQ(std::get<RectangleAnnotation>(moved.data).outer_bounds,
+              (RectPx::From_ltrb(15, 7, 26, 18)));
 }
 
 TEST(annotation_hit_test, AnnotationShowsCornerBrackets_FreehandReturnsTrue) {
@@ -166,9 +171,10 @@ TEST(annotation_hit_test, AnnotationShowsCornerBrackets_RectangleReturnsFalse) {
 TEST(annotation_hit_test, AnnotationVisualBounds_FreehandMatchesHitTestBounds) {
     Annotation ann{};
     ann.id = 1;
-    ann.kind = AnnotationKind::Freehand;
-    ann.freehand.style.width_px = 4;
-    ann.freehand.points = {PointPx{10, 20}, PointPx{30, 40}, PointPx{50, 20}};
+    ann.data = FreehandStrokeAnnotation{
+        .points = {PointPx{10, 20}, PointPx{30, 40}, PointPx{50, 20}},
+        .style = {.width_px = 4},
+    };
 
     EXPECT_EQ(Annotation_visual_bounds(ann), Annotation_bounds(ann));
 }

@@ -74,9 +74,11 @@ TEST(annotation_tool, FreehandTool_UsesHostStyleSmoothingAndCommit) {
     EXPECT_TRUE(tool.Has_active_gesture());
     EXPECT_TRUE(tool.On_pointer_move(host, {20, 18}));
     ASSERT_NE(tool.Draft_annotation(host), nullptr);
-    EXPECT_EQ(tool.Draft_annotation(host)->kind, AnnotationKind::Freehand);
+    EXPECT_EQ(tool.Draft_annotation(host)->Kind(), AnnotationKind::Freehand);
     EXPECT_EQ(tool.Draft_annotation(host)->id, 42u);
-    EXPECT_EQ(tool.Draft_annotation(host)->freehand.style, host.stroke_style);
+    EXPECT_EQ(
+        std::get<FreehandStrokeAnnotation>(tool.Draft_annotation(host)->data).style,
+        host.stroke_style);
     EXPECT_EQ(tool.Draft_freehand_points().size(), 2u);
     EXPECT_EQ(tool.Draft_freehand_style(host),
               std::optional<StrokeStyle>{host.stroke_style});
@@ -85,11 +87,14 @@ TEST(annotation_tool, FreehandTool_UsesHostStyleSmoothingAndCommit) {
     EXPECT_FALSE(tool.Has_active_gesture());
     EXPECT_EQ(tool.Draft_annotation(host), nullptr);
     ASSERT_EQ(host.committed_annotations.size(), 1u);
-    EXPECT_EQ(host.committed_annotations[0].kind, AnnotationKind::Freehand);
+    EXPECT_EQ(host.committed_annotations[0].Kind(), AnnotationKind::Freehand);
     EXPECT_EQ(host.committed_annotations[0].id, 42u);
-    EXPECT_EQ(host.committed_annotations[0].freehand.style, host.stroke_style);
-    EXPECT_EQ(host.committed_annotations[0].freehand.points,
-              *host.smoothed_points_override);
+    {
+        auto const &fh =
+            std::get<FreehandStrokeAnnotation>(host.committed_annotations[0].data);
+        EXPECT_EQ(fh.style, host.stroke_style);
+        EXPECT_EQ(fh.points, *host.smoothed_points_override);
+    }
 }
 
 TEST(annotation_tool, FreehandTool_RefreshesDraftAfterStyleChangeNotification) {
@@ -100,13 +105,17 @@ TEST(annotation_tool, FreehandTool_RefreshesDraftAfterStyleChangeNotification) {
     EXPECT_TRUE(tool.On_primary_press(host, {10, 10}));
     EXPECT_TRUE(tool.On_pointer_move(host, {20, 20}));
     ASSERT_NE(tool.Draft_annotation(host), nullptr);
-    EXPECT_EQ(tool.Draft_annotation(host)->freehand.style.width_px, 4);
+    EXPECT_EQ(std::get<FreehandStrokeAnnotation>(tool.Draft_annotation(host)->data)
+                  .style.width_px,
+              4);
 
     host.stroke_style = StrokeStyle{9, RGB(0xAA, 0xBB, 0xCC)};
     tool.On_stroke_style_changed();
 
     ASSERT_NE(tool.Draft_annotation(host), nullptr);
-    EXPECT_EQ(tool.Draft_annotation(host)->freehand.style, host.stroke_style);
+    EXPECT_EQ(
+        std::get<FreehandStrokeAnnotation>(tool.Draft_annotation(host)->data).style,
+        host.stroke_style);
 }
 
 TEST(annotation_tool, LineTool_UsesHostStyleAngleAndCommit) {
@@ -120,12 +129,16 @@ TEST(annotation_tool, LineTool_UsesHostStyleAngleAndCommit) {
     EXPECT_TRUE(tool.On_primary_press(host, {15, 20}));
     EXPECT_TRUE(tool.On_pointer_move(host, {45, 60}));
     ASSERT_NE(tool.Draft_annotation(host), nullptr);
-    EXPECT_EQ(tool.Draft_annotation(host)->kind, AnnotationKind::Line);
+    EXPECT_EQ(tool.Draft_annotation(host)->Kind(), AnnotationKind::Line);
     EXPECT_EQ(tool.Draft_annotation(host)->id, 7u);
-    EXPECT_FALSE(tool.Draft_annotation(host)->line.arrow_head);
-    EXPECT_EQ(tool.Draft_annotation(host)->line.style, host.stroke_style);
-    EXPECT_EQ(tool.Draft_annotation(host)->line.start, (PointPx{15, 20}));
-    EXPECT_EQ(tool.Draft_annotation(host)->line.end, (PointPx{45, 60}));
+    {
+        auto const &draft_line =
+            std::get<LineAnnotation>(tool.Draft_annotation(host)->data);
+        EXPECT_FALSE(draft_line.arrow_head);
+        EXPECT_EQ(draft_line.style, host.stroke_style);
+        EXPECT_EQ(draft_line.start, (PointPx{15, 20}));
+        EXPECT_EQ(draft_line.end, (PointPx{45, 60}));
+    }
     ASSERT_TRUE(tool.Draft_line_angle_radians().has_value());
     EXPECT_NEAR(*tool.Draft_line_angle_radians(), 0.927295218, 1e-6);
 
@@ -133,12 +146,16 @@ TEST(annotation_tool, LineTool_UsesHostStyleAngleAndCommit) {
     EXPECT_FALSE(tool.Has_active_gesture());
     EXPECT_EQ(tool.Draft_annotation(host), nullptr);
     ASSERT_EQ(host.committed_annotations.size(), 1u);
-    EXPECT_EQ(host.committed_annotations[0].kind, AnnotationKind::Line);
-    EXPECT_FALSE(host.committed_annotations[0].line.arrow_head);
+    EXPECT_EQ(host.committed_annotations[0].Kind(), AnnotationKind::Line);
     EXPECT_EQ(host.committed_annotations[0].id, 7u);
-    EXPECT_EQ(host.committed_annotations[0].line.style, host.stroke_style);
-    EXPECT_EQ(host.committed_annotations[0].line.start, (PointPx{15, 20}));
-    EXPECT_EQ(host.committed_annotations[0].line.end, (PointPx{45, 60}));
+    {
+        auto const &committed_line =
+            std::get<LineAnnotation>(host.committed_annotations[0].data);
+        EXPECT_FALSE(committed_line.arrow_head);
+        EXPECT_EQ(committed_line.style, host.stroke_style);
+        EXPECT_EQ(committed_line.start, (PointPx{15, 20}));
+        EXPECT_EQ(committed_line.end, (PointPx{45, 60}));
+    }
 }
 
 TEST(annotation_tool, LineTool_RefreshesDraftAfterStyleChangeNotification) {
@@ -149,13 +166,15 @@ TEST(annotation_tool, LineTool_RefreshesDraftAfterStyleChangeNotification) {
     EXPECT_TRUE(tool.On_primary_press(host, {30, 30}));
     EXPECT_TRUE(tool.On_pointer_move(host, {60, 30}));
     ASSERT_NE(tool.Draft_annotation(host), nullptr);
-    EXPECT_EQ(tool.Draft_annotation(host)->line.style.width_px, 3);
+    EXPECT_EQ(
+        std::get<LineAnnotation>(tool.Draft_annotation(host)->data).style.width_px, 3);
 
     host.stroke_style = StrokeStyle{12, RGB(0x10, 0x20, 0x30)};
     tool.On_stroke_style_changed();
 
     ASSERT_NE(tool.Draft_annotation(host), nullptr);
-    EXPECT_EQ(tool.Draft_annotation(host)->line.style, host.stroke_style);
+    EXPECT_EQ(std::get<LineAnnotation>(tool.Draft_annotation(host)->data).style,
+              host.stroke_style);
 }
 
 TEST(annotation_tool, ArrowTool_UsesHostStyleAndCommit) {
@@ -169,16 +188,24 @@ TEST(annotation_tool, ArrowTool_UsesHostStyleAndCommit) {
     EXPECT_TRUE(tool.On_primary_press(host, {20, 30}));
     EXPECT_TRUE(tool.On_pointer_move(host, {60, 45}));
     ASSERT_NE(tool.Draft_annotation(host), nullptr);
-    EXPECT_EQ(tool.Draft_annotation(host)->kind, AnnotationKind::Line);
-    EXPECT_TRUE(tool.Draft_annotation(host)->line.arrow_head);
-    EXPECT_EQ(tool.Draft_annotation(host)->line.style, host.stroke_style);
-    EXPECT_EQ(tool.Draft_annotation(host)->line.start, (PointPx{20, 30}));
-    EXPECT_EQ(tool.Draft_annotation(host)->line.end, (PointPx{60, 45}));
+    EXPECT_EQ(tool.Draft_annotation(host)->Kind(), AnnotationKind::Line);
+    {
+        auto const &draft_arrow =
+            std::get<LineAnnotation>(tool.Draft_annotation(host)->data);
+        EXPECT_TRUE(draft_arrow.arrow_head);
+        EXPECT_EQ(draft_arrow.style, host.stroke_style);
+        EXPECT_EQ(draft_arrow.start, (PointPx{20, 30}));
+        EXPECT_EQ(draft_arrow.end, (PointPx{60, 45}));
+    }
 
     EXPECT_TRUE(tool.On_primary_release(host, undo_stack));
     ASSERT_EQ(host.committed_annotations.size(), 1u);
-    EXPECT_TRUE(host.committed_annotations[0].line.arrow_head);
-    EXPECT_EQ(host.committed_annotations[0].line.style, host.stroke_style);
+    {
+        auto const &committed_arrow =
+            std::get<LineAnnotation>(host.committed_annotations[0].data);
+        EXPECT_TRUE(committed_arrow.arrow_head);
+        EXPECT_EQ(committed_arrow.style, host.stroke_style);
+    }
 }
 
 TEST(annotation_tool, RectangleTool_UsesHostStyleAndCommit) {
@@ -192,22 +219,28 @@ TEST(annotation_tool, RectangleTool_UsesHostStyleAndCommit) {
     EXPECT_TRUE(tool.On_primary_press(host, {15, 20}));
     EXPECT_TRUE(tool.On_pointer_move(host, {45, 60}));
     ASSERT_NE(tool.Draft_annotation(host), nullptr);
-    EXPECT_EQ(tool.Draft_annotation(host)->kind, AnnotationKind::Rectangle);
-    EXPECT_FALSE(tool.Draft_annotation(host)->rectangle.filled);
+    EXPECT_EQ(tool.Draft_annotation(host)->Kind(), AnnotationKind::Rectangle);
     EXPECT_EQ(tool.Draft_annotation(host)->id, 11u);
-    EXPECT_EQ(tool.Draft_annotation(host)->rectangle.style, host.stroke_style);
-    EXPECT_EQ(tool.Draft_annotation(host)->rectangle.outer_bounds,
-              (RectPx::From_ltrb(15, 20, 46, 61)));
+    {
+        auto const &draft_rect =
+            std::get<RectangleAnnotation>(tool.Draft_annotation(host)->data);
+        EXPECT_FALSE(draft_rect.filled);
+        EXPECT_EQ(draft_rect.style, host.stroke_style);
+        EXPECT_EQ(draft_rect.outer_bounds, (RectPx::From_ltrb(15, 20, 46, 61)));
+    }
 
     EXPECT_TRUE(tool.On_primary_release(host, undo_stack));
     EXPECT_FALSE(tool.Has_active_gesture());
     EXPECT_EQ(tool.Draft_annotation(host), nullptr);
     ASSERT_EQ(host.committed_annotations.size(), 1u);
-    EXPECT_EQ(host.committed_annotations[0].kind, AnnotationKind::Rectangle);
-    EXPECT_FALSE(host.committed_annotations[0].rectangle.filled);
-    EXPECT_EQ(host.committed_annotations[0].rectangle.style, host.stroke_style);
-    EXPECT_EQ(host.committed_annotations[0].rectangle.outer_bounds,
-              (RectPx::From_ltrb(15, 20, 46, 61)));
+    EXPECT_EQ(host.committed_annotations[0].Kind(), AnnotationKind::Rectangle);
+    {
+        auto const &committed_rect =
+            std::get<RectangleAnnotation>(host.committed_annotations[0].data);
+        EXPECT_FALSE(committed_rect.filled);
+        EXPECT_EQ(committed_rect.style, host.stroke_style);
+        EXPECT_EQ(committed_rect.outer_bounds, (RectPx::From_ltrb(15, 20, 46, 61)));
+    }
 }
 
 TEST(annotation_tool, RectangleTool_RefreshesDraftAfterStyleChangeNotification) {
@@ -218,13 +251,16 @@ TEST(annotation_tool, RectangleTool_RefreshesDraftAfterStyleChangeNotification) 
     EXPECT_TRUE(tool.On_primary_press(host, {30, 30}));
     EXPECT_TRUE(tool.On_pointer_move(host, {60, 30}));
     ASSERT_NE(tool.Draft_annotation(host), nullptr);
-    EXPECT_EQ(tool.Draft_annotation(host)->rectangle.style.width_px, 3);
+    EXPECT_EQ(
+        std::get<RectangleAnnotation>(tool.Draft_annotation(host)->data).style.width_px,
+        3);
 
     host.stroke_style = StrokeStyle{12, RGB(0x10, 0x20, 0x30)};
     tool.On_stroke_style_changed();
 
     ASSERT_NE(tool.Draft_annotation(host), nullptr);
-    EXPECT_EQ(tool.Draft_annotation(host)->rectangle.style, host.stroke_style);
+    EXPECT_EQ(std::get<RectangleAnnotation>(tool.Draft_annotation(host)->data).style,
+              host.stroke_style);
 }
 
 TEST(annotation_tool, FilledRectangleTool_UsesCurrentColorAndCommit) {
@@ -238,17 +274,22 @@ TEST(annotation_tool, FilledRectangleTool_UsesCurrentColorAndCommit) {
     EXPECT_TRUE(tool.On_primary_press(host, {50, 40}));
     EXPECT_TRUE(tool.On_pointer_move(host, {70, 60}));
     ASSERT_NE(tool.Draft_annotation(host), nullptr);
-    EXPECT_EQ(tool.Draft_annotation(host)->kind, AnnotationKind::Rectangle);
-    EXPECT_TRUE(tool.Draft_annotation(host)->rectangle.filled);
-    EXPECT_EQ(tool.Draft_annotation(host)->rectangle.style.color,
-              host.stroke_style.color);
-    EXPECT_EQ(tool.Draft_annotation(host)->rectangle.outer_bounds,
-              (RectPx::From_ltrb(50, 40, 71, 61)));
+    EXPECT_EQ(tool.Draft_annotation(host)->Kind(), AnnotationKind::Rectangle);
+    {
+        auto const &draft_rect =
+            std::get<RectangleAnnotation>(tool.Draft_annotation(host)->data);
+        EXPECT_TRUE(draft_rect.filled);
+        EXPECT_EQ(draft_rect.style.color, host.stroke_style.color);
+        EXPECT_EQ(draft_rect.outer_bounds, (RectPx::From_ltrb(50, 40, 71, 61)));
+    }
 
     EXPECT_TRUE(tool.On_primary_release(host, undo_stack));
     EXPECT_FALSE(tool.Has_active_gesture());
     ASSERT_EQ(host.committed_annotations.size(), 1u);
-    EXPECT_TRUE(host.committed_annotations[0].rectangle.filled);
-    EXPECT_EQ(host.committed_annotations[0].rectangle.style.color,
-              host.stroke_style.color);
+    {
+        auto const &committed_rect =
+            std::get<RectangleAnnotation>(host.committed_annotations[0].data);
+        EXPECT_TRUE(committed_rect.filled);
+        EXPECT_EQ(committed_rect.style.color, host.stroke_style.color);
+    }
 }

@@ -171,11 +171,16 @@ without pushing per-tool logic into the Win32 layer.
   - `next_annotation_id`
 
 - `Annotation`
-  - tagged type for future extensibility
-  - current kinds:
-    - `Freehand`
-    - `Line`
-    - `Rectangle`
+  - holds an `id` and an `AnnotationData` payload
+  - `AnnotationData` is `std::variant<FreehandStrokeAnnotation, LineAnnotation,
+    RectangleAnnotation>`; all dispatch is done with `std::visit(Overloaded{...},
+    annotation.data)`
+  - `AnnotationKind` enum exists separately and is used only by
+    `Annotation_shows_corner_brackets`; `Annotation::kind()` derives it from the
+    active variant alternative
+  - adding a new alternative to the variant causes every `std::visit` site that
+    does not cover it to become a compile error, which is the intended enforcement
+    mechanism
 
 - `FreehandStrokeAnnotation`
   - raw/smoothed points in physical pixels
@@ -321,7 +326,15 @@ To add a future tool:
 1. Add a new tool id and descriptor metadata.
 2. Implement a new `IAnnotationTool`.
 3. Register it in `AnnotationToolRegistry` in the desired toolbar order.
-4. Extend `Annotation` with a new kind/data payload as needed.
+4. If the tool produces a new annotation shape, add a new payload struct and extend
+   `AnnotationData` in `annotation_types.h`:
+   - define the new `XxxAnnotation` struct with its fields and `operator==`
+   - add it to the `std::variant` alias `AnnotationData`
+   - add it to `AnnotationKind` and add an arm to `Annotation::kind()`
+   - decide whether `Annotation_shows_corner_brackets` should return `true` or
+     `false` for the new kind
+   - all `std::visit(Overloaded{...}, annotation.data)` call sites that are missing
+     an arm will now fail to compile — fix each one
 5. Add raster/hit-test/composite support in core.
 6. Decide whether the tool needs a lightweight live-preview path distinct from its
    committed raster path.

@@ -86,10 +86,11 @@ Annotation RectangleAnnotationTool::Build_annotation(IAnnotationToolHost const &
                                                      PointPx start, PointPx end) const {
     Annotation annotation{};
     annotation.id = host.Next_annotation_id();
-    annotation.kind = AnnotationKind::Rectangle;
-    annotation.rectangle.outer_bounds = Rectangle_outer_bounds_from_corners(start, end);
-    annotation.rectangle.style = host.Current_stroke_style();
-    annotation.rectangle.filled = filled_;
+    annotation.data = RectangleAnnotation{
+        .outer_bounds = Rectangle_outer_bounds_from_corners(start, end),
+        .style = host.Current_stroke_style(),
+        .filled = filled_,
+    };
     return annotation;
 }
 

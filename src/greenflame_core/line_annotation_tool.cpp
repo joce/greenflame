@@ -94,11 +94,12 @@ Annotation LineAnnotationTool::Build_annotation(IAnnotationToolHost const &host,
                                                 PointPx start, PointPx end) const {
     Annotation annotation{};
     annotation.id = host.Next_annotation_id();
-    annotation.kind = AnnotationKind::Line;
-    annotation.line.start = start;
-    annotation.line.end = end;
-    annotation.line.style = host.Current_stroke_style();
-    annotation.line.arrow_head = arrow_head_;
+    annotation.data = LineAnnotation{
+        .start = start,
+        .end = end,
+        .style = host.Current_stroke_style(),
+        .arrow_head = arrow_head_,
+    };
     return annotation;
 }
 

@@ -338,48 +338,64 @@ struct ArrowGeometry final {
 
 } // namespace
 
+AnnotationKind Annotation::Kind() const noexcept {
+    return std::visit(
+        Overloaded{
+            [](FreehandStrokeAnnotation const &) noexcept {
+                return AnnotationKind::Freehand;
+            },
+            [](LineAnnotation const &) noexcept { return AnnotationKind::Line; },
+            [](RectangleAnnotation const &) noexcept {
+                return AnnotationKind::Rectangle;
+            },
+        },
+        data);
+}
+
 RectPx Annotation_bounds(Annotation const &annotation) noexcept {
-    switch (annotation.kind) {
-    case AnnotationKind::Freehand: {
-        auto const &pts = annotation.freehand.points;
-        if (pts.empty()) {
-            return {};
-        }
-        int32_t min_x = pts.front().x;
-        int32_t min_y = pts.front().y;
-        int32_t max_x = pts.front().x;
-        int32_t max_y = pts.front().y;
-        for (PointPx const &p : pts) {
-            min_x = std::min(min_x, p.x);
-            min_y = std::min(min_y, p.y);
-            max_x = std::max(max_x, p.x);
-            max_y = std::max(max_y, p.y);
-        }
-        float const radius =
-            std::max(1.0F, static_cast<float>(annotation.freehand.style.width_px)) /
-            2.0F;
-        int32_t const outset = static_cast<int32_t>(std::ceil(radius));
-        return RectPx::From_ltrb(min_x - outset, min_y - outset, max_x + outset + 1,
-                                 max_y + outset + 1);
-    }
-    case AnnotationKind::Line: {
-        PointF const start_f = To_point_f(annotation.line.start);
-        PointF const end_f = To_point_f(annotation.line.end);
-        if (annotation.line.arrow_head) {
-            ArrowGeometry const geom =
-                Build_arrow_geometry(start_f, end_f, annotation.line.style);
-            RectPx const head_bounds = Triangle_bounds_px(geom.head);
-            RectPx const shaft_bounds =
-                geom.has_shaft ? Line_frame_bounds_px(geom.shaft_frame) : RectPx{};
-            return Combine_bounds(shaft_bounds, head_bounds);
-        }
-        return Line_frame_bounds_px(
-            Build_line_raster_frame(start_f, end_f, annotation.line.style));
-    }
-    case AnnotationKind::Rectangle:
-        return annotation.rectangle.outer_bounds.Normalized();
-    }
-    return {};
+    return std::visit(
+        Overloaded{
+            [](FreehandStrokeAnnotation const &fh) -> RectPx {
+                auto const &pts = fh.points;
+                if (pts.empty()) {
+                    return {};
+                }
+                int32_t min_x = pts.front().x;
+                int32_t min_y = pts.front().y;
+                int32_t max_x = pts.front().x;
+                int32_t max_y = pts.front().y;
+                for (PointPx const &p : pts) {
+                    min_x = std::min(min_x, p.x);
+                    min_y = std::min(min_y, p.y);
+                    max_x = std::max(max_x, p.x);
+                    max_y = std::max(max_y, p.y);
+                }
+                float const radius =
+                    std::max(1.0F, static_cast<float>(fh.style.width_px)) / 2.0F;
+                int32_t const outset = static_cast<int32_t>(std::ceil(radius));
+                return RectPx::From_ltrb(min_x - outset, min_y - outset,
+                                         max_x + outset + 1, max_y + outset + 1);
+            },
+            [](LineAnnotation const &line) -> RectPx {
+                PointF const start_f = To_point_f(line.start);
+                PointF const end_f = To_point_f(line.end);
+                if (line.arrow_head) {
+                    ArrowGeometry const geom =
+                        Build_arrow_geometry(start_f, end_f, line.style);
+                    RectPx const head_bounds = Triangle_bounds_px(geom.head);
+                    RectPx const shaft_bounds =
+                        geom.has_shaft ? Line_frame_bounds_px(geom.shaft_frame)
+                                       : RectPx{};
+                    return Combine_bounds(shaft_bounds, head_bounds);
+                }
+                return Line_frame_bounds_px(
+                    Build_line_raster_frame(start_f, end_f, line.style));
+            },
+            [](RectangleAnnotation const &rect) -> RectPx {
+                return rect.outer_bounds.Normalized();
+            },
+        },
+        annotation.data);
 }
 
 bool Annotation_shows_corner_brackets(AnnotationKind kind) noexcept {
@@ -394,101 +410,100 @@ bool Annotation_shows_corner_brackets(AnnotationKind kind) noexcept {
 }
 
 RectPx Annotation_visual_bounds(Annotation const &annotation) noexcept {
-    switch (annotation.kind) {
-    case AnnotationKind::Freehand:
-    case AnnotationKind::Rectangle:
-        return Annotation_bounds(annotation);
-    case AnnotationKind::Line: {
-        PointF const start_f = To_point_f(annotation.line.start);
-        PointF const end_f = To_point_f(annotation.line.end);
-        if (annotation.line.arrow_head) {
-            ArrowGeometry const geom =
-                Build_arrow_geometry(start_f, end_f, annotation.line.style);
-            RectPx const head_bounds = Triangle_tight_bounds_px(geom.head);
-            RectPx const shaft_bounds =
-                geom.has_shaft
-                    ? Line_tight_visual_bounds_px(start_f, geom.head_base_center,
-                                                  annotation.line.style)
-                    : RectPx{};
-            return Combine_bounds(shaft_bounds, head_bounds);
-        }
-        return Line_tight_visual_bounds_px(start_f, end_f, annotation.line.style);
-    }
-    }
-    return {};
+    return std::visit(
+        Overloaded{
+            [&](FreehandStrokeAnnotation const &) -> RectPx {
+                return Annotation_bounds(annotation);
+            },
+            [](LineAnnotation const &line) -> RectPx {
+                PointF const start_f = To_point_f(line.start);
+                PointF const end_f = To_point_f(line.end);
+                if (line.arrow_head) {
+                    ArrowGeometry const geom =
+                        Build_arrow_geometry(start_f, end_f, line.style);
+                    RectPx const head_bounds = Triangle_tight_bounds_px(geom.head);
+                    RectPx const shaft_bounds =
+                        geom.has_shaft ? Line_tight_visual_bounds_px(
+                                             start_f, geom.head_base_center, line.style)
+                                       : RectPx{};
+                    return Combine_bounds(shaft_bounds, head_bounds);
+                }
+                return Line_tight_visual_bounds_px(start_f, end_f, line.style);
+            },
+            [&](RectangleAnnotation const &) -> RectPx {
+                return Annotation_bounds(annotation);
+            },
+        },
+        annotation.data);
 }
 
 bool Annotation_hits_point(Annotation const &annotation, PointPx point) noexcept {
-    switch (annotation.kind) {
-    case AnnotationKind::Freehand: {
-        auto const &pts = annotation.freehand.points;
-        if (pts.empty()) {
-            return false;
-        }
-        float const radius =
-            std::max(1.0F, static_cast<float>(annotation.freehand.style.width_px)) /
-            2.0F;
-        float const radius_sq = radius * radius;
-        float const cx = static_cast<float>(point.x) + kHalf;
-        float const cy = static_cast<float>(point.y) + kHalf;
-        return Pixel_covered_by_polyline(cx, cy, pts, radius_sq);
-    }
-    case AnnotationKind::Line: {
-        // Use 4x4 supersampling at the queried pixel to match original raster behavior.
-        constexpr int samples = kLineRasterSamplesPerAxis;
-        constexpr float step = 1.0F / static_cast<float>(samples);
-
-        PointF const start_f = To_point_f(annotation.line.start);
-        PointF const end_f = To_point_f(annotation.line.end);
-
-        if (annotation.line.arrow_head) {
-            ArrowGeometry const geom =
-                Build_arrow_geometry(start_f, end_f, annotation.line.style);
-            for (int sy = 0; sy < samples; ++sy) {
-                float const sample_y = static_cast<float>(point.y) +
-                                       (static_cast<float>(sy) + kHalf) * step;
-                for (int sx = 0; sx < samples; ++sx) {
-                    float const sample_x = static_cast<float>(point.x) +
-                                           (static_cast<float>(sx) + kHalf) * step;
-                    if (Sample_covered_by_arrow(sample_x, sample_y, geom)) {
-                        return true;
+    return std::visit(
+        Overloaded{
+            [&](FreehandStrokeAnnotation const &fh) -> bool {
+                if (fh.points.empty()) {
+                    return false;
+                }
+                float const radius =
+                    std::max(1.0F, static_cast<float>(fh.style.width_px)) / 2.0F;
+                float const cx = static_cast<float>(point.x) + kHalf;
+                float const cy = static_cast<float>(point.y) + kHalf;
+                return Pixel_covered_by_polyline(cx, cy, fh.points, radius * radius);
+            },
+            [&](LineAnnotation const &line) -> bool {
+                // Use 4x4 supersampling at the queried pixel to match raster behavior.
+                constexpr int samples = kLineRasterSamplesPerAxis;
+                constexpr float step = 1.0F / static_cast<float>(samples);
+                PointF const start_f = To_point_f(line.start);
+                PointF const end_f = To_point_f(line.end);
+                if (line.arrow_head) {
+                    ArrowGeometry const geom =
+                        Build_arrow_geometry(start_f, end_f, line.style);
+                    for (int sy = 0; sy < samples; ++sy) {
+                        float const sample_y = static_cast<float>(point.y) +
+                                               (static_cast<float>(sy) + kHalf) * step;
+                        for (int sx = 0; sx < samples; ++sx) {
+                            float const sample_x =
+                                static_cast<float>(point.x) +
+                                (static_cast<float>(sx) + kHalf) * step;
+                            if (Sample_covered_by_arrow(sample_x, sample_y, geom)) {
+                                return true;
+                            }
+                        }
+                    }
+                    return false;
+                }
+                LineRasterFrame const frame =
+                    Build_line_raster_frame(start_f, end_f, line.style);
+                for (int sy = 0; sy < samples; ++sy) {
+                    float const sample_y = static_cast<float>(point.y) +
+                                           (static_cast<float>(sy) + kHalf) * step;
+                    for (int sx = 0; sx < samples; ++sx) {
+                        float const sample_x = static_cast<float>(point.x) +
+                                               (static_cast<float>(sx) + kHalf) * step;
+                        if (Point_inside_line_shape(sample_x, sample_y, frame)) {
+                            return true;
+                        }
                     }
                 }
-            }
-            return false;
-        }
-
-        LineRasterFrame const frame =
-            Build_line_raster_frame(start_f, end_f, annotation.line.style);
-        for (int sy = 0; sy < samples; ++sy) {
-            float const sample_y =
-                static_cast<float>(point.y) + (static_cast<float>(sy) + kHalf) * step;
-            for (int sx = 0; sx < samples; ++sx) {
-                float const sample_x = static_cast<float>(point.x) +
-                                       (static_cast<float>(sx) + kHalf) * step;
-                if (Point_inside_line_shape(sample_x, sample_y, frame)) {
+                return false;
+            },
+            [&](RectangleAnnotation const &rect) -> bool {
+                RectPx const r = rect.outer_bounds.Normalized();
+                if (!r.Contains(point)) {
+                    return false;
+                }
+                if (rect.filled) {
                     return true;
                 }
-            }
-        }
-        return false;
-    }
-    case AnnotationKind::Rectangle: {
-        RectPx const r = annotation.rectangle.outer_bounds.Normalized();
-        if (!r.Contains(point)) {
-            return false;
-        }
-        if (annotation.rectangle.filled) {
-            return true;
-        }
-        int32_t const inset = std::max<int32_t>(StrokeStyle::kMinWidthPx,
-                                                annotation.rectangle.style.width_px);
-        RectPx const inner = RectPx::From_ltrb(r.left + inset, r.top + inset,
-                                               r.right - inset, r.bottom - inset);
-        return inner.Is_empty() || !inner.Contains(point);
-    }
-    }
-    return false;
+                int32_t const inset =
+                    std::max<int32_t>(StrokeStyle::kMinWidthPx, rect.style.width_px);
+                RectPx const inner = RectPx::From_ltrb(
+                    r.left + inset, r.top + inset, r.right - inset, r.bottom - inset);
+                return inner.Is_empty() || !inner.Contains(point);
+            },
+        },
+        annotation.data);
 }
 
 std::optional<size_t>
@@ -683,27 +698,28 @@ RectPx Resize_rectangle_from_handle(RectPx outer_bounds, SelectionHandle handle,
 }
 
 Annotation Translate_annotation(Annotation annotation, PointPx delta) noexcept {
-    switch (annotation.kind) {
-    case AnnotationKind::Freehand:
-        for (PointPx &point : annotation.freehand.points) {
-            point.x += delta.x;
-            point.y += delta.y;
-        }
-        break;
-    case AnnotationKind::Line:
-        annotation.line.start.x += delta.x;
-        annotation.line.start.y += delta.y;
-        annotation.line.end.x += delta.x;
-        annotation.line.end.y += delta.y;
-        break;
-    case AnnotationKind::Rectangle:
-        annotation.rectangle.outer_bounds =
-            RectPx::From_ltrb(annotation.rectangle.outer_bounds.left + delta.x,
-                              annotation.rectangle.outer_bounds.top + delta.y,
-                              annotation.rectangle.outer_bounds.right + delta.x,
-                              annotation.rectangle.outer_bounds.bottom + delta.y);
-        break;
-    }
+    std::visit(Overloaded{
+                   [&](FreehandStrokeAnnotation &fh) noexcept {
+                       for (PointPx &point : fh.points) {
+                           point.x += delta.x;
+                           point.y += delta.y;
+                       }
+                   },
+                   [&](LineAnnotation &line) noexcept {
+                       line.start.x += delta.x;
+                       line.start.y += delta.y;
+                       line.end.x += delta.x;
+                       line.end.y += delta.y;
+                   },
+                   [&](RectangleAnnotation &rect) noexcept {
+                       rect.outer_bounds =
+                           RectPx::From_ltrb(rect.outer_bounds.left + delta.x,
+                                             rect.outer_bounds.top + delta.y,
+                                             rect.outer_bounds.right + delta.x,
+                                             rect.outer_bounds.bottom + delta.y);
+                   },
+               },
+               annotation.data);
     return annotation;
 }
 
@@ -733,57 +749,60 @@ void Blend_annotation_onto_pixels(std::span<uint8_t> pixels, int width, int heig
         return;
     }
 
-    StrokeStyle style{};
-    switch (annotation.kind) {
-    case AnnotationKind::Freehand:
-        style = annotation.freehand.style;
-        break;
-    case AnnotationKind::Line:
-        style = annotation.line.style;
-        break;
-    case AnnotationKind::Rectangle:
-        style = annotation.rectangle.style;
-        break;
-    }
+    // All three payload types have a .style member; extract it generically.
+    StrokeStyle const style =
+        std::visit([](auto const &d) noexcept { return d.style; }, annotation.data);
 
     uint8_t const red = Colorref_red(style.color);
     uint8_t const green = Colorref_green(style.color);
     uint8_t const blue = Colorref_blue(style.color);
 
-    // Pre-compute geometry for line/arrow to avoid rebuilding per pixel.
-    LineRasterFrame line_frame{};
-    ArrowGeometry arrow_geom{};
-    bool is_arrow = false;
+    // Pre-compute kind-specific rendering state once, before the pixel loop.
+    struct FreehandState {
+        std::span<const PointPx> points;
+        float radius_sq;
+    };
+    struct LineState {
+        LineRasterFrame frame;
+        ArrowGeometry arrow;
+        bool is_arrow;
+    };
+    struct RectState {
+        RectPx r;
+        RectPx inner;
+        bool has_inner;
+        bool filled;
+    };
+    using RenderState = std::variant<FreehandState, LineState, RectState>;
 
-    if (annotation.kind == AnnotationKind::Line) {
-        PointF const start_f = To_point_f(annotation.line.start);
-        PointF const end_f = To_point_f(annotation.line.end);
-        if (annotation.line.arrow_head) {
-            arrow_geom = Build_arrow_geometry(start_f, end_f, annotation.line.style);
-            is_arrow = true;
-        } else {
-            line_frame = Build_line_raster_frame(start_f, end_f, annotation.line.style);
-        }
-    }
-
-    float const freehand_radius =
-        annotation.kind == AnnotationKind::Freehand
-            ? std::max(1.0F, static_cast<float>(annotation.freehand.style.width_px)) /
-                  2.0F
-            : 0.0F;
-    float const freehand_radius_sq = freehand_radius * freehand_radius;
-
-    // Rectangle pre-computation.
-    RectPx rect_inner{};
-    bool rect_has_inner = false;
-    if (annotation.kind == AnnotationKind::Rectangle) {
-        RectPx const r = annotation.rectangle.outer_bounds.Normalized();
-        int32_t const inset = std::max<int32_t>(StrokeStyle::kMinWidthPx,
-                                                annotation.rectangle.style.width_px);
-        rect_inner = RectPx::From_ltrb(r.left + inset, r.top + inset, r.right - inset,
-                                       r.bottom - inset);
-        rect_has_inner = !rect_inner.Is_empty() && !annotation.rectangle.filled;
-    }
+    RenderState const rs = std::visit(
+        Overloaded{
+            [](FreehandStrokeAnnotation const &fh) -> RenderState {
+                float const r =
+                    std::max(1.0F, static_cast<float>(fh.style.width_px)) / 2.0F;
+                return FreehandState{fh.points, r * r};
+            },
+            [](LineAnnotation const &line) -> RenderState {
+                PointF const sf = To_point_f(line.start);
+                PointF const ef = To_point_f(line.end);
+                if (line.arrow_head) {
+                    return LineState{
+                        {}, Build_arrow_geometry(sf, ef, line.style), true};
+                }
+                return LineState{
+                    Build_line_raster_frame(sf, ef, line.style), {}, false};
+            },
+            [](RectangleAnnotation const &rect) -> RenderState {
+                RectPx const r = rect.outer_bounds.Normalized();
+                int32_t const inset =
+                    std::max<int32_t>(StrokeStyle::kMinWidthPx, rect.style.width_px);
+                RectPx const inner = RectPx::From_ltrb(
+                    r.left + inset, r.top + inset, r.right - inset, r.bottom - inset);
+                return RectState{r, inner, !inner.Is_empty() && !rect.filled,
+                                 rect.filled};
+            },
+        },
+        annotation.data);
 
     for (int32_t y = clipped->top; y < clipped->bottom; ++y) {
         int32_t const target_y = y - target_bounds.top;
@@ -791,41 +810,31 @@ void Blend_annotation_onto_pixels(std::span<uint8_t> pixels, int width, int heig
             static_cast<size_t>(target_y) * static_cast<size_t>(row_bytes);
 
         for (int32_t x = clipped->left; x < clipped->right; ++x) {
-            bool covered = false;
-
-            switch (annotation.kind) {
-            case AnnotationKind::Freehand: {
-                float const cx = static_cast<float>(x) + kHalf;
-                float const cy = static_cast<float>(y) + kHalf;
-                covered = Pixel_covered_by_polyline(cx, cy, annotation.freehand.points,
-                                                    freehand_radius_sq);
-                break;
-            }
-            case AnnotationKind::Line: {
-                if (is_arrow) {
-                    covered = Sample_covered_by_arrow(static_cast<float>(x) + kHalf,
-                                                      static_cast<float>(y) + kHalf,
-                                                      arrow_geom);
-                } else {
-                    covered = Point_inside_line_shape(static_cast<float>(x) + kHalf,
-                                                      static_cast<float>(y) + kHalf,
-                                                      line_frame);
-                }
-                break;
-            }
-            case AnnotationKind::Rectangle: {
-                PointPx const pt{x, y};
-                RectPx const r = annotation.rectangle.outer_bounds.Normalized();
-                if (!r.Contains(pt)) {
-                    covered = false;
-                } else if (annotation.rectangle.filled) {
-                    covered = true;
-                } else {
-                    covered = !rect_has_inner || !rect_inner.Contains(pt);
-                }
-                break;
-            }
-            }
+            bool const covered = std::visit(
+                Overloaded{
+                    [&](FreehandState const &s) noexcept {
+                        return Pixel_covered_by_polyline(static_cast<float>(x) + kHalf,
+                                                         static_cast<float>(y) + kHalf,
+                                                         s.points, s.radius_sq);
+                    },
+                    [&](LineState const &s) noexcept {
+                        float const fx = static_cast<float>(x) + kHalf;
+                        float const fy = static_cast<float>(y) + kHalf;
+                        return s.is_arrow ? Sample_covered_by_arrow(fx, fy, s.arrow)
+                                          : Point_inside_line_shape(fx, fy, s.frame);
+                    },
+                    [&](RectState const &s) noexcept {
+                        PointPx const pt{x, y};
+                        if (!s.r.Contains(pt)) {
+                            return false;
+                        }
+                        if (s.filled) {
+                            return true;
+                        }
+                        return !s.has_inner || !s.inner.Contains(pt);
+                    },
+                },
+                rs);
 
             if (!covered) {
                 continue;

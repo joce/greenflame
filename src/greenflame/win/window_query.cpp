@@ -124,21 +124,29 @@ void Merge_segments(std::vector<greenflame::core::SnapEdgeSegmentPx> &segments) 
 
 void Collect_region_rects(HRGN region, std::vector<RECT> &out) {
     DWORD const bytes = GetRegionData(region, 0, nullptr);
-    if (bytes == 0) {
+    size_t const header_bytes = offsetof(RGNDATA, Buffer);
+    if (bytes < header_bytes) {
         return;
     }
 
-    size_t const slot_count =
-        (static_cast<size_t>(bytes) + sizeof(std::max_align_t) - 1) /
-        sizeof(std::max_align_t);
-    std::vector<std::max_align_t> buffer(slot_count);
+    std::vector<std::byte> buffer(bytes);
+
+    CLANG_WARN_IGNORE_PUSH("-Wunsafe-buffer-usage")
     RGNDATA *const data = reinterpret_cast<RGNDATA *>(buffer.data());
+    CLANG_WARN_IGNORE_POP()
     if (GetRegionData(region, bytes, data) == 0) {
         return;
     }
 
-    RECT const *const rects = reinterpret_cast<RECT const *>(data->Buffer);
-    out.insert(out.end(), rects, rects + data->rdh.nCount);
+    size_t const available_rect_count =
+        (static_cast<size_t>(bytes) - header_bytes) / sizeof(RECT);
+    size_t const rect_count =
+        std::min(static_cast<size_t>(data->rdh.nCount), available_rect_count);
+    size_t const out_offset = out.size();
+    out.resize(out_offset + rect_count);
+    std::copy_n(reinterpret_cast<RECT const *>(data->Buffer), rect_count,
+                out.begin() +
+                    static_cast<std::vector<RECT>::difference_type>(out_offset));
 }
 
 void Append_edge_segments_from_strip(

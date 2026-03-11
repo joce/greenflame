@@ -165,6 +165,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         -Wall
         -Wextra
         -Wpedantic
+        -Werror
         -Wno-c++98-compat
         -Wno-c++98-compat-pedantic
         -Wno-pre-c++14-compat
@@ -178,6 +179,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 elseif(MSVC)
     target_compile_options(greenflame_core PRIVATE
         /Wall
+        /WX
         /wd4355 # 'this': used in base member initializer list
         /wd4514 # 'function' : unreferenced inline function has been removed
         /wd4710 # 'function' : function not inlined
@@ -190,7 +192,7 @@ elseif(MSVC)
         /Zc:__cplusplus
     )
 else()
-    target_compile_options(greenflame_core PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(greenflame_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
 
 # -----------------------------
@@ -266,6 +268,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         -Wall
         -Wextra
         -Wpedantic
+        -Werror
         -Wno-c++98-compat
         -Wno-c++98-compat-pedantic
         -Wno-pre-c++14-compat
@@ -279,6 +282,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 elseif(MSVC)
     target_compile_options(greenflame PRIVATE
         /Wall
+        /WX
         /wd4355 # 'this': used in base member initializer list
         /wd4514 # 'function' : unreferenced inline function has been removed
         /wd4710 # 'function' : function not inlined
@@ -291,7 +295,7 @@ elseif(MSVC)
         /Zc:__cplusplus
     )
 else()
-    target_compile_options(greenflame PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(greenflame PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
 
 target_link_libraries(greenflame PRIVATE

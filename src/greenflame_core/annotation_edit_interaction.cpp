@@ -145,16 +145,19 @@ class LineEndpointEditInteraction final : public IAnnotationEditInteraction {
     [[nodiscard]] bool Update(IAnnotationEditInteractionHost &host,
                               PointPx cursor) override {
         Annotation const *const current = host.Annotation_at(index_);
+        LineAnnotation const *const line_before =
+            std::get_if<LineAnnotation>(&annotation_before_.data);
         if (current == nullptr || current->id != annotation_id_ ||
-            annotation_before_.kind != AnnotationKind::Line) {
+            line_before == nullptr) {
             return false;
         }
 
         Annotation edited = annotation_before_;
+        LineAnnotation &line_edited = std::get<LineAnnotation>(edited.data);
         if (active_handle_ == AnnotationEditHandleKind::LineStart) {
-            edited.line.start = cursor;
+            line_edited.start = cursor;
         } else {
-            edited.line.end = cursor;
+            line_edited.end = cursor;
         }
         if (*current == edited) {
             return false;
@@ -209,14 +212,16 @@ class RectangleResizeEditInteraction final : public IAnnotationEditInteraction {
     [[nodiscard]] bool Update(IAnnotationEditInteractionHost &host,
                               PointPx cursor) override {
         Annotation const *const current = host.Annotation_at(index_);
+        RectangleAnnotation const *const rect_before =
+            std::get_if<RectangleAnnotation>(&annotation_before_.data);
         if (current == nullptr || current->id != annotation_id_ ||
-            annotation_before_.kind != AnnotationKind::Rectangle) {
+            rect_before == nullptr) {
             return false;
         }
 
         Annotation edited = annotation_before_;
-        edited.rectangle.outer_bounds = Resize_rectangle_from_handle(
-            annotation_before_.rectangle.outer_bounds, handle_, cursor);
+        std::get<RectangleAnnotation>(edited.data).outer_bounds =
+            Resize_rectangle_from_handle(rect_before->outer_bounds, handle_, cursor);
         if (*current == edited) {
             return false;
         }
@@ -265,22 +270,24 @@ std::optional<AnnotationEditTarget>
 Hit_test_annotation_edit_target(Annotation const *selected_annotation,
                                 std::span<const Annotation> annotations,
                                 PointPx cursor) noexcept {
-    if (selected_annotation != nullptr &&
-        selected_annotation->kind == AnnotationKind::Line) {
+    if (LineAnnotation const *const sel_line =
+            selected_annotation
+                ? std::get_if<LineAnnotation>(&selected_annotation->data)
+                : nullptr) {
         if (std::optional<AnnotationLineEndpoint> const endpoint =
-                Hit_test_line_endpoint_handles(selected_annotation->line.start,
-                                               selected_annotation->line.end, cursor);
+                Hit_test_line_endpoint_handles(sel_line->start, sel_line->end, cursor);
             endpoint.has_value()) {
             return AnnotationEditTarget{selected_annotation->id,
                                         *endpoint == AnnotationLineEndpoint::Start
                                             ? AnnotationEditTargetKind::LineStartHandle
                                             : AnnotationEditTargetKind::LineEndHandle};
         }
-    } else if (selected_annotation != nullptr &&
-               selected_annotation->kind == AnnotationKind::Rectangle) {
+    } else if (RectangleAnnotation const *const sel_rect =
+                   selected_annotation
+                       ? std::get_if<RectangleAnnotation>(&selected_annotation->data)
+                       : nullptr) {
         if (std::optional<SelectionHandle> const handle =
-                Hit_test_rectangle_resize_handles(
-                    selected_annotation->rectangle.outer_bounds, cursor);
+                Hit_test_rectangle_resize_handles(sel_rect->outer_bounds, cursor);
             handle.has_value()) {
             return AnnotationEditTarget{selected_annotation->id,
                                         Target_kind_for_rectangle_handle(*handle)};
@@ -303,14 +310,14 @@ Create_annotation_edit_interaction(AnnotationEditTarget target, size_t index,
         return std::make_unique<MoveAnnotationEditInteraction>(
             target.annotation_id, index, std::move(annotation_before), cursor);
     case AnnotationEditTargetKind::LineStartHandle:
-        if (annotation_before.kind != AnnotationKind::Line) {
+        if (!std::holds_alternative<LineAnnotation>(annotation_before.data)) {
             return {};
         }
         return std::make_unique<LineEndpointEditInteraction>(
             target.annotation_id, index, std::move(annotation_before),
             AnnotationEditHandleKind::LineStart);
     case AnnotationEditTargetKind::LineEndHandle:
-        if (annotation_before.kind != AnnotationKind::Line) {
+        if (!std::holds_alternative<LineAnnotation>(annotation_before.data)) {
             return {};
         }
         return std::make_unique<LineEndpointEditInteraction>(
@@ -324,7 +331,7 @@ Create_annotation_edit_interaction(AnnotationEditTarget target, size_t index,
     case AnnotationEditTargetKind::RectangleRightHandle:
     case AnnotationEditTargetKind::RectangleBottomHandle:
     case AnnotationEditTargetKind::RectangleLeftHandle:
-        if (annotation_before.kind != AnnotationKind::Rectangle) {
+        if (!std::holds_alternative<RectangleAnnotation>(annotation_before.data)) {
             return {};
         }
         if (std::optional<SelectionHandle> const handle =

@@ -7,9 +7,10 @@ namespace {
 Annotation Make_stroke(uint64_t id, std::initializer_list<PointPx> points) {
     Annotation annotation{};
     annotation.id = id;
-    annotation.kind = AnnotationKind::Freehand;
-    annotation.freehand.style = {};
-    annotation.freehand.points.assign(points.begin(), points.end());
+    annotation.data = FreehandStrokeAnnotation{
+        .points = std::vector<PointPx>(points),
+        .style = {},
+    };
     return annotation;
 }
 
@@ -18,11 +19,12 @@ Annotation Make_line(uint64_t id, PointPx start, PointPx end,
                      bool arrow_head = false) {
     Annotation annotation{};
     annotation.id = id;
-    annotation.kind = AnnotationKind::Line;
-    annotation.line.start = start;
-    annotation.line.end = end;
-    annotation.line.style.width_px = width_px;
-    annotation.line.arrow_head = arrow_head;
+    annotation.data = LineAnnotation{
+        .start = start,
+        .end = end,
+        .style = {.width_px = width_px},
+        .arrow_head = arrow_head,
+    };
     return annotation;
 }
 
@@ -30,10 +32,11 @@ Annotation Make_rectangle(uint64_t id, RectPx outer_bounds, int32_t width_px,
                           bool filled = false) {
     Annotation annotation{};
     annotation.id = id;
-    annotation.kind = AnnotationKind::Rectangle;
-    annotation.rectangle.outer_bounds = outer_bounds;
-    annotation.rectangle.style.width_px = width_px;
-    annotation.rectangle.filled = filled;
+    annotation.data = RectangleAnnotation{
+        .outer_bounds = outer_bounds,
+        .style = {.width_px = width_px},
+        .filled = filled,
+    };
     return annotation;
 }
 
@@ -88,14 +91,17 @@ TEST(annotation_edit_interaction, MoveInteraction_ProducesUndoableCommandData) {
 
     EXPECT_TRUE(interaction->Update(host, {70, 60}));
     EXPECT_EQ(host.selected_annotation_id, std::optional<uint64_t>{7});
-    EXPECT_EQ(host.annotations[0].freehand.points[0], (PointPx{60, 60}));
+    EXPECT_EQ(std::get<FreehandStrokeAnnotation>(host.annotations[0].data).points[0],
+              (PointPx{60, 60}));
 
     std::optional<AnnotationEditCommandData> const command = interaction->Commit();
     ASSERT_TRUE(command.has_value());
     EXPECT_EQ(command->description, "Move annotation");
     EXPECT_EQ(command->selection_before, std::optional<uint64_t>{7});
     EXPECT_EQ(command->selection_after, std::optional<uint64_t>{7});
-    EXPECT_EQ(command->annotation_after.freehand.points[0], (PointPx{60, 60}));
+    EXPECT_EQ(
+        std::get<FreehandStrokeAnnotation>(command->annotation_after.data).points[0],
+        (PointPx{60, 60}));
 }
 
 TEST(annotation_edit_interaction,
@@ -110,9 +116,12 @@ TEST(annotation_edit_interaction,
     ASSERT_NE(interaction, nullptr);
 
     EXPECT_TRUE(interaction->Update(host, {50, 25}));
-    EXPECT_TRUE(host.annotations[0].line.arrow_head);
-    EXPECT_EQ(host.annotations[0].line.start, (PointPx{30, 25}));
-    EXPECT_EQ(host.annotations[0].line.end, (PointPx{70, 25}));
+    {
+        auto const &moved_line = std::get<LineAnnotation>(host.annotations[0].data);
+        EXPECT_TRUE(moved_line.arrow_head);
+        EXPECT_EQ(moved_line.start, (PointPx{30, 25}));
+        EXPECT_EQ(moved_line.end, (PointPx{70, 25}));
+    }
     EXPECT_TRUE(Annotation_hits_point(host.annotations[0], {70, 25}));
     EXPECT_TRUE(Annotation_hits_point(host.annotations[0], {60, 22}));
 }
@@ -133,7 +142,8 @@ TEST(annotation_edit_interaction,
                                                 AnnotationEditHandleKind::LineEnd});
 
     EXPECT_TRUE(interaction->Update(host, {120, 70}));
-    EXPECT_EQ(host.annotations[0].line.end, (PointPx{120, 70}));
+    EXPECT_EQ(std::get<LineAnnotation>(host.annotations[0].data).end,
+              (PointPx{120, 70}));
 
     EXPECT_TRUE(interaction->Cancel(host));
     EXPECT_EQ(host.annotations[0], original);
@@ -155,8 +165,9 @@ TEST(annotation_edit_interaction,
                                                 AnnotationEditHandleKind::LineEnd});
 
     EXPECT_TRUE(interaction->Update(host, {120, 70}));
-    EXPECT_TRUE(host.annotations[0].line.arrow_head);
-    EXPECT_EQ(host.annotations[0].line.end, (PointPx{120, 70}));
+    EXPECT_TRUE(std::get<LineAnnotation>(host.annotations[0].data).arrow_head);
+    EXPECT_EQ(std::get<LineAnnotation>(host.annotations[0].data).end,
+              (PointPx{120, 70}));
 }
 
 TEST(annotation_edit_interaction,
@@ -190,7 +201,7 @@ TEST(annotation_edit_interaction,
                   AnnotationEditHandleKind::RectangleRight});
 
     EXPECT_TRUE(interaction->Update(host, {95, 60}));
-    EXPECT_EQ(host.annotations[0].rectangle.outer_bounds,
+    EXPECT_EQ(std::get<RectangleAnnotation>(host.annotations[0].data).outer_bounds,
               (RectPx::From_ltrb(40, 40, 96, 81)));
 
     EXPECT_TRUE(interaction->Cancel(host));

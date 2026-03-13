@@ -290,9 +290,13 @@ void Draw_rectangle(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         float const hw = static_cast<float>(rect.style.width_px) * 0.5f;
         D2D1_RECT_F const inset =
             D2D1::RectF(rf.left + hw, rf.top + hw, rf.right - hw, rf.bottom - hw);
-        rt->DrawRectangle(inset, res.solid_brush.Get(),
-                          static_cast<float>(rect.style.width_px),
-                          res.flat_cap_style.Get());
+        if (inset.left >= inset.right || inset.top >= inset.bottom) {
+            rt->FillRectangle(rf, res.solid_brush.Get());
+        } else {
+            rt->DrawRectangle(inset, res.solid_brush.Get(),
+                              static_cast<float>(rect.style.width_px),
+                              res.flat_cap_style.Get());
+        }
     }
 }
 

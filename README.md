@@ -34,13 +34,15 @@ Once a region is selected:
 - With **no annotation tool selected**, a **selected line or arrow annotation** shows draggable endpoint handles you can drag to reshape it.
 - With **no annotation tool selected**, a **selected rectangle annotation** shows draggable resize handles on the corners and sides.
 - Press **B** or use the toolbar to toggle the **Brush tool** on or off.
+- Press **H** or use the toolbar to toggle the **Highlighter tool** on or off.
 - Press **L** or use the toolbar to toggle the **Line tool** on or off.
 - Press **A** or use the toolbar to toggle the **Arrow tool** on or off.
 - Press **R** or use the toolbar to toggle the **Rectangle tool** on or off.
 - Press **F** or use the toolbar to toggle the **Filled Rectangle tool** on or off.
-- With an annotation tool active, **right-click** anywhere to open the **color wheel** at the cursor. **Left-click** a segment to select that color, or press **Escape** to dismiss the wheel.
-- With the **Brush**, **Line**, **Arrow**, or **Rectangle** tool active, use **mouse-wheel up/down** or **Ctrl+= / Ctrl+-** to change stroke width from **1** to **50**.
+- With an annotation tool active, **right-click** anywhere to open the active tool's **color wheel** at the cursor. **Left-click** a segment to select that color, or press **Escape** to dismiss the wheel.
+- With the **Brush**, **Highlighter**, **Line**, **Arrow**, or **Rectangle** tool active, use **mouse-wheel up/down** or **Ctrl+= / Ctrl+-** to change stroke width from **1** to **50**.
 - With the **Brush tool** active, the overlay shows an anti-aliased circular size preview around the cursor hotspot.
+- With the **Highlighter tool** active, the overlay shows an anti-aliased axis-aligned square size preview around the cursor hotspot.
 - With the **Line** or **Arrow** tool active, the overlay shows an anti-aliased square size preview around the cursor hotspot aligned to the current line direction.
 - The **Rectangle** and **Filled Rectangle** tools do not draw a cursor size preview overlay.
 - **Delete** ➜ remove the selected annotation.
@@ -156,9 +158,12 @@ Greenflame reads `~/.config/greenflame/greenflame.ini` (i.e. `%USERPROFILE%\.con
 | `[ui]` | `show_selection_size_side_labels` | `true` | Show selection-size labels outside the selection (width on top/bottom and height on left/right). |
 | `[ui]` | `show_selection_size_center_label` | `true` | Show centered `W x H` selection-size label inside the selection. |
 | `[ui]` | `tool_size_overlay_duration_ms` | `800` | How long the centered tool-size overlay stays visible after a stroke-width change. `0` disables it. |
-| `[tools]` | `brush_width` | `2` | Default Brush/Line/Arrow/Rectangle stroke width in physical pixels. Runtime adjustments are clamped to `1..50` and persisted here. Filled rectangles ignore it. |
+| `[tools]` | `brush_width` | `2` | Default Brush/Highlighter/Line/Arrow/Rectangle stroke width in physical pixels. Runtime adjustments are clamped to `1..50` and persisted here. Filled rectangles ignore it. |
 | `[tools]` | `current_color` | `0` | Current annotation color slot index, clamped to `0..7`. |
 | `[tools]` | `color_0` ... `color_7` | `#000000`, `#ff0000`, `#00ff00`, `#0000ff`, `#ffff00`, `#ff00ff`, `#00ffff`, `#ffffff` | Annotation color wheel slots, starting at the top-right segment and moving clockwise. Values use `#rrggbb`. |
+| `[tools]` | `highlighter_current_color` | `0` | Current Highlighter color slot index, clamped to `0..5`. |
+| `[tools]` | `highlighter_color_0` ... `highlighter_color_5` | `#f7eb62`, `#7fe36a`, `#ffb44d`, `#ff79b9`, `#64c7ff`, `#c38cff` | Highlighter color wheel slots, starting at the top-right segment and moving clockwise. Values use `#rrggbb`. |
+| `[tools]` | `highlighter_opacity_percent` | `50` | Default Highlighter opacity for live preview, save output, and clipboard output. Values are clamped to `0..100`. |
 | `[save]` | `default_save_dir` | `%USERPROFILE%\Pictures\greenflame` (runtime fallback when unset) | Folder used by **Ctrl-S**, **Ctrl-Alt-S**, and CLI captures when `--output` is not provided. |
 | `[save]` | `last_save_as_dir` | Falls back to `default_save_dir`, then `%USERPROFILE%\Pictures\greenflame` | Initial folder used by **Ctrl-Shift-S** and **Ctrl-Shift-Alt-S** (Save As). |
 | `[save]` | `default_save_format` | `png` | Default image format for **Ctrl-S**, **Ctrl-Alt-S**, and CLI output paths without explicit extension. Accepted values: `png`, `jpg`/`jpeg`, `bmp`. |
@@ -187,6 +192,14 @@ color_4=#ffff00
 color_5=#ff00ff
 color_6=#00ffff
 color_7=#ffffff
+highlighter_current_color=0
+highlighter_color_0=#f7eb62
+highlighter_color_1=#7fe36a
+highlighter_color_2=#ffb44d
+highlighter_color_3=#ff79b9
+highlighter_color_4=#64c7ff
+highlighter_color_5=#c38cff
+highlighter_opacity_percent=50
 
 [save]
 default_save_dir=C:\Users\you\Pictures\greenflame

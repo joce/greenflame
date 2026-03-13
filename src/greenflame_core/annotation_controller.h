@@ -53,9 +53,23 @@ class AnnotationController final : public IAnnotationToolHost,
     }
     [[nodiscard]] bool Set_brush_width_px(int32_t width_px) noexcept;
     [[nodiscard]] COLORREF Annotation_color() const noexcept {
-        return brush_style_.color;
+        return Active_tool() == AnnotationToolId::Highlighter ? highlighter_style_.color
+                                                              : brush_style_.color;
     }
     [[nodiscard]] bool Set_annotation_color(COLORREF color) noexcept;
+    [[nodiscard]] COLORREF Brush_annotation_color() const noexcept {
+        return brush_style_.color;
+    }
+    [[nodiscard]] bool Set_brush_annotation_color(COLORREF color) noexcept;
+    [[nodiscard]] COLORREF Highlighter_color() const noexcept {
+        return highlighter_style_.color;
+    }
+    [[nodiscard]] bool Set_highlighter_color(COLORREF color) noexcept;
+    [[nodiscard]] int32_t Highlighter_opacity_percent() const noexcept {
+        return highlighter_style_.opacity_percent;
+    }
+    [[nodiscard]] bool
+    Set_highlighter_opacity_percent(int32_t opacity_percent) noexcept;
 
     [[nodiscard]] std::span<const Annotation> Annotations() const noexcept {
         return document_.annotations;
@@ -125,6 +139,7 @@ class AnnotationController final : public IAnnotationToolHost,
     PassthroughStrokeSmoother smoother_ = {};
     std::optional<AnnotationToolId> active_tool_ = std::nullopt;
     StrokeStyle brush_style_ = {};
+    StrokeStyle highlighter_style_ = {};
     std::unique_ptr<IAnnotationEditInteraction> active_edit_interaction_ = {};
 };
 

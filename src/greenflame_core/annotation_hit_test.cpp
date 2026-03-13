@@ -11,8 +11,11 @@ struct PointF final {
 
 constexpr COLORREF kByteMask = static_cast<COLORREF>(0xFF);
 constexpr uint8_t kFullOpacity = 255;
+constexpr int32_t kOpacityPercentRoundBias = 50;
+constexpr uint32_t kAlphaBlendRoundBias = 127;
 constexpr int kLineRasterSamplesPerAxis = 4;
 constexpr float kHalf = 0.5F;
+constexpr float kFloatEpsilon = 1e-6F;
 constexpr float kArrowHeadBaseWidthPx = 10.0F;
 constexpr float kArrowHeadBaseLengthPx = 18.0F;
 constexpr float kArrowHeadWidthPerStrokePx = 2.0F;
@@ -65,6 +68,54 @@ constexpr float kArrowHeadShaftOverlapPerStrokePx = 2.0F;
     return false;
 }
 
+[[nodiscard]] bool Point_inside_axis_aligned_square(float px, float py, PointPx center,
+                                                    float half_extent) noexcept {
+    return std::abs(px - static_cast<float>(center.x)) <= half_extent &&
+           std::abs(py - static_cast<float>(center.y)) <= half_extent;
+}
+
+[[nodiscard]] bool Segment_intersects_axis_aligned_rect(PointPx start, PointPx end,
+                                                        float left, float top,
+                                                        float right,
+                                                        float bottom) noexcept {
+    float const x0 = static_cast<float>(start.x);
+    float const y0 = static_cast<float>(start.y);
+    float const x1 = static_cast<float>(end.x);
+    float const y1 = static_cast<float>(end.y);
+    float const dx = x1 - x0;
+    float const dy = y1 - y0;
+    float t0 = 0.0F;
+    float t1 = 1.0F;
+
+    auto clip = [&](float p, float q) noexcept {
+        if (std::abs(p) <= kFloatEpsilon) {
+            return q >= 0.0F;
+        }
+
+        float const r = q / p;
+        if (p < 0.0F) {
+            if (r > t1) {
+                return false;
+            }
+            if (r > t0) {
+                t0 = r;
+            }
+            return true;
+        }
+
+        if (r < t0) {
+            return false;
+        }
+        if (r < t1) {
+            t1 = r;
+        }
+        return true;
+    };
+
+    return clip(-dx, x0 - left) && clip(dx, right - x0) && clip(-dy, y0 - top) &&
+           clip(dy, bottom - y0);
+}
+
 [[nodiscard]] uint8_t Colorref_red(COLORREF color) noexcept {
     return static_cast<uint8_t>(color & kByteMask);
 }
@@ -75,6 +126,22 @@ constexpr float kArrowHeadShaftOverlapPerStrokePx = 2.0F;
 
 [[nodiscard]] uint8_t Colorref_blue(COLORREF color) noexcept {
     return static_cast<uint8_t>((color >> 16) & kByteMask);
+}
+
+[[nodiscard]] uint8_t Opacity_percent_to_alpha(int32_t opacity_percent) noexcept {
+    int32_t const clamped = std::clamp(opacity_percent, StrokeStyle::kMinOpacityPercent,
+                                       StrokeStyle::kMaxOpacityPercent);
+    return static_cast<uint8_t>(
+        (clamped * static_cast<int32_t>(kFullOpacity) + kOpacityPercentRoundBias) /
+        100);
+}
+
+[[nodiscard]] uint8_t Blend_channel(uint8_t dst, uint8_t src, uint8_t alpha) noexcept {
+    uint32_t const src_term = static_cast<uint32_t>(src) * alpha;
+    uint32_t const dst_term =
+        static_cast<uint32_t>(dst) * (static_cast<uint32_t>(kFullOpacity) - alpha);
+    return static_cast<uint8_t>((src_term + dst_term + kAlphaBlendRoundBias) /
+                                kFullOpacity);
 }
 
 [[nodiscard]] RectPx Centered_square_bounds(PointPx center, int32_t size) noexcept {
@@ -162,6 +229,33 @@ struct TriangleShape final {
     float const major = rel_x * frame.axis_u.x + rel_y * frame.axis_u.y;
     float const minor = rel_x * frame.axis_v.x + rel_y * frame.axis_v.y;
     return std::abs(major) <= frame.half_length && std::abs(minor) <= frame.half_width;
+}
+
+[[nodiscard]] bool
+Pixel_covered_by_square_capped_polyline(float center_x, float center_y,
+                                        std::span<const PointPx> points,
+                                        int32_t width_px) noexcept {
+    if (points.empty()) {
+        return false;
+    }
+
+    float const half_extent = std::max(1.0F, static_cast<float>(width_px)) * kHalf;
+    if (points.size() == 1) {
+        return Point_inside_axis_aligned_square(center_x, center_y, points.front(),
+                                                half_extent);
+    }
+
+    float const left = center_x - half_extent;
+    float const top = center_y - half_extent;
+    float const right = center_x + half_extent;
+    float const bottom = center_y + half_extent;
+    for (size_t i = 1; i < points.size(); ++i) {
+        if (Segment_intersects_axis_aligned_rect(points[i - 1], points[i], left, top,
+                                                 right, bottom)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 [[nodiscard]] float Triangle_edge_function(PointF a, PointF b, float px,
@@ -370,9 +464,9 @@ RectPx Annotation_bounds(Annotation const &annotation) noexcept {
                     max_x = std::max(max_x, p.x);
                     max_y = std::max(max_y, p.y);
                 }
-                float const radius =
-                    std::max(1.0F, static_cast<float>(fh.style.width_px)) / 2.0F;
-                int32_t const outset = static_cast<int32_t>(std::ceil(radius));
+                float const half_extent =
+                    std::max(1.0F, static_cast<float>(fh.style.width_px)) * kHalf;
+                int32_t const outset = static_cast<int32_t>(std::ceil(half_extent));
                 return RectPx::From_ltrb(min_x - outset, min_y - outset,
                                          max_x + outset + 1, max_y + outset + 1);
             },
@@ -444,10 +538,14 @@ bool Annotation_hits_point(Annotation const &annotation, PointPx point) noexcept
                 if (fh.points.empty()) {
                     return false;
                 }
-                float const radius =
-                    std::max(1.0F, static_cast<float>(fh.style.width_px)) / 2.0F;
                 float const cx = static_cast<float>(point.x) + kHalf;
                 float const cy = static_cast<float>(point.y) + kHalf;
+                if (fh.freehand_tip_shape == FreehandTipShape::Square) {
+                    return Pixel_covered_by_square_capped_polyline(cx, cy, fh.points,
+                                                                   fh.style.width_px);
+                }
+                float const radius =
+                    std::max(1.0F, static_cast<float>(fh.style.width_px)) * kHalf;
                 return Pixel_covered_by_polyline(cx, cy, fh.points, radius * radius);
             },
             [&](LineAnnotation const &line) -> bool {
@@ -756,11 +854,17 @@ void Blend_annotation_onto_pixels(std::span<uint8_t> pixels, int width, int heig
     uint8_t const red = Colorref_red(style.color);
     uint8_t const green = Colorref_green(style.color);
     uint8_t const blue = Colorref_blue(style.color);
+    uint8_t const alpha = Opacity_percent_to_alpha(style.opacity_percent);
+    if (alpha == 0) {
+        return;
+    }
 
     // Pre-compute kind-specific rendering state once, before the pixel loop.
     struct FreehandState {
         std::span<const PointPx> points;
         float radius_sq;
+        int32_t width_px;
+        FreehandTipShape tip_shape = FreehandTipShape::Round;
     };
     struct LineState {
         LineRasterFrame frame;
@@ -779,8 +883,9 @@ void Blend_annotation_onto_pixels(std::span<uint8_t> pixels, int width, int heig
         Overloaded{
             [](FreehandStrokeAnnotation const &fh) -> RenderState {
                 float const r =
-                    std::max(1.0F, static_cast<float>(fh.style.width_px)) / 2.0F;
-                return FreehandState{fh.points, r * r};
+                    std::max(1.0F, static_cast<float>(fh.style.width_px)) * kHalf;
+                return FreehandState{fh.points, r * r, fh.style.width_px,
+                                     fh.freehand_tip_shape};
             },
             [](LineAnnotation const &line) -> RenderState {
                 PointF const sf = To_point_f(line.start);
@@ -813,6 +918,11 @@ void Blend_annotation_onto_pixels(std::span<uint8_t> pixels, int width, int heig
             bool const covered = std::visit(
                 Overloaded{
                     [&](FreehandState const &s) noexcept {
+                        if (s.tip_shape == FreehandTipShape::Square) {
+                            return Pixel_covered_by_square_capped_polyline(
+                                static_cast<float>(x) + kHalf,
+                                static_cast<float>(y) + kHalf, s.points, s.width_px);
+                        }
                         return Pixel_covered_by_polyline(static_cast<float>(x) + kHalf,
                                                          static_cast<float>(y) + kHalf,
                                                          s.points, s.radius_sq);
@@ -846,9 +956,19 @@ void Blend_annotation_onto_pixels(std::span<uint8_t> pixels, int width, int heig
                 continue;
             }
 
-            pixels[pixel_offset] = blue;
-            pixels[pixel_offset + 1] = green;
-            pixels[pixel_offset + 2] = red;
+            if (alpha == kFullOpacity) {
+                pixels[pixel_offset] = blue;
+                pixels[pixel_offset + 1] = green;
+                pixels[pixel_offset + 2] = red;
+                pixels[pixel_offset + 3] = kFullOpacity;
+                continue;
+            }
+
+            pixels[pixel_offset] = Blend_channel(pixels[pixel_offset], blue, alpha);
+            pixels[pixel_offset + 1] =
+                Blend_channel(pixels[pixel_offset + 1], green, alpha);
+            pixels[pixel_offset + 2] =
+                Blend_channel(pixels[pixel_offset + 2], red, alpha);
             pixels[pixel_offset + 3] = kFullOpacity;
         }
     }

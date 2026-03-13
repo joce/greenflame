@@ -54,6 +54,7 @@ The annotation system applies only to the interactive overlay flow.
 - Default mode: no tool selected
 - Registered tools:
   - `Brush tool` hotkey `B`
+  - `Highlighter tool` hotkey `H`
   - `Line tool` hotkey `L`
   - `Arrow tool` hotkey `A`
   - `Rectangle tool` hotkey `R`
@@ -63,6 +64,8 @@ The annotation system applies only to the interactive overlay flow.
 - Hovering a toolbar button shows a tooltip with the full tool name.
 - Pressing `B` or clicking the `Brush tool` toolbar button toggles that tool on or
   off.
+- Pressing `H` or clicking the `Highlighter tool` toolbar button toggles that tool on
+  or off.
 - Pressing `L` or clicking the `Line tool` toolbar button toggles that tool on or
   off.
 - Pressing `A` or clicking the `Arrow tool` toolbar button toggles that tool on or
@@ -71,18 +74,23 @@ The annotation system applies only to the interactive overlay flow.
   or off.
 - Pressing `F` or clicking the `Filled rectangle tool` toolbar button toggles that
   tool on or off.
-- While an annotation tool is active, right-click opens a color wheel centered on
-  the cursor.
+- While an annotation tool is active, right-click opens that tool's color wheel
+  centered on the cursor.
 - While the color wheel is visible:
   - moving the mouse highlights the hovered color slot
   - left-clicking a slot selects that color for future annotations and closes the
     wheel
   - `Esc` closes the wheel without changing color
-- While the Brush, Line, Arrow, or Rectangle tool is active, mouse-wheel up/down
-  or `Ctrl+=` / `Ctrl+-` increases or decreases stroke width within the `1..50`
-  range.
+- The Brush, Line, Arrow, Rectangle, and Filled rectangle tools use the
+  configurable 8-slot annotation palette.
+- The Highlighter tool uses its own configurable 6-slot palette.
+- While the Brush, Highlighter, Line, Arrow, or Rectangle tool is active,
+  mouse-wheel up/down or `Ctrl+=` / `Ctrl+-` increases or decreases stroke width
+  within the `1..50` range.
 - While the Brush tool is active, the overlay draws an anti-aliased circular size
   preview around the cursor hotspot.
+- While the Highlighter tool is active, the overlay draws an anti-aliased
+  axis-aligned square size preview around the cursor hotspot.
 - While the Line or Arrow tool is active, the overlay draws an anti-aliased square
   size preview around the cursor hotspot aligned to the current line direction.
 - The Rectangle and Filled rectangle tools do not draw a cursor size preview
@@ -93,6 +101,11 @@ The annotation system applies only to the interactive overlay flow.
 - The color wheel palette persists in `[tools] color_0` through `[tools] color_7`
   using `#rrggbb`.
 - The currently selected palette slot persists in `[tools] current_color`.
+- The Highlighter palette persists in `[tools] highlighter_color_0` through
+  `[tools] highlighter_color_5` using `#rrggbb`.
+- The currently selected Highlighter slot persists in
+  `[tools] highlighter_current_color`.
+- Highlighter opacity persists in `[tools] highlighter_opacity_percent`.
 - The size-overlay duration persists in the INI file at
   `[ui] tool_size_overlay_duration_ms`.
 - Completing an annotation does not change the active tool.
@@ -154,7 +167,8 @@ The registry lives in core.
 - `IAnnotationTool`
   - interface implemented by each tool object
   - current concrete tools:
-    - `FreehandAnnotationTool`
+    - `FreehandAnnotationTool` configured for brush strokes
+    - `FreehandAnnotationTool` configured for highlighter strokes
     - `LineAnnotationTool` configured for plain lines
     - `LineAnnotationTool` configured for arrows
     - `RectangleAnnotationTool` configured for outlined rectangles
@@ -230,12 +244,14 @@ path for selection, output compositing, and committed annotation paint.
 
 ### Draft freehand preview
 
-The in-progress freehand stroke is intentionally different from committed
-annotations:
+The in-progress Brush and Highlighter strokes are intentionally different from
+committed annotations:
 
 - live preview is rendered from raw draft points in the Win32 paint layer
 - the preview uses a lightweight polyline path for responsiveness during long
   strokes
+- the preview still respects the active stroke style, including round vs square tip
+  shape and opacity
 - the stroke is rasterized in core only on commit (`mouse-up`)
 - hit-testing and save/copy never use the draft preview path
 

@@ -23,9 +23,11 @@ struct D2DPaintInput {
     core::Annotation const *draft_annotation = nullptr;
     std::span<const core::PointPx> draft_freehand_points = {};
     std::optional<core::StrokeStyle> draft_freehand_style = std::nullopt;
+    core::FreehandTipShape draft_freehand_tip_shape = core::FreehandTipShape::Round;
+    float draft_freehand_blit_opacity = 1.0f;
     std::optional<int32_t> brush_cursor_preview_width_px = std::nullopt;
-    std::optional<int32_t> line_cursor_preview_width_px = std::nullopt;
-    std::optional<double> line_cursor_preview_angle_radians = std::nullopt;
+    std::optional<int32_t> square_cursor_preview_width_px = std::nullopt;
+    std::optional<double> square_cursor_preview_angle_radians = std::nullopt;
     bool dragging = false;
     bool handle_dragging = false;
     bool move_dragging = false;
@@ -45,6 +47,7 @@ struct D2DPaintInput {
     bool show_color_wheel = false;
     core::PointPx color_wheel_center_px = {};
     std::span<const COLORREF> color_wheel_colors = {};
+    size_t color_wheel_segment_count = 0;
     std::optional<size_t> color_wheel_selected_segment = std::nullopt;
     std::optional<size_t> color_wheel_hovered_segment = std::nullopt;
 };

@@ -38,6 +38,7 @@ Current convention:
 Examples of source files:
 
 - `resources/brush.png`
+- `resources/highlighter.png`
 - `resources/line.png`
 - `resources/arrow.png`
 - `resources/rectangle.png`
@@ -46,6 +47,7 @@ Examples of source files:
 Derived embedded assets follow the same naming pattern:
 
 - `resources/brush-mask.png`
+- `resources/highlighter-mask.png`
 - `resources/line-mask.png`
 - `resources/arrow-mask.png`
 - `resources/rectangle-mask.png`
@@ -58,6 +60,12 @@ magick resources\brush.png -colorspace Gray -negate -alpha copy -fill white -col
 ```
 
 For example:
+
+```bat
+magick resources\highlighter.png -colorspace Gray -negate -alpha copy -fill white -colorize 100 -strip resources\highlighter-mask.png
+```
+
+And:
 
 ```bat
 magick resources\arrow.png -colorspace Gray -negate -alpha copy -fill white -colorize 100 -strip resources\arrow-mask.png

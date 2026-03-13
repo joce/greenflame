@@ -1,4 +1,5 @@
 #include "greenflame_core/app_config.h"
+#include "greenflame_core/annotation_types.h"
 
 namespace greenflame::core {
 
@@ -31,6 +32,11 @@ void AppConfig::Normalize() {
     brush_width_px = std::clamp(brush_width_px, kMinBrushWidthPx, kMaxBrushWidthPx);
     current_annotation_color_index =
         Clamp_annotation_color_index(current_annotation_color_index);
+    current_highlighter_color_index =
+        Clamp_highlighter_color_index(current_highlighter_color_index);
+    highlighter_opacity_percent =
+        std::clamp(highlighter_opacity_percent, StrokeStyle::kMinOpacityPercent,
+                   StrokeStyle::kMaxOpacityPercent);
     tool_size_overlay_duration_ms = std::max(tool_size_overlay_duration_ms, 0);
 
     if (default_save_format.empty()) {

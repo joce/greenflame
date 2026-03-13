@@ -7,6 +7,9 @@ namespace greenflame::core {
 class FreehandAnnotationTool final : public IAnnotationTool {
   public:
     FreehandAnnotationTool();
+    explicit FreehandAnnotationTool(AnnotationToolDescriptor descriptor);
+    explicit FreehandAnnotationTool(AnnotationToolDescriptor descriptor,
+                                    FreehandTipShape tip_shape);
 
     [[nodiscard]] AnnotationToolDescriptor const &Descriptor() const noexcept override;
 
@@ -34,6 +37,7 @@ class FreehandAnnotationTool final : public IAnnotationTool {
     void Invalidate_draft() noexcept;
 
     AnnotationToolDescriptor descriptor_ = {};
+    FreehandTipShape tip_shape_ = FreehandTipShape::Round;
     bool drawing_ = false;
     std::vector<PointPx> points_ = {};
     mutable std::optional<Annotation> draft_annotation_cache_ = std::nullopt;

@@ -48,15 +48,149 @@ inline D2D1_COLOR_F Colorref_to_d2d(COLORREF c, float alpha = 1.f) {
     return {color.r, color.g, color.b, alpha};
 }
 
+[[nodiscard]] float Alpha_from_opacity_percent(int32_t opacity_percent) noexcept {
+    int32_t const clamped =
+        std::clamp(opacity_percent, core::StrokeStyle::kMinOpacityPercent,
+                   core::StrokeStyle::kMaxOpacityPercent);
+    return static_cast<float>(clamped) / 100.f;
+}
+
+[[nodiscard]] float Cross(D2D1_POINT_2F origin, D2D1_POINT_2F a,
+                          D2D1_POINT_2F b) noexcept {
+    float const ax = a.x - origin.x;
+    float const ay = a.y - origin.y;
+    float const bx = b.x - origin.x;
+    float const by = b.y - origin.y;
+    return ax * by - ay * bx;
+}
+
+struct HullResult {
+    std::array<D2D1_POINT_2F, 8> points = {};
+    size_t count = 0;
+};
+
+[[nodiscard]] HullResult Build_convex_hull(std::array<D2D1_POINT_2F, 8> points) {
+    std::sort(points.begin(), points.end(), [](D2D1_POINT_2F a, D2D1_POINT_2F b) {
+        return std::tie(a.x, a.y) < std::tie(b.x, b.y);
+    });
+    auto const last =
+        std::unique(points.begin(), points.end(), [](D2D1_POINT_2F a, D2D1_POINT_2F b) {
+            return !(a.x < b.x) && !(b.x < a.x) && !(a.y < b.y) && !(b.y < a.y);
+        });
+    size_t const count = static_cast<size_t>(std::distance(points.begin(), last));
+    std::array<D2D1_POINT_2F, 16> working = {};
+    size_t working_size = 0;
+
+    for (size_t i = 0; i < count; ++i) {
+        while (working_size >= 2 &&
+               Cross(working[working_size - 2], working[working_size - 1], points[i]) <=
+                   0.f) {
+            --working_size;
+        }
+        working[working_size++] = points[i];
+    }
+
+    size_t const lower_size = working_size;
+    if (count > 1) {
+        for (size_t i = count - 1; i > 0; --i) {
+            while (working_size > lower_size &&
+                   Cross(working[working_size - 2], working[working_size - 1],
+                         points[i - 1]) <= 0.f) {
+                --working_size;
+            }
+            working[working_size++] = points[i - 1];
+        }
+    }
+
+    if (working_size > 1) {
+        --working_size;
+    }
+
+    HullResult result{};
+    result.count = working_size;
+    for (size_t i = 0; i < working_size; ++i) {
+        result.points[i] = working[i];
+    }
+    return result;
+}
+
 // ---------------------------------------------------------------------------
 // Annotation drawing helpers
 // ---------------------------------------------------------------------------
 
-void Draw_freehand(ID2D1RenderTarget *rt, D2DOverlayResources &res,
-                   core::FreehandStrokeAnnotation const &fh) {
-    if (fh.points.size() < 2) {
+void Draw_freehand_points(ID2D1RenderTarget *rt, D2DOverlayResources &res,
+                          std::span<const core::PointPx> points,
+                          core::StrokeStyle style, core::FreehandTipShape tip_shape) {
+    if (points.empty()) {
         return;
     }
+    res.solid_brush->SetColor(Colorref_to_d2d(
+        style.color, Alpha_from_opacity_percent(style.opacity_percent)));
+    if (points.size() == 1) {
+        float const half_extent = static_cast<float>(std::max<int32_t>(
+                                      core::StrokeStyle::kMinWidthPx, style.width_px)) /
+                                  2.f;
+        float const cx = static_cast<float>(points.front().x);
+        float const cy = static_cast<float>(points.front().y);
+        if (tip_shape == core::FreehandTipShape::Square) {
+            rt->FillRectangle(D2D1::RectF(cx - half_extent, cy - half_extent,
+                                          cx + half_extent, cy + half_extent),
+                              res.solid_brush.Get());
+        } else {
+            rt->FillEllipse(
+                D2D1::Ellipse(D2D1::Point2F(cx, cy), half_extent, half_extent),
+                res.solid_brush.Get());
+        }
+        return;
+    }
+
+    if (tip_shape == core::FreehandTipShape::Square) {
+        // Match the axis-aligned square brush model by filling the convex hull of the
+        // endpoint squares for each segment. This avoids D2D stroke-join artifacts.
+        Microsoft::WRL::ComPtr<ID2D1PathGeometry> path;
+        if (FAILED(res.factory->CreatePathGeometry(path.GetAddressOf()))) {
+            return;
+        }
+        Microsoft::WRL::ComPtr<ID2D1GeometrySink> sink;
+        if (FAILED(path->Open(sink.GetAddressOf()))) {
+            return;
+        }
+        sink->SetFillMode(D2D1_FILL_MODE_WINDING);
+
+        float const half_extent = static_cast<float>(std::max<int32_t>(
+                                      core::StrokeStyle::kMinWidthPx, style.width_px)) /
+                                  2.f;
+        for (size_t i = 1; i < points.size(); ++i) {
+            float const ax = static_cast<float>(points[i - 1].x);
+            float const ay = static_cast<float>(points[i - 1].y);
+            float const bx = static_cast<float>(points[i].x);
+            float const by = static_cast<float>(points[i].y);
+            std::array<D2D1_POINT_2F, 8> const corners = {
+                D2D1::Point2F(ax - half_extent, ay - half_extent),
+                D2D1::Point2F(ax + half_extent, ay - half_extent),
+                D2D1::Point2F(ax + half_extent, ay + half_extent),
+                D2D1::Point2F(ax - half_extent, ay + half_extent),
+                D2D1::Point2F(bx - half_extent, by - half_extent),
+                D2D1::Point2F(bx + half_extent, by - half_extent),
+                D2D1::Point2F(bx + half_extent, by + half_extent),
+                D2D1::Point2F(bx - half_extent, by + half_extent),
+            };
+            HullResult const hull = Build_convex_hull(corners);
+            if (hull.count < 3) {
+                continue;
+            }
+
+            sink->BeginFigure(hull.points[0], D2D1_FIGURE_BEGIN_FILLED);
+            for (size_t hull_index = 1; hull_index < hull.count; ++hull_index) {
+                sink->AddLine(hull.points[hull_index]);
+            }
+            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+        }
+        sink->Close();
+        rt->FillGeometry(path.Get(), res.solid_brush.Get());
+        return;
+    }
+
     Microsoft::WRL::ComPtr<ID2D1PathGeometry> path;
     if (FAILED(res.factory->CreatePathGeometry(path.GetAddressOf()))) {
         return;
@@ -65,21 +199,26 @@ void Draw_freehand(ID2D1RenderTarget *rt, D2DOverlayResources &res,
     if (FAILED(path->Open(sink.GetAddressOf()))) {
         return;
     }
-    sink->BeginFigure(Pt(fh.points[0]), D2D1_FIGURE_BEGIN_HOLLOW);
-    for (size_t i = 1; i < fh.points.size(); ++i) {
-        sink->AddLine(Pt(fh.points[i]));
+    sink->BeginFigure(Pt(points[0]), D2D1_FIGURE_BEGIN_HOLLOW);
+    for (size_t i = 1; i < points.size(); ++i) {
+        sink->AddLine(Pt(points[i]));
     }
     sink->EndFigure(D2D1_FIGURE_END_OPEN);
     sink->Close();
 
-    res.solid_brush->SetColor(Colorref_to_d2d(fh.style.color));
     rt->DrawGeometry(path.Get(), res.solid_brush.Get(),
-                     static_cast<float>(fh.style.width_px), res.round_cap_style.Get());
+                     static_cast<float>(style.width_px), res.round_cap_style.Get());
+}
+
+void Draw_freehand(ID2D1RenderTarget *rt, D2DOverlayResources &res,
+                   core::FreehandStrokeAnnotation const &fh) {
+    Draw_freehand_points(rt, res, fh.points, fh.style, fh.freehand_tip_shape);
 }
 
 void Draw_line(ID2D1RenderTarget *rt, D2DOverlayResources &res,
                core::LineAnnotation const &line) {
-    res.solid_brush->SetColor(Colorref_to_d2d(line.style.color));
+    res.solid_brush->SetColor(Colorref_to_d2d(
+        line.style.color, Alpha_from_opacity_percent(line.style.opacity_percent)));
     float const w = static_cast<float>(line.style.width_px);
 
     if (!line.arrow_head) {
@@ -142,7 +281,8 @@ void Draw_line(ID2D1RenderTarget *rt, D2DOverlayResources &res,
 
 void Draw_rectangle(ID2D1RenderTarget *rt, D2DOverlayResources &res,
                     core::RectangleAnnotation const &rect) {
-    res.solid_brush->SetColor(Colorref_to_d2d(rect.style.color));
+    res.solid_brush->SetColor(Colorref_to_d2d(
+        rect.style.color, Alpha_from_opacity_percent(rect.style.opacity_percent)));
     D2D1_RECT_F const rf = Rect(rect.outer_bounds);
     if (rect.filled) {
         rt->FillRectangle(rf, res.solid_brush.Get());
@@ -862,9 +1002,9 @@ void Draw_brush_cursor_preview(ID2D1RenderTarget *rt, D2DOverlayResources &res,
     rt->DrawEllipse(ell, res.solid_brush.Get(), black_w, res.flat_cap_style.Get());
 }
 
-void Draw_line_cursor_preview(ID2D1RenderTarget *rt, D2DOverlayResources &res,
-                              core::PointPx cursor, int32_t width_px,
-                              std::optional<double> angle_radians) {
+void Draw_square_cursor_preview(ID2D1RenderTarget *rt, D2DOverlayResources &res,
+                                core::PointPx cursor, int32_t width_px,
+                                std::optional<double> angle_radians) {
     float const inner_sz =
         static_cast<float>(std::max<int32_t>(core::StrokeStyle::kMinWidthPx, width_px));
     constexpr float white_w = 3.f;
@@ -953,8 +1093,8 @@ void Draw_toolbar(ID2D1RenderTarget *rt, D2DOverlayResources &res,
 
 void Draw_color_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
                       D2DPaintInput const &input) {
-    if (!input.show_color_wheel ||
-        input.color_wheel_colors.size() < core::kAnnotationColorSlotCount) {
+    if (!input.show_color_wheel || input.color_wheel_segment_count == 0 ||
+        input.color_wheel_colors.size() < input.color_wheel_segment_count) {
         return;
     }
     if (!res.factory) {
@@ -975,9 +1115,10 @@ void Draw_color_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         return D2D1::Point2F(cx + r * std::cosf(rad), cy + r * std::sinf(rad));
     };
 
-    for (size_t seg = 0; seg < core::kAnnotationColorSlotCount; ++seg) {
+    for (size_t seg = 0; seg < input.color_wheel_segment_count; ++seg) {
         core::ColorWheelSegmentGeometry const geo =
-            core::Get_color_wheel_segment_geometry(seg);
+            core::Get_color_wheel_segment_geometry(seg,
+                                                   input.color_wheel_segment_count);
         float const sa = geo.start_angle_degrees;
         float const ea = sa + geo.sweep_angle_degrees;
 
@@ -1023,11 +1164,12 @@ void Draw_color_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
 
     // Halo for selected/hovered segment: arc strokes outside the wheel.
     auto draw_halo = [&](size_t seg, float inner_w, float outer_w) {
-        if (seg >= core::kAnnotationColorSlotCount) {
+        if (seg >= input.color_wheel_segment_count) {
             return;
         }
         core::ColorWheelSegmentGeometry const geo =
-            core::Get_color_wheel_segment_geometry(seg);
+            core::Get_color_wheel_segment_geometry(seg,
+                                                   input.color_wheel_segment_count);
         float const sa = geo.start_angle_degrees;
         float const ea = sa + geo.sweep_angle_degrees;
 
@@ -1100,14 +1242,34 @@ void Draw_color_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
 // Draft stroke bitmap (incremental freehand accumulator)
 // ---------------------------------------------------------------------------
 
+void Clear_draft_stroke_surface(D2DOverlayResources &res) {
+    if (res.draft_stroke_point_count == 0 && !res.draft_stroke_bitmap) {
+        return;
+    }
+
+    res.draft_stroke_point_count = 0;
+    res.draft_stroke_bitmap.Reset();
+    if (!res.draft_stroke_rt) {
+        return;
+    }
+
+    res.draft_stroke_rt->BeginDraw();
+    res.draft_stroke_rt->Clear(D2D1::ColorF(0.f, 0.f, 0.f, 0.f));
+    (void)res.draft_stroke_rt->EndDraw();
+}
+
 // Appends any new freehand segments to draft_stroke_rt since the last call.
-// When points is empty, resets the point count so the next gesture starts clean.
+// Round-tip: drawn with round cap stroke at configured opacity.
+// Square-tip: drawn as convex hull fills at full opacity; opacity applied at blit time.
+// When points is empty, the cached draft surface is cleared so the next gesture
+// cannot resurrect stale pixels.
 // Must be called BEFORE hwnd_rt->BeginDraw.
 void Update_draft_stroke_bitmap(D2DOverlayResources &res,
                                 std::span<const core::PointPx> points,
-                                std::optional<core::StrokeStyle> const &style) {
+                                std::optional<core::StrokeStyle> const &style,
+                                core::FreehandTipShape tip_shape) {
     if (points.empty() || !style.has_value()) {
-        res.draft_stroke_point_count = 0;
+        Clear_draft_stroke_surface(res);
         return;
     }
     if (!res.draft_stroke_rt) {
@@ -1123,8 +1285,6 @@ void Update_draft_stroke_bitmap(D2DOverlayResources &res,
         return;
     }
 
-    float const stroke_w = static_cast<float>(style->width_px);
-
     res.draft_stroke_rt->BeginDraw();
 
     if (res.draft_stroke_point_count == 0) {
@@ -1132,15 +1292,61 @@ void Update_draft_stroke_bitmap(D2DOverlayResources &res,
         res.draft_stroke_rt->Clear(D2D1::ColorF(0.f, 0.f, 0.f, 0.f));
     }
 
-    res.solid_brush->SetColor(Colorref_to_d2d(style->color));
-
     // Draw only the segments that are new since the last update.
     size_t const from =
         res.draft_stroke_point_count > 0 ? res.draft_stroke_point_count - 1 : 0;
-    for (size_t i = from; i + 1 < points.size(); ++i) {
-        res.draft_stroke_rt->DrawLine(Pt(points[i]), Pt(points[i + 1]),
-                                      res.solid_brush.Get(), stroke_w,
-                                      res.round_cap_style.Get());
+
+    if (tip_shape == core::FreehandTipShape::Round) {
+        res.solid_brush->SetColor(Colorref_to_d2d(
+            style->color, Alpha_from_opacity_percent(style->opacity_percent)));
+        float const stroke_w = static_cast<float>(style->width_px);
+        for (size_t i = from; i + 1 < points.size(); ++i) {
+            res.draft_stroke_rt->DrawLine(Pt(points[i]), Pt(points[i + 1]),
+                                          res.solid_brush.Get(), stroke_w,
+                                          res.round_cap_style.Get());
+        }
+    } else {
+        // Square tip: draw segment hulls at full opacity. Opacity is applied at blit
+        // time so each covered pixel is blended exactly once.
+        Microsoft::WRL::ComPtr<ID2D1PathGeometry> path;
+        Microsoft::WRL::ComPtr<ID2D1GeometrySink> sink;
+        if (res.factory &&
+            SUCCEEDED(res.factory->CreatePathGeometry(path.GetAddressOf())) &&
+            SUCCEEDED(path->Open(sink.GetAddressOf()))) {
+            sink->SetFillMode(D2D1_FILL_MODE_WINDING);
+            float const half_extent =
+                static_cast<float>(std::max<int32_t>(core::StrokeStyle::kMinWidthPx,
+                                                     style->width_px)) /
+                2.f;
+            for (size_t i = from; i + 1 < points.size(); ++i) {
+                float const ax = static_cast<float>(points[i].x);
+                float const ay = static_cast<float>(points[i].y);
+                float const bx = static_cast<float>(points[i + 1].x);
+                float const by = static_cast<float>(points[i + 1].y);
+                std::array<D2D1_POINT_2F, 8> const corners = {
+                    D2D1::Point2F(ax - half_extent, ay - half_extent),
+                    D2D1::Point2F(ax + half_extent, ay - half_extent),
+                    D2D1::Point2F(ax + half_extent, ay + half_extent),
+                    D2D1::Point2F(ax - half_extent, ay + half_extent),
+                    D2D1::Point2F(bx - half_extent, by - half_extent),
+                    D2D1::Point2F(bx + half_extent, by - half_extent),
+                    D2D1::Point2F(bx + half_extent, by + half_extent),
+                    D2D1::Point2F(bx - half_extent, by + half_extent),
+                };
+                HullResult const hull = Build_convex_hull(corners);
+                if (hull.count < 3) {
+                    continue;
+                }
+                sink->BeginFigure(hull.points[0], D2D1_FIGURE_BEGIN_FILLED);
+                for (size_t hi = 1; hi < hull.count; ++hi) {
+                    sink->AddLine(hull.points[hi]);
+                }
+                sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+            }
+            sink->Close();
+            res.solid_brush->SetColor(Colorref_to_d2d(style->color, 1.0f));
+            res.draft_stroke_rt->FillGeometry(path.Get(), res.solid_brush.Get());
+        }
     }
 
     HRESULT const hr = res.draft_stroke_rt->EndDraw();
@@ -1163,7 +1369,8 @@ void Draw_live_layer(ID2D1RenderTarget *rt, D2DOverlayResources &res,
     } else if (!input.draft_freehand_points.empty() &&
                input.draft_freehand_style.has_value()) {
         if (res.draft_stroke_bitmap) {
-            rt->DrawBitmap(res.draft_stroke_bitmap.Get());
+            rt->DrawBitmap(res.draft_stroke_bitmap.Get(), nullptr,
+                           input.draft_freehand_blit_opacity);
         }
     }
 
@@ -1217,7 +1424,7 @@ void Draw_live_layer(ID2D1RenderTarget *rt, D2DOverlayResources &res,
 
     // Cursor previews (clipped to final selection).
     if (input.brush_cursor_preview_width_px.has_value() ||
-        input.line_cursor_preview_width_px.has_value()) {
+        input.square_cursor_preview_width_px.has_value()) {
         // Push clip to final selection.
         bool has_clip = false;
         Microsoft::WRL::ComPtr<ID2D1Layer> clip_layer;
@@ -1233,10 +1440,10 @@ void Draw_live_layer(ID2D1RenderTarget *rt, D2DOverlayResources &res,
             Draw_brush_cursor_preview(rt, res, input.cursor_client_px,
                                       *input.brush_cursor_preview_width_px);
         }
-        if (input.line_cursor_preview_width_px.has_value()) {
-            Draw_line_cursor_preview(rt, res, input.cursor_client_px,
-                                     *input.line_cursor_preview_width_px,
-                                     input.line_cursor_preview_angle_radians);
+        if (input.square_cursor_preview_width_px.has_value()) {
+            Draw_square_cursor_preview(rt, res, input.cursor_client_px,
+                                       *input.square_cursor_preview_width_px,
+                                       input.square_cursor_preview_angle_radians);
         }
 
         if (has_clip) {
@@ -1316,7 +1523,8 @@ bool Paint_d2d_frame(D2DOverlayResources &res, D2DPaintInput const &input, int v
     }
 
     Update_draft_stroke_bitmap(res, input.draft_freehand_points,
-                               input.draft_freehand_style);
+                               input.draft_freehand_style,
+                               input.draft_freehand_tip_shape);
 
     bool const is_steady_state = res.frozen_valid && !input.dragging &&
                                  !input.handle_dragging && !input.move_dragging &&

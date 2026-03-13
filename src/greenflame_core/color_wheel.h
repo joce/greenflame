@@ -5,11 +5,11 @@
 namespace greenflame::core {
 
 constexpr size_t kAnnotationColorSlotCount = 8;
+constexpr size_t kHighlighterColorSlotCount = 6;
 
 using AnnotationColorPalette = std::array<COLORREF, kAnnotationColorSlotCount>;
+using HighlighterColorPalette = std::array<COLORREF, kHighlighterColorSlotCount>;
 
-inline constexpr int32_t kColorWheelSegmentCount =
-    static_cast<int32_t>(kAnnotationColorSlotCount);
 inline constexpr int32_t kColorWheelOuterDiameterPx = 130;
 inline constexpr float kColorWheelWidthPx = 15.0f;
 inline constexpr float kColorWheelSegmentGapPx = 10.0f;
@@ -37,7 +37,14 @@ inline constexpr AnnotationColorPalette kDefaultAnnotationColorPalette = {
      Make_colorref(0xFF, 0xFF, 0x00), Make_colorref(0xFF, 0x00, 0xFF),
      Make_colorref(0x00, 0xFF, 0xFF), Make_colorref(0xFF, 0xFF, 0xFF)}};
 
+inline constexpr HighlighterColorPalette kDefaultHighlighterColorPalette = {
+    {Make_colorref(0xF7, 0xEB, 0x62), Make_colorref(0x7F, 0xE3, 0x6A),
+     Make_colorref(0xFF, 0xB4, 0x4D), Make_colorref(0xFF, 0x79, 0xB9),
+     Make_colorref(0x64, 0xC7, 0xFF), Make_colorref(0xC3, 0x8C, 0xFF)}};
+
 inline constexpr int32_t kDefaultAnnotationColorIndex = 0;
+inline constexpr int32_t kDefaultHighlighterColorIndex = 0;
+inline constexpr int32_t kDefaultHighlighterOpacityPercent = 50;
 
 struct ColorWheelSegmentGeometry final {
     float center_angle_degrees = 0.0f;
@@ -45,13 +52,26 @@ struct ColorWheelSegmentGeometry final {
     float sweep_angle_degrees = 0.0f;
 };
 
+[[nodiscard]] constexpr int32_t Clamp_color_index(int32_t index,
+                                                  size_t slot_count) noexcept {
+    if (slot_count == 0) {
+        return 0;
+    }
+    return std::clamp(index, 0, static_cast<int32_t>(slot_count) - 1);
+}
+
 [[nodiscard]] constexpr int32_t Clamp_annotation_color_index(int32_t index) noexcept {
-    return std::clamp(index, 0, static_cast<int32_t>(kAnnotationColorSlotCount) - 1);
+    return Clamp_color_index(index, kAnnotationColorSlotCount);
+}
+
+[[nodiscard]] constexpr int32_t Clamp_highlighter_color_index(int32_t index) noexcept {
+    return Clamp_color_index(index, kHighlighterColorSlotCount);
 }
 
 [[nodiscard]] ColorWheelSegmentGeometry
-Get_color_wheel_segment_geometry(size_t index) noexcept;
+Get_color_wheel_segment_geometry(size_t index, size_t segment_count) noexcept;
 [[nodiscard]] std::optional<size_t>
-Hit_test_color_wheel_segment(PointPx center, PointPx point) noexcept;
+Hit_test_color_wheel_segment(PointPx center, PointPx point,
+                             size_t segment_count) noexcept;
 
 } // namespace greenflame::core

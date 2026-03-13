@@ -68,8 +68,10 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         -Wno-implicit-int-float-conversion
         -Wno-switch-default
         -Wno-language-extension-token
-        -ftime-trace
     )
+    if(GREENFLAME_ENABLE_TIME_TRACE)
+        target_compile_options(greenflame_tests PRIVATE -ftime-trace)
+    endif()
 elseif(MSVC)
     target_compile_options(greenflame_tests PRIVATE
         /Wall

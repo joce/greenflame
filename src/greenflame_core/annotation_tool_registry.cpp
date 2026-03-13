@@ -16,6 +16,10 @@ namespace {
 
 AnnotationToolRegistry::AnnotationToolRegistry() {
     tools_.push_back(std::make_unique<FreehandAnnotationTool>());
+    tools_.push_back(std::make_unique<FreehandAnnotationTool>(
+        AnnotationToolDescriptor{AnnotationToolId::Highlighter, L"Highlighter tool",
+                                 L'H', L"H", AnnotationToolbarGlyph::Highlighter},
+        FreehandTipShape::Square));
     tools_.push_back(std::make_unique<LineAnnotationTool>(
         AnnotationToolDescriptor{AnnotationToolId::Line, L"Line tool", L'L', L"L",
                                  AnnotationToolbarGlyph::Line},

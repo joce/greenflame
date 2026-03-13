@@ -18,6 +18,9 @@ struct AppConfig final {
     int32_t brush_width_px = kDefaultBrushWidthPx;
     AnnotationColorPalette annotation_colors = kDefaultAnnotationColorPalette;
     int32_t current_annotation_color_index = kDefaultAnnotationColorIndex;
+    HighlighterColorPalette highlighter_colors = kDefaultHighlighterColorPalette;
+    int32_t current_highlighter_color_index = kDefaultHighlighterColorIndex;
+    int32_t highlighter_opacity_percent = kDefaultHighlighterOpacityPercent;
     int32_t tool_size_overlay_duration_ms = kDefaultToolSizeOverlayDurationMs;
     bool show_balloons = true;
     bool show_selection_size_side_labels = true;

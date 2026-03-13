@@ -279,6 +279,7 @@ bool D2DOverlayResources::Create_cache_targets(int width, int height) {
 }
 
 bool D2DOverlayResources::Upload_glyph_bitmaps(OverlayButtonGlyph const *brush,
+                                               OverlayButtonGlyph const *highlighter,
                                                OverlayButtonGlyph const *line,
                                                OverlayButtonGlyph const *arrow,
                                                OverlayButtonGlyph const *rect,
@@ -287,6 +288,7 @@ bool D2DOverlayResources::Upload_glyph_bitmaps(OverlayButtonGlyph const *brush,
         return false;
     }
     return Upload_glyph(hwnd_rt.Get(), brush, glyph_brush) &&
+           Upload_glyph(hwnd_rt.Get(), highlighter, glyph_highlighter) &&
            Upload_glyph(hwnd_rt.Get(), line, glyph_line) &&
            Upload_glyph(hwnd_rt.Get(), arrow, glyph_arrow) &&
            Upload_glyph(hwnd_rt.Get(), rect, glyph_rect) &&
@@ -318,6 +320,7 @@ void D2DOverlayResources::Release_device_resources() {
     text_center.Reset();
     text_hint.Reset();
     glyph_brush.Reset();
+    glyph_highlighter.Reset();
     glyph_line.Reset();
     glyph_arrow.Reset();
     glyph_rect.Reset();

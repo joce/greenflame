@@ -11,14 +11,24 @@ enum class AnnotationKind : uint8_t {
     Rectangle,
 };
 
+enum class FreehandTipShape : uint8_t {
+    Round,
+    Square,
+};
+
 struct StrokeStyle final {
     static constexpr int32_t kMinWidthPx = 1;
     static constexpr int32_t kDefaultWidthPx = 2;
     static constexpr int32_t kMaxWidthPx = 50;
+    static constexpr int32_t kMinOpacityPercent = 0;
+    static constexpr int32_t kDefaultOpacityPercent = 100;
+    static constexpr int32_t kMaxOpacityPercent = 100;
     static constexpr COLORREF kDefaultColor = static_cast<COLORREF>(0x00000000u);
 
     int32_t width_px = kDefaultWidthPx;
     COLORREF color = kDefaultColor;
+    // opacity_percent applies to all annotation types, including Line and Rectangle.
+    int32_t opacity_percent = kDefaultOpacityPercent;
 
     constexpr bool operator==(StrokeStyle const &) const noexcept = default;
 };
@@ -26,6 +36,7 @@ struct StrokeStyle final {
 struct FreehandStrokeAnnotation final {
     std::vector<PointPx> points = {};
     StrokeStyle style = {};
+    FreehandTipShape freehand_tip_shape = FreehandTipShape::Round;
 
     constexpr bool
     operator==(FreehandStrokeAnnotation const &) const noexcept = default;

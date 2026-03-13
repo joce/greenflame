@@ -7,6 +7,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+option(GREENFLAME_ENABLE_TIME_TRACE
+    "Emit Clang -ftime-trace JSON files during compilation"
+    OFF
+)
+
 # cmake-scripts (pulled by Catch2/CPM) sets CMAKE_COMPILE_WARNING_AS_ERROR=ON
 # which adds /WX globally, breaking builds on warnings in third-party headers.
 # We control warnings per-target already, so disable it.
@@ -45,6 +50,11 @@ set(GREENFLAME_BRUSH_TOOL_GLYPH_PATH
 )
 file(TO_CMAKE_PATH "${GREENFLAME_BRUSH_TOOL_GLYPH_PATH}"
      GREENFLAME_BRUSH_TOOL_GLYPH_PATH)
+set(GREENFLAME_HIGHLIGHTER_TOOL_GLYPH_PATH
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/highlighter-mask.png"
+)
+file(TO_CMAKE_PATH "${GREENFLAME_HIGHLIGHTER_TOOL_GLYPH_PATH}"
+     GREENFLAME_HIGHLIGHTER_TOOL_GLYPH_PATH)
 set(GREENFLAME_LINE_TOOL_GLYPH_PATH
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/line-mask.png"
 )
@@ -174,8 +184,10 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         -Wno-implicit-int-float-conversion
         -Wno-switch-default
         -Wno-language-extension-token
-        -ftime-trace
     )
+    if(GREENFLAME_ENABLE_TIME_TRACE)
+        target_compile_options(greenflame_core PRIVATE -ftime-trace)
+    endif()
 elseif(MSVC)
     target_compile_options(greenflame_core PRIVATE
         /Wall
@@ -277,8 +289,10 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         -Wno-implicit-int-float-conversion
         -Wno-switch-default
         -Wno-language-extension-token
-        -ftime-trace
     )
+    if(GREENFLAME_ENABLE_TIME_TRACE)
+        target_compile_options(greenflame PRIVATE -ftime-trace)
+    endif()
 elseif(MSVC)
     target_compile_options(greenflame PRIVATE
         /Wall

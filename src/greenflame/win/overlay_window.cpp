@@ -27,10 +27,11 @@ constexpr int kToolbarButtonSizePx = 36;
 constexpr int kToolbarButtonSeparatorPx = 9; // size / 4
 constexpr int kAnnotationToolCursorResourceId = 102;
 constexpr int kBrushToolGlyphResourceId = 103;
-constexpr int kLineToolGlyphResourceId = 104;
-constexpr int kArrowToolGlyphResourceId = 105;
-constexpr int kRectangleToolGlyphResourceId = 106;
-constexpr int kFilledRectangleToolGlyphResourceId = 107;
+constexpr int kHighlighterToolGlyphResourceId = 104;
+constexpr int kLineToolGlyphResourceId = 105;
+constexpr int kArrowToolGlyphResourceId = 106;
+constexpr int kRectangleToolGlyphResourceId = 107;
+constexpr int kFilledRectangleToolGlyphResourceId = 108;
 constexpr UINT_PTR kBrushSizeOverlayTimerId = 1;
 
 constexpr int kThumbnailMaxWidth = 320;
@@ -384,6 +385,7 @@ namespace greenflame {
 struct OverlayWindow::OverlayResources {
     GdiCaptureResult capture = {};
     std::shared_ptr<OverlayButtonGlyph const> brush_tool_glyph = {};
+    std::shared_ptr<OverlayButtonGlyph const> highlighter_tool_glyph = {};
     std::shared_ptr<OverlayButtonGlyph const> line_tool_glyph = {};
     std::shared_ptr<OverlayButtonGlyph const> arrow_tool_glyph = {};
     std::shared_ptr<OverlayButtonGlyph const> rectangle_tool_glyph = {};
@@ -401,6 +403,8 @@ struct OverlayWindow::OverlayResources {
         }
         brush_tool_glyph =
             Load_png_resource_alpha_mask(hinstance, kBrushToolGlyphResourceId);
+        highlighter_tool_glyph =
+            Load_png_resource_alpha_mask(hinstance, kHighlighterToolGlyphResourceId);
         line_tool_glyph =
             Load_png_resource_alpha_mask(hinstance, kLineToolGlyphResourceId);
         arrow_tool_glyph =
@@ -415,6 +419,7 @@ struct OverlayWindow::OverlayResources {
     void Reset() noexcept {
         capture.Free();
         brush_tool_glyph.reset();
+        highlighter_tool_glyph.reset();
         line_tool_glyph.reset();
         arrow_tool_glyph.reset();
         rectangle_tool_glyph.reset();
@@ -476,6 +481,8 @@ OverlayButtonGlyph const *OverlayWindow::Resolve_toolbar_button_glyph(
     switch (glyph) {
     case core::AnnotationToolbarGlyph::Brush:
         return resources_->brush_tool_glyph.get();
+    case core::AnnotationToolbarGlyph::Highlighter:
+        return resources_->highlighter_tool_glyph.get();
     case core::AnnotationToolbarGlyph::Line:
         return resources_->line_tool_glyph.get();
     case core::AnnotationToolbarGlyph::Arrow:
@@ -576,7 +583,8 @@ bool OverlayWindow::Create_and_show(HINSTANCE hinstance) {
         d2d_resources_.reset();
     } else {
         (void)d2d_resources_->Upload_glyph_bitmaps(
-            resources_->brush_tool_glyph.get(), resources_->line_tool_glyph.get(),
+            resources_->brush_tool_glyph.get(),
+            resources_->highlighter_tool_glyph.get(), resources_->line_tool_glyph.get(),
             resources_->arrow_tool_glyph.get(), resources_->rectangle_tool_glyph.get(),
             resources_->filled_rectangle_tool_glyph.get());
     }
@@ -587,8 +595,21 @@ bool OverlayWindow::Create_and_show(HINSTANCE hinstance) {
     controller_.Set_brush_width_px(config_ != nullptr
                                        ? config_->brush_width_px
                                        : core::StrokeStyle::kDefaultWidthPx);
-    controller_.Set_annotation_color(
-        Current_annotation_palette()[Current_annotation_color_index()]);
+    controller_.Set_brush_annotation_color(
+        config_ != nullptr ? config_->annotation_colors[static_cast<size_t>(
+                                 core::Clamp_annotation_color_index(
+                                     config_->current_annotation_color_index))]
+                           : core::kDefaultAnnotationColorPalette[static_cast<size_t>(
+                                 core::kDefaultAnnotationColorIndex)]);
+    controller_.Set_highlighter_color(
+        config_ != nullptr ? config_->highlighter_colors[static_cast<size_t>(
+                                 core::Clamp_highlighter_color_index(
+                                     config_->current_highlighter_color_index))]
+                           : core::kDefaultHighlighterColorPalette[static_cast<size_t>(
+                                 core::kDefaultHighlighterColorIndex)]);
+    controller_.Set_highlighter_opacity_percent(
+        config_ != nullptr ? config_->highlighter_opacity_percent
+                           : core::kDefaultHighlighterOpacityPercent);
     ShowWindow(hwnd, SW_SHOW);
     return true;
 }
@@ -675,7 +696,13 @@ bool OverlayWindow::Can_show_color_wheel() const noexcept {
            !hotkey_help_overlay_.Is_visible();
 }
 
-std::span<const COLORREF> OverlayWindow::Current_annotation_palette() const noexcept {
+std::span<const COLORREF> OverlayWindow::Current_tool_color_palette() const noexcept {
+    if (controller_.Active_annotation_tool() == core::AnnotationToolId::Highlighter) {
+        if (config_ != nullptr) {
+            return std::span<const COLORREF>(config_->highlighter_colors);
+        }
+        return std::span<const COLORREF>(core::kDefaultHighlighterColorPalette);
+    }
     if (config_ != nullptr) {
         return std::span<const COLORREF>(config_->annotation_colors);
     }
@@ -683,11 +710,22 @@ std::span<const COLORREF> OverlayWindow::Current_annotation_palette() const noex
 }
 
 size_t OverlayWindow::Current_annotation_color_index() const noexcept {
+    if (controller_.Active_annotation_tool() == core::AnnotationToolId::Highlighter) {
+        if (config_ != nullptr) {
+            return static_cast<size_t>(core::Clamp_highlighter_color_index(
+                config_->current_highlighter_color_index));
+        }
+        return static_cast<size_t>(core::kDefaultHighlighterColorIndex);
+    }
     if (config_ != nullptr) {
         return static_cast<size_t>(core::Clamp_annotation_color_index(
             config_->current_annotation_color_index));
     }
     return static_cast<size_t>(core::kDefaultAnnotationColorIndex);
+}
+
+size_t OverlayWindow::Current_color_wheel_segment_count() const noexcept {
+    return Current_tool_color_palette().size();
 }
 
 void OverlayWindow::Show_color_wheel(core::PointPx center) {
@@ -720,8 +758,8 @@ bool OverlayWindow::Update_color_wheel_hover(core::PointPx cursor) {
     if (!color_wheel_.visible) {
         return false;
     }
-    std::optional<size_t> const hovered =
-        core::Hit_test_color_wheel_segment(color_wheel_.center, cursor);
+    std::optional<size_t> const hovered = core::Hit_test_color_wheel_segment(
+        color_wheel_.center, cursor, Current_color_wheel_segment_count());
     if (hovered == color_wheel_.hovered_segment) {
         return false;
     }
@@ -730,12 +768,22 @@ bool OverlayWindow::Update_color_wheel_hover(core::PointPx cursor) {
 }
 
 void OverlayWindow::Select_color_wheel_segment(size_t index) {
-    std::span<const COLORREF> const palette = Current_annotation_palette();
+    std::span<const COLORREF> const palette = Current_tool_color_palette();
     if (index >= palette.size()) {
         return;
     }
 
-    controller_.Set_annotation_color(palette[index]);
+    if (controller_.Active_annotation_tool() == core::AnnotationToolId::Highlighter) {
+        controller_.Set_highlighter_color(palette[index]);
+        if (config_ != nullptr) {
+            config_->current_highlighter_color_index = static_cast<int32_t>(index);
+            config_->Normalize();
+            (void)Save_app_config(*config_);
+        }
+        return;
+    }
+
+    controller_.Set_brush_annotation_color(palette[index]);
     if (config_ != nullptr) {
         config_->current_annotation_color_index = static_cast<int32_t>(index);
         config_->Normalize();
@@ -759,14 +807,12 @@ bool OverlayWindow::Should_show_brush_cursor_preview() const {
         return false;
     }
     auto const &s = controller_.State();
-    return controller_.Active_annotation_tool() ==
-               std::optional<core::AnnotationToolId>{
-                   core::AnnotationToolId::Freehand} &&
+    return controller_.Active_annotation_tool() == core::AnnotationToolId::Freehand &&
            !s.final_selection.Is_empty() && !s.dragging && !s.handle_dragging &&
            !s.move_dragging && !s.modifier_preview && !last_hover_handle_.has_value();
 }
 
-bool OverlayWindow::Should_show_line_cursor_preview() const {
+bool OverlayWindow::Should_show_square_cursor_preview() const {
     if (color_wheel_.visible) {
         return false;
     }
@@ -774,14 +820,19 @@ bool OverlayWindow::Should_show_line_cursor_preview() const {
     std::optional<core::AnnotationToolId> const active_tool =
         controller_.Active_annotation_tool();
     return active_tool.has_value() &&
-           (*active_tool == core::AnnotationToolId::Line ||
+           (*active_tool == core::AnnotationToolId::Highlighter ||
+            *active_tool == core::AnnotationToolId::Line ||
             *active_tool == core::AnnotationToolId::Arrow) &&
            !s.final_selection.Is_empty() && !s.dragging && !s.handle_dragging &&
            !s.move_dragging && !s.modifier_preview && !last_hover_handle_.has_value();
 }
 
-std::optional<double> OverlayWindow::Current_line_cursor_preview_angle_radians() const {
-    if (!Should_show_line_cursor_preview()) {
+std::optional<double>
+OverlayWindow::Current_square_cursor_preview_angle_radians() const {
+    if (!Should_show_square_cursor_preview()) {
+        return std::nullopt;
+    }
+    if (controller_.Active_annotation_tool() == core::AnnotationToolId::Highlighter) {
         return std::nullopt;
     }
     return controller_.Draft_line_angle_radians();
@@ -1048,7 +1099,8 @@ LRESULT OverlayWindow::On_l_button_down() {
     if (color_wheel_.visible) {
         suppress_next_lbutton_up_ = true;
         std::optional<size_t> const segment = core::Hit_test_color_wheel_segment(
-            color_wheel_.center, Get_client_cursor_pos_px(hwnd_));
+            color_wheel_.center, Get_client_cursor_pos_px(hwnd_),
+            Current_color_wheel_segment_count());
         Dismiss_color_wheel(false);
         if (segment.has_value()) {
             Select_color_wheel_segment(*segment);
@@ -1207,7 +1259,7 @@ LRESULT OverlayWindow::On_mouse_move() {
     }
 
     if (!controller_.Has_active_annotation_gesture() &&
-        (Should_show_brush_cursor_preview() || Should_show_line_cursor_preview())) {
+        (Should_show_brush_cursor_preview() || Should_show_square_cursor_preview())) {
         RedrawWindow(hwnd_, nullptr, nullptr,
                      RDW_INVALIDATE | RDW_NOERASE | RDW_UPDATENOW);
     }
@@ -1226,6 +1278,7 @@ LRESULT OverlayWindow::On_mouse_wheel(WPARAM wparam) {
         controller_.Active_annotation_tool();
     if (!active_tool.has_value() ||
         (*active_tool != core::AnnotationToolId::Freehand &&
+         *active_tool != core::AnnotationToolId::Highlighter &&
          *active_tool != core::AnnotationToolId::Line &&
          *active_tool != core::AnnotationToolId::Arrow &&
          *active_tool != core::AnnotationToolId::Rectangle)) {
@@ -1792,6 +1845,9 @@ LRESULT OverlayWindow::On_paint() {
             case core::AnnotationToolId::Freehand:
                 glyph = d2d_resources_->glyph_brush.Get();
                 break;
+            case core::AnnotationToolId::Highlighter:
+                glyph = d2d_resources_->glyph_highlighter.Get();
+                break;
             case core::AnnotationToolId::Line:
                 glyph = d2d_resources_->glyph_line.Get();
                 break;
@@ -1840,6 +1896,19 @@ LRESULT OverlayWindow::On_paint() {
         input.annotations = controller_.Annotations();
         input.draft_freehand_points = controller_.Draft_freehand_points();
         input.draft_freehand_style = controller_.Draft_freehand_style();
+        input.draft_freehand_tip_shape =
+            controller_.Active_annotation_tool() == core::AnnotationToolId::Highlighter
+                ? core::FreehandTipShape::Square
+                : core::FreehandTipShape::Round;
+        input.draft_freehand_blit_opacity =
+            controller_.Active_annotation_tool() == core::AnnotationToolId::Highlighter
+                ? static_cast<float>(std::clamp(
+                      config_ != nullptr ? config_->highlighter_opacity_percent
+                                         : core::kDefaultHighlighterOpacityPercent,
+                      core::StrokeStyle::kMinOpacityPercent,
+                      core::StrokeStyle::kMaxOpacityPercent)) /
+                      100.f
+                : 1.0f;
         if (!input.draft_freehand_style.has_value()) {
             input.draft_annotation = controller_.Draft_annotation();
         }
@@ -1852,7 +1921,8 @@ LRESULT OverlayWindow::On_paint() {
         input.hovered_toolbar_bounds = Hovered_toolbar_button_bounds();
         input.show_color_wheel = color_wheel_.visible;
         input.color_wheel_center_px = color_wheel_.center;
-        input.color_wheel_colors = Current_annotation_palette();
+        input.color_wheel_colors = Current_tool_color_palette();
+        input.color_wheel_segment_count = Current_color_wheel_segment_count();
         input.color_wheel_selected_segment = Current_annotation_color_index();
         input.color_wheel_hovered_segment = color_wheel_.hovered_segment;
         if (s.handle_dragging && s.resize_handle.has_value()) {
@@ -1865,10 +1935,10 @@ LRESULT OverlayWindow::On_paint() {
         if (Should_show_brush_cursor_preview()) {
             input.brush_cursor_preview_width_px = controller_.Brush_width_px();
         }
-        if (Should_show_line_cursor_preview()) {
-            input.line_cursor_preview_width_px = controller_.Brush_width_px();
-            input.line_cursor_preview_angle_radians =
-                Current_line_cursor_preview_angle_radians();
+        if (Should_show_square_cursor_preview()) {
+            input.square_cursor_preview_width_px = controller_.Brush_width_px();
+            input.square_cursor_preview_angle_radians =
+                Current_square_cursor_preview_angle_radians();
         }
         input.toolbar_buttons = std::span<IOverlayButton *const>(btn_ptrs);
         input.toolbar_button_glyphs = std::span<ID2D1Bitmap *const>(btn_glyphs);
@@ -1908,8 +1978,9 @@ void OverlayWindow::Handle_device_loss() {
         return;
     }
     (void)d2d_resources_->Upload_glyph_bitmaps(
-        resources_->brush_tool_glyph.get(), resources_->line_tool_glyph.get(),
-        resources_->arrow_tool_glyph.get(), resources_->rectangle_tool_glyph.get(),
+        resources_->brush_tool_glyph.get(), resources_->highlighter_tool_glyph.get(),
+        resources_->line_tool_glyph.get(), resources_->arrow_tool_glyph.get(),
+        resources_->rectangle_tool_glyph.get(),
         resources_->filled_rectangle_tool_glyph.get());
     d2d_resources_->Invalidate_annotations();
     InvalidateRect(hwnd_, nullptr, FALSE);
@@ -2007,6 +2078,7 @@ void OverlayWindow::Refresh_cursor() {
             return;
         }
         if (*active_tool == core::AnnotationToolId::Freehand ||
+            *active_tool == core::AnnotationToolId::Highlighter ||
             *active_tool == core::AnnotationToolId::Line ||
             *active_tool == core::AnnotationToolId::Arrow ||
             *active_tool == core::AnnotationToolId::Rectangle ||

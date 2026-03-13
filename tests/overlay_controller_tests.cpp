@@ -814,6 +814,19 @@ TEST(overlay_controller, AnnotationToolHotkey_TogglesFreehand) {
     EXPECT_EQ(c.Active_annotation_tool(), std::nullopt);
 }
 
+TEST(overlay_controller, AnnotationToolHotkey_TogglesHighlighter) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+
+    EXPECT_EQ(c.Active_annotation_tool(), std::nullopt);
+    EXPECT_EQ(c.On_annotation_tool_hotkey(L'H'), OverlayAction::Repaint);
+    EXPECT_EQ(c.Active_annotation_tool(),
+              std::optional<AnnotationToolId>{AnnotationToolId::Highlighter});
+    EXPECT_EQ(c.On_annotation_tool_hotkey(L'H'), OverlayAction::Repaint);
+    EXPECT_EQ(c.Active_annotation_tool(), std::nullopt);
+}
+
 TEST(overlay_controller, AnnotationToolHotkey_TogglesLine) {
     auto c = Make_controller();
     Press(c, {100, 100});
@@ -886,6 +899,17 @@ TEST(overlay_controller, BrushWidthAdjust_ClampsAndReturnsUpdatedWidth) {
     EXPECT_EQ(c.Adjust_brush_width(100), std::optional<int32_t>{50});
     EXPECT_EQ(c.Adjust_brush_width(1), std::nullopt);
     EXPECT_EQ(c.Adjust_brush_width(-100), std::optional<int32_t>{1});
+}
+
+TEST(overlay_controller, BrushWidthAdjust_AppliesToHighlighterTool) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'H'), OverlayAction::Repaint);
+
+    EXPECT_EQ(c.Brush_width_px(), StrokeStyle::kDefaultWidthPx);
+    EXPECT_EQ(c.Adjust_brush_width(1), std::optional<int32_t>{3});
+    EXPECT_EQ(c.Adjust_brush_width(-2), std::optional<int32_t>{1});
 }
 
 TEST(overlay_controller, BrushWidthAdjust_AppliesToLineTool) {

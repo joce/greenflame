@@ -59,32 +59,37 @@ TEST(annotation_controller, ToolbarViews_ExposeAnnotationTools) {
     std::vector<AnnotationToolbarButtonView> const views =
         controller.Build_toolbar_button_views();
 
-    ASSERT_EQ(views.size(), 5u);
+    ASSERT_EQ(views.size(), 6u);
     EXPECT_EQ(views[0].id, AnnotationToolId::Freehand);
     EXPECT_EQ(views[0].label, L"B");
     EXPECT_EQ(views[0].tooltip, L"Brush tool");
     EXPECT_EQ(views[0].glyph, AnnotationToolbarGlyph::Brush);
     EXPECT_FALSE(views[0].active);
-    EXPECT_EQ(views[1].id, AnnotationToolId::Line);
-    EXPECT_EQ(views[1].label, L"L");
-    EXPECT_EQ(views[1].tooltip, L"Line tool");
-    EXPECT_EQ(views[1].glyph, AnnotationToolbarGlyph::Line);
+    EXPECT_EQ(views[1].id, AnnotationToolId::Highlighter);
+    EXPECT_EQ(views[1].label, L"H");
+    EXPECT_EQ(views[1].tooltip, L"Highlighter tool");
+    EXPECT_EQ(views[1].glyph, AnnotationToolbarGlyph::Highlighter);
     EXPECT_FALSE(views[1].active);
-    EXPECT_EQ(views[2].id, AnnotationToolId::Arrow);
-    EXPECT_EQ(views[2].label, L"A");
-    EXPECT_EQ(views[2].tooltip, L"Arrow tool");
-    EXPECT_EQ(views[2].glyph, AnnotationToolbarGlyph::Arrow);
+    EXPECT_EQ(views[2].id, AnnotationToolId::Line);
+    EXPECT_EQ(views[2].label, L"L");
+    EXPECT_EQ(views[2].tooltip, L"Line tool");
+    EXPECT_EQ(views[2].glyph, AnnotationToolbarGlyph::Line);
     EXPECT_FALSE(views[2].active);
-    EXPECT_EQ(views[3].id, AnnotationToolId::Rectangle);
-    EXPECT_EQ(views[3].label, L"R");
-    EXPECT_EQ(views[3].tooltip, L"Rectangle tool");
-    EXPECT_EQ(views[3].glyph, AnnotationToolbarGlyph::Rectangle);
+    EXPECT_EQ(views[3].id, AnnotationToolId::Arrow);
+    EXPECT_EQ(views[3].label, L"A");
+    EXPECT_EQ(views[3].tooltip, L"Arrow tool");
+    EXPECT_EQ(views[3].glyph, AnnotationToolbarGlyph::Arrow);
     EXPECT_FALSE(views[3].active);
-    EXPECT_EQ(views[4].id, AnnotationToolId::FilledRectangle);
-    EXPECT_EQ(views[4].label, L"F");
-    EXPECT_EQ(views[4].tooltip, L"Filled rectangle tool");
-    EXPECT_EQ(views[4].glyph, AnnotationToolbarGlyph::FilledRectangle);
+    EXPECT_EQ(views[4].id, AnnotationToolId::Rectangle);
+    EXPECT_EQ(views[4].label, L"R");
+    EXPECT_EQ(views[4].tooltip, L"Rectangle tool");
+    EXPECT_EQ(views[4].glyph, AnnotationToolbarGlyph::Rectangle);
     EXPECT_FALSE(views[4].active);
+    EXPECT_EQ(views[5].id, AnnotationToolId::FilledRectangle);
+    EXPECT_EQ(views[5].label, L"F");
+    EXPECT_EQ(views[5].tooltip, L"Filled rectangle tool");
+    EXPECT_EQ(views[5].glyph, AnnotationToolbarGlyph::FilledRectangle);
+    EXPECT_FALSE(views[5].active);
 }
 
 TEST(annotation_controller, ToggleToolByHotkey_ActivatesAndDeactivatesFreehand) {
@@ -103,6 +108,16 @@ TEST(annotation_controller, ToggleToolByLowercaseHotkey_ActivatesFreehand) {
     EXPECT_TRUE(controller.Toggle_tool_by_hotkey(L'b'));
     EXPECT_EQ(controller.Active_tool(),
               std::optional<AnnotationToolId>{AnnotationToolId::Freehand});
+}
+
+TEST(annotation_controller, ToggleToolByHotkey_ActivatesAndDeactivatesHighlighter) {
+    AnnotationController controller;
+
+    EXPECT_TRUE(controller.Toggle_tool_by_hotkey(L'H'));
+    EXPECT_EQ(controller.Active_tool(),
+              std::optional<AnnotationToolId>{AnnotationToolId::Highlighter});
+    EXPECT_TRUE(controller.Toggle_tool_by_hotkey(L'h'));
+    EXPECT_EQ(controller.Active_tool(), std::nullopt);
 }
 
 TEST(annotation_controller, ToggleToolByHotkey_ActivatesAndDeactivatesLine) {
@@ -487,6 +502,30 @@ TEST(annotation_controller, BrushWidth_AffectsDraftAndCommittedArrowStyle) {
     }
 }
 
+TEST(annotation_controller, BrushWidth_AffectsDraftAndCommittedHighlighterStyle) {
+    AnnotationController controller;
+    UndoStack undo_stack;
+
+    EXPECT_TRUE(controller.Set_brush_width_px(12));
+    EXPECT_TRUE(controller.Toggle_tool(AnnotationToolId::Highlighter));
+    EXPECT_TRUE(controller.On_primary_press({10, 10}));
+    ASSERT_TRUE(controller.Draft_freehand_style().has_value());
+    EXPECT_EQ(controller.Draft_freehand_style()->width_px, 12);
+    EXPECT_EQ(controller.Draft_freehand_style()->opacity_percent,
+              controller.Highlighter_opacity_percent());
+
+    EXPECT_TRUE(controller.On_pointer_move({20, 10}));
+    EXPECT_TRUE(controller.On_primary_release(undo_stack));
+
+    ASSERT_EQ(controller.Annotations().size(), 1u);
+    auto const &highlighter =
+        std::get<FreehandStrokeAnnotation>(controller.Annotations()[0].data);
+    EXPECT_EQ(highlighter.style.width_px, 12);
+    EXPECT_EQ(highlighter.freehand_tip_shape, FreehandTipShape::Square);
+    EXPECT_EQ(highlighter.style.opacity_percent,
+              controller.Highlighter_opacity_percent());
+}
+
 TEST(annotation_controller, BrushWidth_AffectsDraftAndCommittedRectangleStyle) {
     AnnotationController controller;
     UndoStack undo_stack;
@@ -526,6 +565,41 @@ TEST(annotation_controller, AnnotationColor_AffectsDraftAndCommittedStrokeStyle)
     EXPECT_EQ(std::get<FreehandStrokeAnnotation>(controller.Annotations()[0].data)
                   .style.color,
               green);
+}
+
+TEST(annotation_controller, HighlighterColor_AffectsDraftAndCommittedStrokeStyle) {
+    AnnotationController controller;
+    UndoStack undo_stack;
+    COLORREF const green = RGB(0x12, 0xA4, 0x56);
+
+    EXPECT_TRUE(controller.Set_highlighter_color(green));
+    EXPECT_TRUE(controller.Toggle_tool(AnnotationToolId::Highlighter));
+    EXPECT_TRUE(controller.On_primary_press({10, 10}));
+    ASSERT_TRUE(controller.Draft_freehand_style().has_value());
+    EXPECT_EQ(controller.Draft_freehand_style()->color, green);
+    EXPECT_EQ(controller.Annotation_color(), green);
+
+    EXPECT_TRUE(controller.On_pointer_move({20, 10}));
+    EXPECT_TRUE(controller.On_primary_release(undo_stack));
+
+    ASSERT_EQ(controller.Annotations().size(), 1u);
+    EXPECT_EQ(std::get<FreehandStrokeAnnotation>(controller.Annotations()[0].data)
+                  .style.color,
+              green);
+}
+
+TEST(annotation_controller, SetAnnotationColor_RoutesToHighlighterWhenActive) {
+    AnnotationController controller;
+    COLORREF const brush_color = RGB(0x11, 0x22, 0x33);
+    COLORREF const highlighter_color = RGB(0x44, 0x55, 0x66);
+
+    EXPECT_TRUE(controller.Set_brush_annotation_color(brush_color));
+    EXPECT_TRUE(controller.Toggle_tool(AnnotationToolId::Highlighter));
+    EXPECT_TRUE(controller.Set_annotation_color(highlighter_color));
+
+    EXPECT_EQ(controller.Brush_annotation_color(), brush_color);
+    EXPECT_EQ(controller.Highlighter_color(), highlighter_color);
+    EXPECT_EQ(controller.Annotation_color(), highlighter_color);
 }
 
 TEST(annotation_controller, AnnotationColor_AffectsDraftAndCommittedLineStyle) {

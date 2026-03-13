@@ -5,7 +5,7 @@ audience: contributors
 status: authoritative
 owners:
   - core-team
-last_updated: 2026-03-08
+last_updated: 2026-03-13
 tags:
   - build
   - cmake
@@ -92,7 +92,7 @@ When builds are launched through the Codex command runner, `pwsh.exe` can interm
 ## Static analysis and include analysis (non-mandatory)
 
 - **clang-tidy:** `compile_commands.json` is generated in the build dir (from `CMAKE_EXPORT_COMPILE_COMMANDS ON`). Use the Clang preset build dir so include paths and defines match. Example: `clang-tidy -p build\x64-debug-clang src\greenflame\win\gdi_capture.cpp` (and similarly for other sources under `src\greenflame\` and `src\greenflame_core\`).
-- **Include timing:** Clang builds use `-ftime-trace`; the compiler emits `.json` trace files in the build dir. Open them in Chrome's `chrome://tracing` to inspect time spent in includes and in the compiler.
+- **Include timing:** Time traces are opt-in. Configure a Clang preset with `-DGREENFLAME_ENABLE_TIME_TRACE=ON` to add `-ftime-trace`; the compiler then emits `.json` trace files in the build dir. Open them in Chrome's `chrome://tracing` to inspect time spent in includes and in the compiler.
 - **Include What You Use (IWYU)** can use the same `compile_commands.json` for optional include-cleanup suggestions.
 
 ## Clang Unsafe-Buffer Warning Guidance

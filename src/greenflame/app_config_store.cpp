@@ -255,6 +255,16 @@ core::AppConfig Load_app_config() {
                     if (Try_parse_int32(value, parsed)) {
                         config.current_annotation_color_index = parsed;
                     }
+                } else if (key == "highlighter_current_color") {
+                    int32_t parsed = 0;
+                    if (Try_parse_int32(value, parsed)) {
+                        config.current_highlighter_color_index = parsed;
+                    }
+                } else if (key == "highlighter_opacity_percent") {
+                    int32_t parsed = 0;
+                    if (Try_parse_int32(value, parsed)) {
+                        config.highlighter_opacity_percent = parsed;
+                    }
                 } else {
                     for (size_t index = 0; index < core::kAnnotationColorSlotCount;
                          ++index) {
@@ -264,6 +274,17 @@ core::AppConfig Load_app_config() {
                         COLORREF parsed = 0;
                         if (Try_parse_color(value, parsed)) {
                             config.annotation_colors[index] = parsed;
+                        }
+                        break;
+                    }
+                    for (size_t index = 0; index < core::kHighlighterColorSlotCount;
+                         ++index) {
+                        if (key != ("highlighter_color_" + std::to_string(index))) {
+                            continue;
+                        }
+                        COLORREF parsed = 0;
+                        if (Try_parse_color(value, parsed)) {
+                            config.highlighter_colors[index] = parsed;
                         }
                         break;
                     }
@@ -335,7 +356,12 @@ bool Save_app_config(core::AppConfig const &config) {
             config.brush_width_px != defaults.brush_width_px ||
             config.current_annotation_color_index !=
                 defaults.current_annotation_color_index ||
-            config.annotation_colors != defaults.annotation_colors;
+            config.annotation_colors != defaults.annotation_colors ||
+            config.current_highlighter_color_index !=
+                defaults.current_highlighter_color_index ||
+            config.highlighter_opacity_percent !=
+                defaults.highlighter_opacity_percent ||
+            config.highlighter_colors != defaults.highlighter_colors;
         if (write_tools_header) {
             file << (wrote_ui_header ? "\n" : "") << "[tools]\n";
             wrote_tools_header = true;
@@ -353,6 +379,24 @@ bool Save_app_config(core::AppConfig const &config) {
         if (config.current_annotation_color_index !=
             defaults.current_annotation_color_index) {
             file << "current_color=" << config.current_annotation_color_index << "\n";
+        }
+        for (size_t index = 0; index < core::kHighlighterColorSlotCount; ++index) {
+            if (config.highlighter_colors[index] ==
+                defaults.highlighter_colors[index]) {
+                continue;
+            }
+            file << "highlighter_color_" << index << "="
+                 << To_hex_color(config.highlighter_colors[index]) << "\n";
+        }
+        if (config.current_highlighter_color_index !=
+            defaults.current_highlighter_color_index) {
+            file << "highlighter_current_color="
+                 << config.current_highlighter_color_index << "\n";
+        }
+        if (config.highlighter_opacity_percent !=
+            defaults.highlighter_opacity_percent) {
+            file << "highlighter_opacity_percent=" << config.highlighter_opacity_percent
+                 << "\n";
         }
 
         // Save section: only write non-default values.

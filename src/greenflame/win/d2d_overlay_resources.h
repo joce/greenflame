@@ -42,6 +42,7 @@ struct D2DOverlayResources final {
 
     // Toolbar glyph bitmaps (BGRA premultiplied, from OverlayButtonGlyph alpha masks)
     Microsoft::WRL::ComPtr<ID2D1Bitmap> glyph_brush;
+    Microsoft::WRL::ComPtr<ID2D1Bitmap> glyph_highlighter;
     Microsoft::WRL::ComPtr<ID2D1Bitmap> glyph_line;
     Microsoft::WRL::ComPtr<ID2D1Bitmap> glyph_arrow;
     Microsoft::WRL::ComPtr<ID2D1Bitmap> glyph_rect;
@@ -65,9 +66,11 @@ struct D2DOverlayResources final {
     // Create the annotations and frozen off-screen bitmap render targets.
     [[nodiscard]] bool Create_cache_targets(int width, int height);
 
-    // Upload the five annotation tool glyph alpha masks as D2D bitmaps.
-    // Order: brush, line, arrow, rect, filled_rect. Null pointers are skipped.
+    // Upload the six annotation tool glyph alpha masks as D2D bitmaps.
+    // Order: brush, highlighter, line, arrow, rect, filled_rect. Null pointers are
+    // skipped.
     [[nodiscard]] bool Upload_glyph_bitmaps(OverlayButtonGlyph const *brush,
+                                            OverlayButtonGlyph const *highlighter,
                                             OverlayButtonGlyph const *line,
                                             OverlayButtonGlyph const *arrow,
                                             OverlayButtonGlyph const *rect,

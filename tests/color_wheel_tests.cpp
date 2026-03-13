@@ -19,8 +19,8 @@ float Mid_radius_px() {
     return (outer_radius + inner_radius) / 2.0f;
 }
 
-float Degrees_per_segment() {
-    return 360.0f / static_cast<float>(kColorWheelSegmentCount);
+float Degrees_per_segment(size_t segment_count) {
+    return 360.0f / static_cast<float>(segment_count);
 }
 
 } // namespace
@@ -36,6 +36,15 @@ TEST(color_wheel, DefaultPaletteMatchesExpectedOrder) {
     EXPECT_EQ(kDefaultAnnotationColorPalette[7], Make_colorref(0xFF, 0xFF, 0xFF));
 }
 
+TEST(color_wheel, DefaultHighlighterPaletteMatchesExpectedOrder) {
+    EXPECT_EQ(kDefaultHighlighterColorPalette[0], Make_colorref(0xF7, 0xEB, 0x62));
+    EXPECT_EQ(kDefaultHighlighterColorPalette[1], Make_colorref(0x7F, 0xE3, 0x6A));
+    EXPECT_EQ(kDefaultHighlighterColorPalette[2], Make_colorref(0xFF, 0xB4, 0x4D));
+    EXPECT_EQ(kDefaultHighlighterColorPalette[3], Make_colorref(0xFF, 0x79, 0xB9));
+    EXPECT_EQ(kDefaultHighlighterColorPalette[4], Make_colorref(0x64, 0xC7, 0xFF));
+    EXPECT_EQ(kDefaultHighlighterColorPalette[5], Make_colorref(0xC3, 0x8C, 0xFF));
+}
+
 TEST(color_wheel, ClampAnnotationColorIndex_ClampsToSupportedRange) {
     EXPECT_EQ(Clamp_annotation_color_index(-10), 0);
     EXPECT_EQ(Clamp_annotation_color_index(0), 0);
@@ -43,11 +52,21 @@ TEST(color_wheel, ClampAnnotationColorIndex_ClampsToSupportedRange) {
     EXPECT_EQ(Clamp_annotation_color_index(99), 7);
 }
 
-TEST(color_wheel, SegmentGeometry_StartsAtTopRightAndSweepsClockwise) {
-    ColorWheelSegmentGeometry const first = Get_color_wheel_segment_geometry(0);
-    ColorWheelSegmentGeometry const second = Get_color_wheel_segment_geometry(1);
-    ColorWheelSegmentGeometry const last = Get_color_wheel_segment_geometry(7);
-    float const degrees_per_segment = Degrees_per_segment();
+TEST(color_wheel, ClampHighlighterColorIndex_ClampsToSupportedRange) {
+    EXPECT_EQ(Clamp_highlighter_color_index(-10), 0);
+    EXPECT_EQ(Clamp_highlighter_color_index(0), 0);
+    EXPECT_EQ(Clamp_highlighter_color_index(5), 5);
+    EXPECT_EQ(Clamp_highlighter_color_index(99), 5);
+}
+
+TEST(color_wheel, SegmentGeometry_StartsAtTopRightAndSweepsClockwiseForEightSegments) {
+    ColorWheelSegmentGeometry const first =
+        Get_color_wheel_segment_geometry(0, kAnnotationColorSlotCount);
+    ColorWheelSegmentGeometry const second =
+        Get_color_wheel_segment_geometry(1, kAnnotationColorSlotCount);
+    ColorWheelSegmentGeometry const last = Get_color_wheel_segment_geometry(
+        kAnnotationColorSlotCount - 1, kAnnotationColorSlotCount);
+    float const degrees_per_segment = Degrees_per_segment(kAnnotationColorSlotCount);
     float const top_gap_center_degrees = 270.0f;
 
     EXPECT_NEAR(first.center_angle_degrees,
@@ -60,17 +79,47 @@ TEST(color_wheel, SegmentGeometry_StartsAtTopRightAndSweepsClockwise) {
                 top_gap_center_degrees - degrees_per_segment / 2.0f, 0.01f);
 }
 
-TEST(color_wheel, HitTest_ReturnsSegmentForEachSegmentCenter) {
+TEST(color_wheel, SegmentGeometry_SupportsConfigurableSixSegments) {
+    ColorWheelSegmentGeometry const first =
+        Get_color_wheel_segment_geometry(0, kHighlighterColorSlotCount);
+    ColorWheelSegmentGeometry const last = Get_color_wheel_segment_geometry(
+        kHighlighterColorSlotCount - 1, kHighlighterColorSlotCount);
+    float const degrees_per_segment = Degrees_per_segment(kHighlighterColorSlotCount);
+    float const top_gap_center_degrees = 270.0f;
+
+    EXPECT_NEAR(first.center_angle_degrees,
+                top_gap_center_degrees + degrees_per_segment / 2.0f, 0.01f);
+    EXPECT_NEAR(last.center_angle_degrees,
+                top_gap_center_degrees - degrees_per_segment / 2.0f, 0.01f);
+}
+
+TEST(color_wheel, HitTest_ReturnsSegmentForEachEightSegmentCenter) {
     PointPx const center{500, 500};
     float const radius = Mid_radius_px();
 
     for (size_t index = 0; index < kAnnotationColorSlotCount; ++index) {
         ColorWheelSegmentGeometry const geometry =
-            Get_color_wheel_segment_geometry(index);
-        EXPECT_EQ(
-            Hit_test_color_wheel_segment(
-                center, Point_on_wheel(center, radius, geometry.center_angle_degrees)),
-            std::optional<size_t>{index});
+            Get_color_wheel_segment_geometry(index, kAnnotationColorSlotCount);
+        EXPECT_EQ(Hit_test_color_wheel_segment(
+                      center,
+                      Point_on_wheel(center, radius, geometry.center_angle_degrees),
+                      kAnnotationColorSlotCount),
+                  std::optional<size_t>{index});
+    }
+}
+
+TEST(color_wheel, HitTest_ReturnsSegmentForEachSixSegmentCenter) {
+    PointPx const center{500, 500};
+    float const radius = Mid_radius_px();
+
+    for (size_t index = 0; index < kHighlighterColorSlotCount; ++index) {
+        ColorWheelSegmentGeometry const geometry =
+            Get_color_wheel_segment_geometry(index, kHighlighterColorSlotCount);
+        EXPECT_EQ(Hit_test_color_wheel_segment(
+                      center,
+                      Point_on_wheel(center, radius, geometry.center_angle_degrees),
+                      kHighlighterColorSlotCount),
+                  std::optional<size_t>{index});
     }
 }
 
@@ -78,11 +127,14 @@ TEST(color_wheel, HitTest_ReturnsNulloptForInnerHoleOuterBoundsAndGap) {
     PointPx const center{300, 300};
     float const outer_radius = static_cast<float>(kColorWheelOuterDiameterPx) / 2.0f;
 
-    EXPECT_EQ(Hit_test_color_wheel_segment(center, center), std::nullopt);
-    EXPECT_EQ(Hit_test_color_wheel_segment(
-                  center, Point_on_wheel(center, outer_radius + 10.0f, 0.0f)),
+    EXPECT_EQ(Hit_test_color_wheel_segment(center, center, kAnnotationColorSlotCount),
               std::nullopt);
     EXPECT_EQ(Hit_test_color_wheel_segment(
-                  center, Point_on_wheel(center, Mid_radius_px(), 270.0f)),
+                  center, Point_on_wheel(center, outer_radius + 10.0f, 0.0f),
+                  kAnnotationColorSlotCount),
+              std::nullopt);
+    EXPECT_EQ(Hit_test_color_wheel_segment(
+                  center, Point_on_wheel(center, Mid_radius_px(), 270.0f),
+                  kAnnotationColorSlotCount),
               std::nullopt);
 }

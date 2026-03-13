@@ -6,11 +6,7 @@ namespace {
 
 constexpr float kPi = 3.14159265358979323846f;
 constexpr float kDegreesPerTurn = 360.0f;
-constexpr float kDegreesPerSegment =
-    kDegreesPerTurn / static_cast<float>(kColorWheelSegmentCount);
 constexpr float kTopGapCenterDegrees = 270.0f;
-constexpr float kFirstSegmentCenterDegrees =
-    kTopGapCenterDegrees + kDegreesPerSegment / 2.0f;
 
 [[nodiscard]] constexpr float Color_wheel_outer_radius_px() noexcept {
     return static_cast<float>(kColorWheelOuterDiameterPx) / 2.0f;
@@ -27,6 +23,13 @@ constexpr float kFirstSegmentCenterDegrees =
 [[nodiscard]] constexpr float Color_wheel_gap_degrees() noexcept {
     return (kColorWheelSegmentGapPx / Color_wheel_mid_radius_px()) *
            (kDegreesPerTurn / (2.0f * kPi));
+}
+
+[[nodiscard]] float Degrees_per_segment(size_t segment_count) noexcept {
+    if (segment_count == 0) {
+        return 0.0f;
+    }
+    return kDegreesPerTurn / static_cast<float>(segment_count);
 }
 
 [[nodiscard]] constexpr float Normalize_degrees(float angle) noexcept {
@@ -50,22 +53,30 @@ constexpr float kFirstSegmentCenterDegrees =
 
 } // namespace
 
-ColorWheelSegmentGeometry Get_color_wheel_segment_geometry(size_t index) noexcept {
+ColorWheelSegmentGeometry
+Get_color_wheel_segment_geometry(size_t index, size_t segment_count) noexcept {
     ColorWheelSegmentGeometry geometry{};
-    if (index >= kAnnotationColorSlotCount) {
+    if (segment_count == 0 || index >= segment_count) {
         return geometry;
     }
 
+    float const degrees_per_segment = Degrees_per_segment(segment_count);
+    float const first_segment_center_degrees =
+        kTopGapCenterDegrees + degrees_per_segment / 2.0f;
     geometry.center_angle_degrees = Normalize_degrees(
-        kFirstSegmentCenterDegrees + static_cast<float>(index) * kDegreesPerSegment);
-    geometry.sweep_angle_degrees = kDegreesPerSegment - Color_wheel_gap_degrees();
+        first_segment_center_degrees + static_cast<float>(index) * degrees_per_segment);
+    geometry.sweep_angle_degrees = degrees_per_segment - Color_wheel_gap_degrees();
     geometry.start_angle_degrees = Normalize_degrees(
         geometry.center_angle_degrees - geometry.sweep_angle_degrees / 2.0f);
     return geometry;
 }
 
-std::optional<size_t> Hit_test_color_wheel_segment(PointPx center,
-                                                   PointPx point) noexcept {
+std::optional<size_t> Hit_test_color_wheel_segment(PointPx center, PointPx point,
+                                                   size_t segment_count) noexcept {
+    if (segment_count == 0) {
+        return std::nullopt;
+    }
+
     float const dx = static_cast<float>(point.x - center.x);
     float const dy = static_cast<float>(point.y - center.y);
     float const distance_sq = dx * dx + dy * dy;
@@ -78,9 +89,9 @@ std::optional<size_t> Hit_test_color_wheel_segment(PointPx center,
 
     float const angle =
         Normalize_degrees(std::atan2(dy, dx) * (kDegreesPerTurn / (2.0f * kPi)));
-    for (size_t index = 0; index < kAnnotationColorSlotCount; ++index) {
+    for (size_t index = 0; index < segment_count; ++index) {
         ColorWheelSegmentGeometry const geometry =
-            Get_color_wheel_segment_geometry(index);
+            Get_color_wheel_segment_geometry(index, segment_count);
         float const half_sweep = geometry.sweep_angle_degrees / 2.0f;
         if (std::fabs(Smallest_angle_delta_degrees(geometry.center_angle_degrees,
                                                    angle)) <= half_sweep) {

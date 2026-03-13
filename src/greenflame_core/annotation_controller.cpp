@@ -1,6 +1,7 @@
 #include "greenflame_core/annotation_controller.h"
 
 #include "greenflame_core/annotation_commands.h"
+#include "greenflame_core/color_wheel.h"
 #include "greenflame_core/undo_stack.h"
 
 namespace greenflame::core {
@@ -11,6 +12,20 @@ namespace {
     return std::clamp(width_px, StrokeStyle::kMinWidthPx, StrokeStyle::kMaxWidthPx);
 }
 
+[[nodiscard]] int32_t Clamp_opacity_percent(int32_t opacity_percent) noexcept {
+    return std::clamp(opacity_percent, StrokeStyle::kMinOpacityPercent,
+                      StrokeStyle::kMaxOpacityPercent);
+}
+
+[[nodiscard]] StrokeStyle Default_highlighter_style() noexcept {
+    return StrokeStyle{
+        .width_px = StrokeStyle::kDefaultWidthPx,
+        .color = kDefaultHighlighterColorPalette[static_cast<size_t>(
+            kDefaultHighlighterColorIndex)],
+        .opacity_percent = kDefaultHighlighterOpacityPercent,
+    };
+}
+
 } // namespace
 
 std::vector<PointPx>
@@ -18,12 +33,14 @@ PassthroughStrokeSmoother::Smooth(std::span<const PointPx> points) const {
     return {points.begin(), points.end()};
 }
 
-AnnotationController::AnnotationController() = default;
+AnnotationController::AnnotationController()
+    : highlighter_style_(Default_highlighter_style()) {}
 
 void AnnotationController::Reset_for_session() {
     document_ = {};
     active_tool_.reset();
     brush_style_ = {};
+    highlighter_style_ = Default_highlighter_style();
     active_edit_interaction_.reset();
     registry_.Reset_all();
 }
@@ -65,19 +82,49 @@ AnnotationController::Tool_id_from_hotkey(wchar_t hotkey) const {
 
 bool AnnotationController::Set_brush_width_px(int32_t width_px) noexcept {
     int32_t const clamped_width = Clamp_brush_width_px(width_px);
-    if (brush_style_.width_px == clamped_width) {
+    // Both widths are always set together and stay in sync; either check suffices.
+    if (brush_style_.width_px == clamped_width &&
+        highlighter_style_.width_px == clamped_width) {
         return false;
     }
     brush_style_.width_px = clamped_width;
+    highlighter_style_.width_px = clamped_width;
     registry_.On_stroke_style_changed();
     return true;
 }
 
 bool AnnotationController::Set_annotation_color(COLORREF color) noexcept {
+    if (active_tool_ == AnnotationToolId::Highlighter) {
+        return Set_highlighter_color(color);
+    }
+    return Set_brush_annotation_color(color);
+}
+
+bool AnnotationController::Set_brush_annotation_color(COLORREF color) noexcept {
     if (brush_style_.color == color) {
         return false;
     }
     brush_style_.color = color;
+    registry_.On_stroke_style_changed();
+    return true;
+}
+
+bool AnnotationController::Set_highlighter_color(COLORREF color) noexcept {
+    if (highlighter_style_.color == color) {
+        return false;
+    }
+    highlighter_style_.color = color;
+    registry_.On_stroke_style_changed();
+    return true;
+}
+
+bool AnnotationController::Set_highlighter_opacity_percent(
+    int32_t opacity_percent) noexcept {
+    int32_t const clamped_opacity = Clamp_opacity_percent(opacity_percent);
+    if (highlighter_style_.opacity_percent == clamped_opacity) {
+        return false;
+    }
+    highlighter_style_.opacity_percent = clamped_opacity;
     registry_.On_stroke_style_changed();
     return true;
 }
@@ -275,6 +322,9 @@ std::span<const PointPx> AnnotationController::Draft_freehand_points() const noe
 }
 
 StrokeStyle AnnotationController::Current_stroke_style() const noexcept {
+    if (active_tool_ == AnnotationToolId::Highlighter) {
+        return highlighter_style_;
+    }
     return brush_style_;
 }
 

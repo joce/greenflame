@@ -330,7 +330,7 @@ unless a real end-to-end bug escapes into the Win32 shell:
 - Run on: `ENV-A`
 - Steps:
   1. Create a selection.
-  2. Toggle `B`, `L`, `A`, `R`, and `F` from the keyboard.
+  2. Toggle `B`, `H`, `L`, `A`, `R`, and `F` from the keyboard.
   3. Toggle the same tools from the toolbar.
   4. Activate the same tool twice in a row.
 - Expected:
@@ -338,21 +338,24 @@ unless a real end-to-end bug escapes into the Win32 shell:
   - Activating the same tool a second time returns to default mode.
   - Keyboard and toolbar stay in sync.
 
-### GF-MAN-ANN-002 - Brush Annotation
+### GF-MAN-ANN-002 - Brush And Highlighter Annotation
 
 - Priority: `P1`
 - Run on: `ENV-A`
 - Steps:
-  1. Activate the Brush tool.
-  2. Move the cursor without drawing.
-  3. Draw a freehand stroke.
-  4. Return to default mode and click the stroke.
-  5. Drag the selected stroke.
+  1. Activate the Brush tool and move the cursor without drawing.
+  2. Draw a freehand brush stroke.
+  3. Activate the Highlighter tool and move the cursor without drawing.
+  4. Draw a highlighter stroke across visible text or another detailed background.
+  5. Return to default mode and click each stroke.
+  6. Drag each selected stroke.
 - Expected:
-  - A circular size preview follows the cursor while the tool is active.
-  - The committed stroke renders cleanly.
-  - Selecting the stroke shows L-bracket corner markers hugging the tight bounding box of the stroke geometry.
-  - The stroke can be moved in default mode.
+  - The Brush tool shows a circular size preview.
+  - The Highlighter tool shows an axis-aligned square size preview.
+  - Both committed strokes render cleanly.
+  - The Highlighter stroke remains semi-transparent and the underlying content stays visible.
+  - Selecting either stroke shows L-bracket corner markers hugging the tight bounding box of the stroke geometry.
+  - Both strokes can be moved in default mode.
 
 ### GF-MAN-ANN-003 - Line And Arrow Editing
 
@@ -418,10 +421,13 @@ unless a real end-to-end bug escapes into the Win32 shell:
   2. Right-click to open the color wheel.
   3. Hover different segments.
   4. Pick a segment once, then reopen and dismiss with `Esc`.
+  5. Repeat with the Highlighter tool active.
 - Expected:
   - The wheel opens centered on the cursor.
   - Hovering highlights the segment under the pointer.
   - Selecting a segment changes the color used by future annotations.
+  - Brush, Line, Arrow, Rectangle, and Filled rectangle show the 8-slot annotation palette.
+  - Highlighter shows the 6-slot highlighter palette.
   - `Esc` closes the wheel without changing the current color.
 
 ### GF-MAN-ANN-008 - Stroke Width Adjustment And Clamp
@@ -429,15 +435,42 @@ unless a real end-to-end bug escapes into the Win32 shell:
 - Priority: `P1`
 - Run on: `ENV-A`
 - Steps:
-  1. Activate Brush, Line, Arrow, and Rectangle in turn.
+  1. Activate Brush, Highlighter, Line, Arrow, and Rectangle in turn.
   2. Adjust width with mouse wheel and with `Ctrl + =` and `Ctrl + -`.
   3. Attempt to go below the minimum and above the maximum.
   4. Repeat once with Filled Rectangle active.
 - Expected:
-  - Width changes affect Brush, Line, Arrow, and outlined Rectangle.
+  - Width changes affect Brush, Highlighter, Line, Arrow, and outlined Rectangle.
   - The value clamps at `1..50`.
   - A centered size overlay appears when enabled.
   - Filled Rectangle rendering does not depend on stroke width.
+
+### GF-MAN-ANN-009 - Undo Then Switch Freehand Tool Preview
+
+- Priority: `P1`
+- Run on: `ENV-A`
+- Steps:
+  1. Create a selection and draw a Highlighter stroke.
+  2. Press `Ctrl + Z` to undo it.
+  3. Activate the Brush tool and start drawing a new stroke.
+  4. Repeat the same sequence in reverse: draw with Brush, undo, then start a Highlighter stroke.
+- Expected:
+  - The undone stroke disappears immediately after undo.
+  - Starting the next freehand stroke does not resurrect pixels from the undone stroke.
+  - The live preview only shows the stroke currently being drawn.
+
+### GF-MAN-ANN-010 - Highlighter Reversal Preview Matches Final Stroke
+
+- Priority: `P1`
+- Run on: `ENV-A`
+- Steps:
+  1. Create a selection and activate the Highlighter tool.
+  2. Draw quickly in one direction, then reverse sharply and continue the stroke.
+  3. Release the mouse and select the finished annotation.
+- Expected:
+  - The live preview does not leave stray blocks or extra segments from an earlier direction of travel.
+  - The committed stroke matches what was shown during the live preview.
+  - The selected-annotation brackets enclose all visible highlighter pixels.
 
 ## Output, Clipboard, And Notifications
 
@@ -446,12 +479,14 @@ unless a real end-to-end bug escapes into the Win32 shell:
 - Priority: `P0`
 - Run on: `ENV-A`
 - Steps:
-  1. Create a selection and add at least one annotation.
+  1. Create a selection and add at least one annotation, including a highlighter
+     stroke over visible text or another detailed background.
   2. Press `Ctrl + C`.
   3. Paste into Paint.
 - Expected:
   - The overlay closes after copy.
   - The pasted image contains the selected crop plus committed annotations.
+  - Highlighter annotations remain semi-transparent in the pasted image.
   - Overlay chrome, labels, toolbar, help, and color wheel are absent from the pasted image.
 
 ### GF-MAN-OUT-002 - Direct Save
@@ -558,14 +593,17 @@ unless a real end-to-end bug escapes into the Win32 shell:
 - Priority: `P1`
 - Run on: `ENV-A`
 - Steps:
-  1. Change the active annotation color and stroke width.
+  1. Change the brush color slot, the highlighter color slot, and the shared stroke
+     width.
   2. Close the overlay and exit the app.
   3. Relaunch and start a fresh capture.
-  4. If using a custom palette in the INI, open the color wheel.
+  4. Open the brush color wheel and then the highlighter color wheel.
 - Expected:
-  - The previously chosen color slot is restored.
+  - The previously chosen brush color slot is restored.
+  - The previously chosen highlighter color slot is restored.
   - The saved stroke width is restored.
-  - Custom palette colors appear in the configured wheel slots.
+  - Custom brush and highlighter palette colors appear in their configured wheel
+    slots.
 
 ## Mixed-DPI And Multi-Monitor
 

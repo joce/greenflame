@@ -4,6 +4,19 @@ using namespace greenflame::core;
 
 namespace {
 
+Annotation Make_freehand(uint64_t id, std::initializer_list<PointPx> points,
+                         StrokeStyle style = {},
+                         FreehandTipShape tip_shape = FreehandTipShape::Round) {
+    Annotation annotation{};
+    annotation.id = id;
+    annotation.data = FreehandStrokeAnnotation{
+        .points = std::vector<PointPx>(points),
+        .style = style,
+        .freehand_tip_shape = tip_shape,
+    };
+    return annotation;
+}
+
 Annotation Make_line(uint64_t id, PointPx start, PointPx end,
                      int32_t width_px = StrokeStyle::kDefaultWidthPx,
                      bool arrow_head = false) {
@@ -32,8 +45,25 @@ Annotation Make_rectangle(uint64_t id, RectPx outer_bounds, int32_t width_px,
 
 } // namespace
 
+TEST(annotation_hit_test, AnnotationHitsPoint_SquareFreehandUsesSquareTipCoverage) {
+    Annotation const square_stroke = Make_freehand(
+        6, {{10, 10}}, StrokeStyle{.width_px = 4}, FreehandTipShape::Square);
+
+    EXPECT_TRUE(Annotation_hits_point(square_stroke, {11, 11}));
+    EXPECT_FALSE(Annotation_hits_point(square_stroke, {12, 12}));
+}
+
+TEST(annotation_hit_test,
+     AnnotationHitsPoint_SquareFreehandDiagonalUsesAxisAlignedSquareSweep) {
+    Annotation const square_stroke = Make_freehand(
+        7, {{10, 10}, {14, 14}}, StrokeStyle{.width_px = 2}, FreehandTipShape::Square);
+
+    EXPECT_TRUE(Annotation_hits_point(square_stroke, {13, 11}));
+    EXPECT_FALSE(Annotation_hits_point(square_stroke, {14, 10}));
+}
+
 TEST(annotation_hit_test, AnnotationHitsPoint_LineUsesSquareCaps) {
-    Annotation const line = Make_line(7, {10, 10}, {20, 10}, 4);
+    Annotation const line = Make_line(8, {10, 10}, {20, 10}, 4);
 
     EXPECT_TRUE(Annotation_hits_point(line, {8, 10}));
     EXPECT_TRUE(Annotation_hits_point(line, {21, 10}));
@@ -183,6 +213,31 @@ TEST(annotation_hit_test, AnnotationVisualBounds_RectangleMatchesHitTestBounds) 
     Annotation const rect = Make_rectangle(1, RectPx::From_ltrb(10, 20, 50, 60), 4);
 
     EXPECT_EQ(Annotation_visual_bounds(rect), Annotation_bounds(rect));
+}
+
+TEST(annotation_hit_test, BlendAnnotationOntoPixels_UsesOpacityForFreehandStroke) {
+    std::array<uint8_t, 4> pixels = {100, 150, 200, 255};
+    Annotation const stroke = Make_freehand(1, {{0, 0}},
+                                            StrokeStyle{.width_px = 2,
+                                                        .color = RGB(0x14, 0x28, 0x3C),
+                                                        .opacity_percent = 50},
+                                            FreehandTipShape::Square);
+
+    Blend_annotation_onto_pixels(pixels, 1, 1, 4, stroke,
+                                 RectPx::From_ltrb(0, 0, 1, 1));
+
+    auto const blend = [](uint8_t dst, uint8_t src) {
+        uint8_t const alpha = 128;
+        uint32_t const src_term = static_cast<uint32_t>(src) * alpha;
+        uint32_t const dst_term =
+            static_cast<uint32_t>(dst) * (static_cast<uint32_t>(255) - alpha);
+        return static_cast<uint8_t>((src_term + dst_term + 127) / 255);
+    };
+
+    EXPECT_EQ(pixels[0], blend(100, 0x3C));
+    EXPECT_EQ(pixels[1], blend(150, 0x28));
+    EXPECT_EQ(pixels[2], blend(200, 0x14));
+    EXPECT_EQ(pixels[3], 255);
 }
 
 TEST(annotation_hit_test, AnnotationVisualBounds_HorizontalLineExcludesCapAndPadding) {

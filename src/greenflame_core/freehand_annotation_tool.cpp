@@ -2,9 +2,24 @@
 
 namespace greenflame::core {
 
+namespace {
+
+[[nodiscard]] AnnotationToolDescriptor Brush_tool_descriptor() {
+    return AnnotationToolDescriptor{AnnotationToolId::Freehand, L"Brush tool", L'B',
+                                    L"B", AnnotationToolbarGlyph::Brush};
+}
+
+} // namespace
+
 FreehandAnnotationTool::FreehandAnnotationTool()
-    : descriptor_{AnnotationToolId::Freehand, L"Brush tool", L'B', L"B",
-                  AnnotationToolbarGlyph::Brush} {}
+    : FreehandAnnotationTool(Brush_tool_descriptor()) {}
+
+FreehandAnnotationTool::FreehandAnnotationTool(AnnotationToolDescriptor descriptor)
+    : descriptor_(std::move(descriptor)) {}
+
+FreehandAnnotationTool::FreehandAnnotationTool(AnnotationToolDescriptor descriptor,
+                                               FreehandTipShape tip_shape)
+    : descriptor_(std::move(descriptor)), tip_shape_(tip_shape) {}
 
 AnnotationToolDescriptor const &FreehandAnnotationTool::Descriptor() const noexcept {
     return descriptor_;
@@ -106,6 +121,7 @@ FreehandAnnotationTool::Build_annotation(IAnnotationToolHost const &host,
     annotation.data = FreehandStrokeAnnotation{
         .points = host.Smooth_points(raw_points),
         .style = host.Current_stroke_style(),
+        .freehand_tip_shape = tip_shape_,
     };
     return annotation;
 }

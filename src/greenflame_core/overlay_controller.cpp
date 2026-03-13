@@ -152,6 +152,18 @@ COLORREF OverlayController::Annotation_color() const noexcept {
     return annotation_controller_.Annotation_color();
 }
 
+COLORREF OverlayController::Brush_annotation_color() const noexcept {
+    return annotation_controller_.Brush_annotation_color();
+}
+
+COLORREF OverlayController::Highlighter_color() const noexcept {
+    return annotation_controller_.Highlighter_color();
+}
+
+int32_t OverlayController::Highlighter_opacity_percent() const noexcept {
+    return annotation_controller_.Highlighter_opacity_percent();
+}
+
 void OverlayController::Set_brush_width_px(int32_t width_px) noexcept {
     (void)annotation_controller_.Set_brush_width_px(width_px);
 }
@@ -160,12 +172,26 @@ void OverlayController::Set_annotation_color(COLORREF color) noexcept {
     (void)annotation_controller_.Set_annotation_color(color);
 }
 
+void OverlayController::Set_brush_annotation_color(COLORREF color) noexcept {
+    (void)annotation_controller_.Set_brush_annotation_color(color);
+}
+
+void OverlayController::Set_highlighter_color(COLORREF color) noexcept {
+    (void)annotation_controller_.Set_highlighter_color(color);
+}
+
+void OverlayController::Set_highlighter_opacity_percent(
+    int32_t opacity_percent) noexcept {
+    (void)annotation_controller_.Set_highlighter_opacity_percent(opacity_percent);
+}
+
 std::optional<int32_t> OverlayController::Adjust_brush_width(int32_t delta_steps) {
     std::optional<AnnotationToolId> const active_tool =
         annotation_controller_.Active_tool();
     if (delta_steps == 0 || state_.final_selection.Is_empty() ||
         !active_tool.has_value() ||
         (*active_tool != AnnotationToolId::Freehand &&
+         *active_tool != AnnotationToolId::Highlighter &&
          *active_tool != AnnotationToolId::Line &&
          *active_tool != AnnotationToolId::Arrow &&
          *active_tool != AnnotationToolId::Rectangle)) {

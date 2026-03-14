@@ -164,6 +164,34 @@ constexpr uint8_t kHexLowNibbleMask = 0x0F;
     return static_cast<char>((value < 10) ? ('0' + value) : ('a' + (value - 10)));
 }
 
+[[nodiscard]] core::TextFontChoice Parse_text_font_choice(std::string_view value) {
+    std::string_view const trimmed = Trim(value);
+    if (trimmed == "serif") {
+        return core::TextFontChoice::Serif;
+    }
+    if (trimmed == "mono") {
+        return core::TextFontChoice::Mono;
+    }
+    if (trimmed == "art") {
+        return core::TextFontChoice::Art;
+    }
+    return core::TextFontChoice::Sans;
+}
+
+[[nodiscard]] std::string_view Text_font_choice_token(core::TextFontChoice choice) {
+    switch (choice) {
+    case core::TextFontChoice::Sans:
+        return "sans";
+    case core::TextFontChoice::Serif:
+        return "serif";
+    case core::TextFontChoice::Mono:
+        return "mono";
+    case core::TextFontChoice::Art:
+        return "art";
+    }
+    return "sans";
+}
+
 [[nodiscard]] std::string To_hex_color(COLORREF color) {
     auto channel = [&](unsigned shift) {
         return static_cast<uint8_t>((color >> shift) & kColorChannelMask);
@@ -265,6 +293,21 @@ core::AppConfig Load_app_config() {
                     if (Try_parse_int32(value, parsed)) {
                         config.highlighter_opacity_percent = parsed;
                     }
+                } else if (key == "text_size_points") {
+                    int32_t parsed = 0;
+                    if (Try_parse_int32(value, parsed)) {
+                        config.text_size_points = parsed;
+                    }
+                } else if (key == "text_current_font") {
+                    config.text_current_font = Parse_text_font_choice(value);
+                } else if (key == "text_font_sans") {
+                    config.text_font_sans = To_wide(value);
+                } else if (key == "text_font_serif") {
+                    config.text_font_serif = To_wide(value);
+                } else if (key == "text_font_mono") {
+                    config.text_font_mono = To_wide(value);
+                } else if (key == "text_font_art") {
+                    config.text_font_art = To_wide(value);
                 } else {
                     for (size_t index = 0; index < core::kAnnotationColorSlotCount;
                          ++index) {
@@ -361,7 +404,13 @@ bool Save_app_config(core::AppConfig const &config) {
                 defaults.current_highlighter_color_index ||
             config.highlighter_opacity_percent !=
                 defaults.highlighter_opacity_percent ||
-            config.highlighter_colors != defaults.highlighter_colors;
+            config.highlighter_colors != defaults.highlighter_colors ||
+            config.text_size_points != defaults.text_size_points ||
+            config.text_current_font != defaults.text_current_font ||
+            config.text_font_sans != defaults.text_font_sans ||
+            config.text_font_serif != defaults.text_font_serif ||
+            config.text_font_mono != defaults.text_font_mono ||
+            config.text_font_art != defaults.text_font_art;
         if (write_tools_header) {
             file << (wrote_ui_header ? "\n" : "") << "[tools]\n";
             wrote_tools_header = true;
@@ -397,6 +446,25 @@ bool Save_app_config(core::AppConfig const &config) {
             defaults.highlighter_opacity_percent) {
             file << "highlighter_opacity_percent=" << config.highlighter_opacity_percent
                  << "\n";
+        }
+        if (config.text_size_points != defaults.text_size_points) {
+            file << "text_size_points=" << config.text_size_points << "\n";
+        }
+        if (config.text_current_font != defaults.text_current_font) {
+            file << "text_current_font="
+                 << Text_font_choice_token(config.text_current_font) << "\n";
+        }
+        if (config.text_font_sans != defaults.text_font_sans) {
+            file << "text_font_sans=" << To_utf8(config.text_font_sans) << "\n";
+        }
+        if (config.text_font_serif != defaults.text_font_serif) {
+            file << "text_font_serif=" << To_utf8(config.text_font_serif) << "\n";
+        }
+        if (config.text_font_mono != defaults.text_font_mono) {
+            file << "text_font_mono=" << To_utf8(config.text_font_mono) << "\n";
+        }
+        if (config.text_font_art != defaults.text_font_art) {
+            file << "text_font_art=" << To_utf8(config.text_font_art) << "\n";
         }
 
         // Save section: only write non-default values.

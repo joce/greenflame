@@ -23,7 +23,11 @@ constexpr float kTextMeasureMaxExtent = 8192.f;
 constexpr float kMagnifierBorderInset = 0.75f;
 constexpr float kMagnifierBorderStrokeWidth = 1.5f;
 constexpr float kOverlayDimAlpha = 0.5f;
-
+constexpr float kDefaultDpi = 96.f;
+constexpr float kDraftTextSelectionAlpha = 0.7f;
+constexpr float kDraftTextOverwriteCaretAlpha = 0.65f;
+constexpr float kColorWheelFontPreviewPointSize = 18.f;
+constexpr float kColorWheelFontPreviewLayoutPaddingPx = 4.f;
 // ---------------------------------------------------------------------------
 // Coordinate helpers
 // ---------------------------------------------------------------------------
@@ -46,6 +50,31 @@ inline D2D1_COLOR_F Colorref_to_d2d(COLORREF c, float alpha = 1.f) {
 [[nodiscard]] constexpr D2D1_COLOR_F With_alpha(D2D1_COLOR_F color,
                                                 float alpha) noexcept {
     return {color.r, color.g, color.b, alpha};
+}
+
+[[nodiscard]] constexpr size_t
+Text_font_choice_index(core::TextFontChoice choice) noexcept {
+    switch (choice) {
+    case core::TextFontChoice::Sans:
+        return 0;
+    case core::TextFontChoice::Serif:
+        return 1;
+    case core::TextFontChoice::Mono:
+        return 2;
+    case core::TextFontChoice::Art:
+        return 3;
+    }
+    return 0;
+}
+
+[[nodiscard]] std::wstring_view
+Resolve_text_font_family(core::TextFontChoice choice,
+                         std::array<std::wstring_view, 4> const &families) noexcept {
+    size_t const index = Text_font_choice_index(choice);
+    if (families[index].empty()) {
+        return core::kDefaultTextFontFamilies[index];
+    }
+    return families[index];
 }
 
 [[nodiscard]] float Alpha_from_opacity_percent(int32_t opacity_percent) noexcept {
@@ -300,18 +329,62 @@ void Draw_rectangle(ID2D1RenderTarget *rt, D2DOverlayResources &res,
     }
 }
 
+[[nodiscard]] bool
+Text_bitmap_is_valid(core::TextAnnotation const &annotation) noexcept {
+    if (annotation.bitmap_width_px <= 0 || annotation.bitmap_height_px <= 0 ||
+        annotation.bitmap_row_bytes < annotation.bitmap_width_px * 4) {
+        return false;
+    }
+    size_t const required_size = static_cast<size_t>(annotation.bitmap_row_bytes) *
+                                 static_cast<size_t>(annotation.bitmap_height_px);
+    return annotation.premultiplied_bgra.size() >= required_size;
+}
+
+void Draw_text(ID2D1RenderTarget *rt, D2DOverlayResources &res, uint64_t annotation_id,
+               core::TextAnnotation const &annotation) {
+    if (!rt || !Text_bitmap_is_valid(annotation)) {
+        return;
+    }
+
+    auto it = res.text_bitmaps.find(annotation_id);
+    if (it == res.text_bitmaps.end()) {
+        D2D1_BITMAP_PROPERTIES props{};
+        props.pixelFormat = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
+                                              D2D1_ALPHA_MODE_PREMULTIPLIED);
+        props.dpiX = kDefaultDpi;
+        props.dpiY = kDefaultDpi;
+
+        Microsoft::WRL::ComPtr<ID2D1Bitmap> bitmap;
+        HRESULT const hr = rt->CreateBitmap(
+            D2D1::SizeU(static_cast<UINT32>(annotation.bitmap_width_px),
+                        static_cast<UINT32>(annotation.bitmap_height_px)),
+            annotation.premultiplied_bgra.data(),
+            static_cast<UINT32>(annotation.bitmap_row_bytes), props,
+            bitmap.GetAddressOf());
+        if (FAILED(hr) || !bitmap) {
+            return;
+        }
+        it = res.text_bitmaps.emplace(annotation_id, std::move(bitmap)).first;
+    }
+
+    rt->DrawBitmap(it->second.Get(), Rect(annotation.visual_bounds), 1.f,
+                   D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
+}
+
 void Draw_annotation(ID2D1RenderTarget *rt, D2DOverlayResources &res,
                      core::Annotation const &ann) {
-    std::visit(core::Overloaded{
-                   [&](core::FreehandStrokeAnnotation const &fh) {
-                       Draw_freehand(rt, res, fh);
-                   },
-                   [&](core::LineAnnotation const &line) { Draw_line(rt, res, line); },
-                   [&](core::RectangleAnnotation const &rect) {
-                       Draw_rectangle(rt, res, rect);
-                   },
-               },
-               ann.data);
+    std::visit(
+        core::Overloaded{
+            [&](core::FreehandStrokeAnnotation const &fh) {
+                Draw_freehand(rt, res, fh);
+            },
+            [&](core::LineAnnotation const &line) { Draw_line(rt, res, line); },
+            [&](core::RectangleAnnotation const &rect) {
+                Draw_rectangle(rt, res, rect);
+            },
+            [&](core::TextAnnotation const &text) { Draw_text(rt, res, ann.id, text); },
+        },
+        ann.data);
 }
 
 // ---------------------------------------------------------------------------
@@ -398,6 +471,169 @@ void Draw_text_box(ID2D1RenderTarget *rt, D2DOverlayResources &res,
     res.solid_brush->SetColor(kCoordTooltipText);
     rt->DrawTextLayout(D2D1::Point2F(box_left + margin, box_top + margin), layout.Get(),
                        res.solid_brush.Get());
+}
+
+struct StyledTextRange final {
+    DWRITE_TEXT_RANGE range = {};
+    core::TextStyleFlags flags = {};
+};
+
+struct DraftTextLayoutData final {
+    std::wstring text = {};
+    std::vector<StyledTextRange> styled_ranges = {};
+};
+
+[[nodiscard]] DraftTextLayoutData
+Build_text_layout_data(std::span<const core::TextRun> runs) {
+    DraftTextLayoutData data{};
+    UINT32 position = 0;
+    for (core::TextRun const &run : runs) {
+        data.text += run.text;
+        UINT32 const length = static_cast<UINT32>(run.text.size());
+        if (length == 0) {
+            continue;
+        }
+        data.styled_ranges.push_back(
+            StyledTextRange{DWRITE_TEXT_RANGE{position, length}, run.flags});
+        position += length;
+    }
+    return data;
+}
+
+[[nodiscard]] DWRITE_FONT_WEIGHT
+Font_weight(core::TextStyleFlags const &flags) noexcept {
+    return flags.bold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL;
+}
+
+[[nodiscard]] DWRITE_FONT_STYLE Font_style(core::TextStyleFlags const &flags) noexcept {
+    return flags.italic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL;
+}
+
+[[nodiscard]] Microsoft::WRL::ComPtr<IDWriteTextFormat>
+Create_text_format(IDWriteFactory *factory, std::wstring_view family,
+                   float point_size) {
+    Microsoft::WRL::ComPtr<IDWriteTextFormat> format;
+    if (factory == nullptr || family.empty()) {
+        return format;
+    }
+
+    HRESULT const hr = factory->CreateTextFormat(
+        family.data(), nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+        DWRITE_FONT_STRETCH_NORMAL, point_size, L"", format.GetAddressOf());
+    if (FAILED(hr) || !format) {
+        return {};
+    }
+
+    (void)format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    (void)format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+    (void)format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    return format;
+}
+
+[[nodiscard]] Microsoft::WRL::ComPtr<IDWriteTextLayout>
+Create_text_layout(IDWriteFactory *factory, IDWriteTextFormat *format,
+                   std::wstring_view text, float max_width = kTextMeasureMaxExtent,
+                   float max_height = kTextMeasureMaxExtent) {
+    Microsoft::WRL::ComPtr<IDWriteTextLayout> layout;
+    if (factory == nullptr || format == nullptr || text.empty()) {
+        return layout;
+    }
+
+    HRESULT const hr =
+        factory->CreateTextLayout(text.data(), static_cast<UINT32>(text.size()), format,
+                                  max_width, max_height, layout.GetAddressOf());
+    if (FAILED(hr) || !layout) {
+        return {};
+    }
+    return layout;
+}
+
+void Apply_styled_ranges(IDWriteTextLayout *layout,
+                         std::span<const StyledTextRange> styled_ranges) {
+    if (layout == nullptr) {
+        return;
+    }
+
+    for (StyledTextRange const &styled_range : styled_ranges) {
+        if (styled_range.range.length == 0) {
+            continue;
+        }
+        (void)layout->SetFontWeight(Font_weight(styled_range.flags),
+                                    styled_range.range);
+        (void)layout->SetFontStyle(Font_style(styled_range.flags), styled_range.range);
+        (void)layout->SetUnderline(styled_range.flags.underline, styled_range.range);
+        (void)layout->SetStrikethrough(styled_range.flags.strikethrough,
+                                       styled_range.range);
+    }
+}
+
+[[nodiscard]] bool
+Build_draft_text_layout(D2DOverlayResources &res,
+                        core::TextAnnotation const &annotation,
+                        std::array<std::wstring_view, 4> const &font_families,
+                        Microsoft::WRL::ComPtr<IDWriteTextFormat> &format,
+                        Microsoft::WRL::ComPtr<IDWriteTextLayout> &layout,
+                        DraftTextLayoutData &layout_data) {
+    if (!res.dwrite_factory) {
+        return false;
+    }
+
+    layout_data = Build_text_layout_data(annotation.runs);
+    if (layout_data.text.empty()) {
+        return false;
+    }
+
+    std::wstring_view const family =
+        Resolve_text_font_family(annotation.base_style.font_choice, font_families);
+    format = Create_text_format(res.dwrite_factory.Get(), family,
+                                static_cast<float>(annotation.base_style.point_size));
+    if (!format) {
+        return false;
+    }
+
+    layout =
+        Create_text_layout(res.dwrite_factory.Get(), format.Get(), layout_data.text);
+    if (!layout) {
+        return false;
+    }
+
+    Apply_styled_ranges(layout.Get(), layout_data.styled_ranges);
+    return true;
+}
+
+void Draw_draft_text(ID2D1RenderTarget *rt, D2DOverlayResources &res,
+                     D2DPaintInput const &input) {
+    core::TextAnnotation const *const annotation = input.draft_text_annotation;
+    if (rt == nullptr || annotation == nullptr) {
+        return;
+    }
+
+    res.solid_brush->SetColor(
+        With_alpha(kOverlayButtonFillColor, kDraftTextSelectionAlpha));
+    for (core::RectPx const &selection_rect : input.draft_text_selection_rects) {
+        if (!selection_rect.Is_empty()) {
+            rt->FillRectangle(Rect(selection_rect), res.solid_brush.Get());
+        }
+    }
+
+    Microsoft::WRL::ComPtr<IDWriteTextFormat> format;
+    Microsoft::WRL::ComPtr<IDWriteTextLayout> layout;
+    DraftTextLayoutData layout_data{};
+    if (Build_draft_text_layout(res, *annotation, input.color_wheel_font_families,
+                                format, layout, layout_data)) {
+        res.solid_brush->SetColor(Colorref_to_d2d(annotation->base_style.color));
+        rt->DrawTextLayout(Pt(annotation->origin), layout.Get(), res.solid_brush.Get());
+    }
+
+    if (!input.draft_text_blink_visible || input.draft_text_caret_rect.Is_empty()) {
+        return;
+    }
+
+    float const caret_alpha =
+        input.draft_text_insert_mode ? 1.f : kDraftTextOverwriteCaretAlpha;
+    res.solid_brush->SetColor(
+        Colorref_to_d2d(annotation->base_style.color, caret_alpha));
+    rt->FillRectangle(Rect(input.draft_text_caret_rect), res.solid_brush.Get());
 }
 
 // ---------------------------------------------------------------------------
@@ -1097,11 +1333,21 @@ void Draw_toolbar(ID2D1RenderTarget *rt, D2DOverlayResources &res,
 
 void Draw_color_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
                       D2DPaintInput const &input) {
-    if (!input.show_color_wheel || input.color_wheel_segment_count == 0 ||
-        input.color_wheel_colors.size() < input.color_wheel_segment_count) {
+    if (!input.show_color_wheel || input.color_wheel_segment_count == 0) {
         return;
     }
     if (!res.factory) {
+        return;
+    }
+
+    size_t const color_segment_count =
+        input.color_wheel_is_text_style
+            ? std::min<size_t>(input.color_wheel_segment_count,
+                               input.color_wheel_colors.size())
+            : input.color_wheel_segment_count;
+    if (color_segment_count == 0 ||
+        (!input.color_wheel_is_text_style &&
+         input.color_wheel_colors.size() < input.color_wheel_segment_count)) {
         return;
     }
 
@@ -1155,8 +1401,15 @@ void Draw_color_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         sink->EndFigure(D2D1_FIGURE_END_CLOSED);
         sink->Close();
 
-        // Fill with segment color.
-        res.solid_brush->SetColor(Colorref_to_d2d(input.color_wheel_colors[seg]));
+        bool const is_font_segment =
+            input.color_wheel_is_text_style && seg >= color_segment_count;
+        if (is_font_segment) {
+            res.solid_brush->SetColor(kOverlayButtonFillColor);
+        } else if (seg < input.color_wheel_colors.size()) {
+            res.solid_brush->SetColor(Colorref_to_d2d(input.color_wheel_colors[seg]));
+        } else {
+            continue;
+        }
         rt->FillGeometry(path.Get(), res.solid_brush.Get());
 
         // Segment border.
@@ -1164,6 +1417,44 @@ void Draw_color_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         rt->DrawGeometry(path.Get(), res.solid_brush.Get(),
                          core::kColorWheelSegmentBorderWidthPx,
                          res.round_cap_style.Get());
+
+        if (is_font_segment && res.dwrite_factory != nullptr) {
+            size_t const font_index = seg - color_segment_count;
+            if (font_index < input.color_wheel_font_families.size()) {
+                std::wstring_view const family =
+                    input.color_wheel_font_families[font_index].empty()
+                        ? core::kDefaultTextFontFamilies[font_index]
+                        : input.color_wheel_font_families[font_index];
+                Microsoft::WRL::ComPtr<IDWriteTextFormat> preview_format =
+                    Create_text_format(res.dwrite_factory.Get(), family,
+                                       kColorWheelFontPreviewPointSize);
+                if (preview_format) {
+                    constexpr std::wstring_view preview_glyph = L"m";
+                    float text_w = 0.f;
+                    float text_h = 0.f;
+                    if (Measure_text(res, preview_format.Get(), preview_glyph, text_w,
+                                     text_h)) {
+                        Microsoft::WRL::ComPtr<IDWriteTextLayout> preview_layout =
+                            Create_text_layout(
+                                res.dwrite_factory.Get(), preview_format.Get(),
+                                preview_glyph,
+                                text_w + kColorWheelFontPreviewLayoutPaddingPx,
+                                text_h + kColorWheelFontPreviewLayoutPaddingPx);
+                        if (preview_layout) {
+                            float const mid_radius =
+                                (outer_radius + inner_radius) / 2.f;
+                            D2D1_POINT_2F const label_center =
+                                arc_pt(mid_radius, geo.center_angle_degrees);
+                            res.solid_brush->SetColor(kOverlayButtonOutlineColor);
+                            rt->DrawTextLayout(
+                                D2D1::Point2F(label_center.x - text_w / 2.f,
+                                              label_center.y - text_h / 2.f),
+                                preview_layout.Get(), res.solid_brush.Get());
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // Halo for selected/hovered segment: arc strokes outside the wheel.
@@ -1232,6 +1523,12 @@ void Draw_color_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
 
     if (input.color_wheel_selected_segment.has_value()) {
         draw_halo(*input.color_wheel_selected_segment,
+                  core::kColorWheelSelectionHaloInnerWidthPx,
+                  core::kColorWheelSelectionHaloOuterWidthPx);
+    }
+    if (input.color_wheel_is_text_style) {
+        draw_halo(color_segment_count +
+                      Text_font_choice_index(input.color_wheel_text_selected_font),
                   core::kColorWheelSelectionHaloInnerWidthPx,
                   core::kColorWheelSelectionHaloOuterWidthPx);
     }
@@ -1368,7 +1665,9 @@ void Update_draft_stroke_bitmap(D2DOverlayResources &res,
 void Draw_live_layer(ID2D1RenderTarget *rt, D2DOverlayResources &res,
                      D2DPaintInput const &input, int vd_width, int vd_height) {
     // Draft annotation (while gesture is active).
-    if (input.draft_annotation != nullptr) {
+    if (input.draft_text_annotation != nullptr) {
+        Draw_draft_text(rt, res, input);
+    } else if (input.draft_annotation != nullptr) {
         Draw_annotation(rt, res, *input.draft_annotation);
     } else if (!input.draft_freehand_points.empty() &&
                input.draft_freehand_style.has_value()) {

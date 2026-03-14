@@ -4,6 +4,8 @@ using namespace greenflame::core;
 
 namespace {
 
+constexpr size_t kTextStyleWheelSegmentCount = 12;
+
 PointPx Point_on_wheel(PointPx center, float radius, float angle_degrees) {
     float const radians = angle_degrees * 3.14159265358979323846f / 180.0f;
     int32_t const x =
@@ -93,6 +95,31 @@ TEST(color_wheel, SegmentGeometry_SupportsConfigurableSixSegments) {
                 top_gap_center_degrees - degrees_per_segment / 2.0f, 0.01f);
 }
 
+TEST(color_wheel, SegmentGeometry_SupportsConfigurableTwelveSegments) {
+    ColorWheelSegmentGeometry const first =
+        Get_color_wheel_segment_geometry(0, kTextStyleWheelSegmentCount);
+    ColorWheelSegmentGeometry const last = Get_color_wheel_segment_geometry(
+        kTextStyleWheelSegmentCount - 1, kTextStyleWheelSegmentCount);
+    ColorWheelSegmentGeometry const first_font_slot =
+        Get_color_wheel_segment_geometry(8, kTextStyleWheelSegmentCount);
+    float const degrees_per_segment = Degrees_per_segment(kTextStyleWheelSegmentCount);
+    float const top_gap_center_degrees = 270.0f;
+
+    EXPECT_NEAR(first.center_angle_degrees,
+                top_gap_center_degrees + degrees_per_segment / 2.0f, 0.01f);
+    EXPECT_NEAR(last.center_angle_degrees,
+                top_gap_center_degrees - degrees_per_segment / 2.0f, 0.01f);
+    EXPECT_NEAR(first_font_slot.center_angle_degrees,
+                top_gap_center_degrees - 7.0f * degrees_per_segment / 2.0f, 0.01f);
+
+    for (size_t index = 0; index < kTextStyleWheelSegmentCount; ++index) {
+        ColorWheelSegmentGeometry const geometry =
+            Get_color_wheel_segment_geometry(index, kTextStyleWheelSegmentCount);
+        EXPECT_GT(geometry.sweep_angle_degrees, 0.0f);
+        EXPECT_LT(geometry.sweep_angle_degrees, degrees_per_segment);
+    }
+}
+
 TEST(color_wheel, HitTest_ReturnsSegmentForEachEightSegmentCenter) {
     PointPx const center{500, 500};
     float const radius = Mid_radius_px();
@@ -123,6 +150,21 @@ TEST(color_wheel, HitTest_ReturnsSegmentForEachSixSegmentCenter) {
     }
 }
 
+TEST(color_wheel, HitTest_ReturnsSegmentForEachTwelveSegmentCenter) {
+    PointPx const center{500, 500};
+    float const radius = Mid_radius_px();
+
+    for (size_t index = 0; index < kTextStyleWheelSegmentCount; ++index) {
+        ColorWheelSegmentGeometry const geometry =
+            Get_color_wheel_segment_geometry(index, kTextStyleWheelSegmentCount);
+        EXPECT_EQ(Hit_test_color_wheel_segment(
+                      center,
+                      Point_on_wheel(center, radius, geometry.center_angle_degrees),
+                      kTextStyleWheelSegmentCount),
+                  std::optional<size_t>{index});
+    }
+}
+
 TEST(color_wheel, HitTest_ReturnsNulloptForInnerHoleOuterBoundsAndGap) {
     PointPx const center{300, 300};
     float const outer_radius = static_cast<float>(kColorWheelOuterDiameterPx) / 2.0f;
@@ -136,5 +178,14 @@ TEST(color_wheel, HitTest_ReturnsNulloptForInnerHoleOuterBoundsAndGap) {
     EXPECT_EQ(Hit_test_color_wheel_segment(
                   center, Point_on_wheel(center, Mid_radius_px(), 270.0f),
                   kAnnotationColorSlotCount),
+              std::nullopt);
+}
+
+TEST(color_wheel, HitTest_TextStyleWheelReturnsNulloptForTwelveSegmentGap) {
+    PointPx const center{300, 300};
+
+    EXPECT_EQ(Hit_test_color_wheel_segment(
+                  center, Point_on_wheel(center, Mid_radius_px(), 270.0f),
+                  kTextStyleWheelSegmentCount),
               std::nullopt);
 }

@@ -43,6 +43,21 @@ Annotation Make_rectangle(uint64_t id, RectPx outer_bounds, int32_t width_px,
     return annotation;
 }
 
+Annotation Make_text(uint64_t id, PointPx origin, RectPx visual_bounds,
+                     std::vector<uint8_t> premultiplied_bgra) {
+    Annotation annotation{};
+    annotation.id = id;
+    TextAnnotation text{};
+    text.origin = origin;
+    text.visual_bounds = visual_bounds;
+    text.bitmap_width_px = visual_bounds.Width();
+    text.bitmap_height_px = visual_bounds.Height();
+    text.bitmap_row_bytes = text.bitmap_width_px * 4;
+    text.premultiplied_bgra = std::move(premultiplied_bgra);
+    annotation.data = std::move(text);
+    return annotation;
+}
+
 } // namespace
 
 TEST(annotation_hit_test, AnnotationHitsPoint_SquareFreehandUsesSquareTipCoverage) {
@@ -184,6 +199,31 @@ TEST(annotation_hit_test, TranslateAnnotation_RectangleMovesBounds) {
 
     EXPECT_EQ(std::get<RectangleAnnotation>(moved.data).outer_bounds,
               (RectPx::From_ltrb(15, 7, 26, 18)));
+}
+
+TEST(annotation_hit_test, AnnotationHitsPoint_TextUsesBitmapAlphaCoverage) {
+    std::vector<uint8_t> bitmap(16u, 0);
+    bitmap[7] = 255;  // pixel (1, 0) alpha
+    bitmap[11] = 255; // pixel (0, 1) alpha
+    Annotation const text =
+        Make_text(3, {40, 50}, RectPx::From_ltrb(40, 50, 42, 52), std::move(bitmap));
+
+    EXPECT_FALSE(Annotation_hits_point(text, {40, 50}));
+    EXPECT_TRUE(Annotation_hits_point(text, {41, 50}));
+    EXPECT_TRUE(Annotation_hits_point(text, {40, 51}));
+    EXPECT_FALSE(Annotation_hits_point(text, {41, 51}));
+}
+
+TEST(annotation_hit_test, TranslateAnnotation_TextMovesOriginAndBounds) {
+    std::vector<uint8_t> bitmap(16u, 0);
+    Annotation const text =
+        Make_text(4, {40, 50}, RectPx::From_ltrb(40, 50, 42, 52), std::move(bitmap));
+
+    Annotation const moved = Translate_annotation(text, {5, -3});
+
+    auto const &moved_text = std::get<TextAnnotation>(moved.data);
+    EXPECT_EQ(moved_text.origin, (PointPx{45, 47}));
+    EXPECT_EQ(moved_text.visual_bounds, (RectPx::From_ltrb(45, 47, 47, 49)));
 }
 
 TEST(annotation_hit_test, AnnotationShowsCornerBrackets_FreehandReturnsTrue) {

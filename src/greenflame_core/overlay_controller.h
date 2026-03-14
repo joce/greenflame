@@ -15,6 +15,7 @@ struct OverlayModifierState {
     bool shift = false;
     bool ctrl = false;
     bool alt = false;
+    bool primary_down = false;
 };
 
 enum class OverlayAction : uint8_t {
@@ -127,6 +128,16 @@ class OverlayController final {
     Annotation_edit_target_at(PointPx cursor) const noexcept;
     [[nodiscard]] std::optional<AnnotationToolId>
     Active_annotation_tool() const noexcept;
+    void Set_text_layout_engine(ITextLayoutEngine *engine) noexcept;
+    [[nodiscard]] bool Has_active_text_edit() const noexcept;
+    [[nodiscard]] TextEditController *Active_text_edit() noexcept;
+    [[nodiscard]] int32_t Text_point_size() const noexcept;
+    void Set_text_point_size(int32_t point_size) noexcept;
+    [[nodiscard]] bool Step_text_size(int delta_steps);
+    [[nodiscard]] TextFontChoice Text_current_font() const noexcept;
+    void Set_text_current_font(TextFontChoice choice) noexcept;
+    bool Commit_active_text_edit();
+    void Cancel_text_draft();
     [[nodiscard]] bool Has_active_annotation_edit() const noexcept;
     [[nodiscard]] std::optional<AnnotationEditHandleKind>
     Active_annotation_edit_handle() const noexcept;

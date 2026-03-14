@@ -5,7 +5,7 @@ audience: contributors
 status: authoritative
 owners:
   - core-team
-last_updated: 2026-03-03
+last_updated: 2026-03-14
 tags:
   - tests
   - ctest
@@ -77,6 +77,12 @@ Test must be run and must pass before any task is considered complete. This is a
 - Add new test files under `tests/`
 - Register them in `tests/CMakeLists.txt` as sources of `greenflame_tests`
 - Tests must only link against `greenflame_core` and the testable logic library — never against `greenflame` directly
+
+## Manual verification coverage
+
+Some Win32 overlay behaviors cannot be exercised in the unit-test binary because `greenflame_tests`
+must not depend on the GUI executable. For those cases, add or update the detailed case coverage in
+[manual_test_plan.md](manual_test_plan.md) and run the applicable cases when the affected feature changes.
 
 ## Writing a test
 

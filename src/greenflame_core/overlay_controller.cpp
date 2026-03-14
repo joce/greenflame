@@ -7,6 +7,15 @@ namespace greenflame::core {
 
 namespace {
 constexpr int32_t kSnapThresholdPx = 10;
+
+[[nodiscard]] bool Text_annotation_has_text(TextAnnotation const &annotation) noexcept {
+    for (TextRun const &run : annotation.runs) {
+        if (!run.text.empty()) {
+            return true;
+        }
+    }
+    return false;
+}
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -135,6 +144,59 @@ OverlayController::Active_annotation_tool() const noexcept {
     return annotation_controller_.Active_tool();
 }
 
+void OverlayController::Set_text_layout_engine(ITextLayoutEngine *engine) noexcept {
+    annotation_controller_.Set_text_layout_engine(engine);
+}
+
+bool OverlayController::Has_active_text_edit() const noexcept {
+    return annotation_controller_.Has_active_text_edit();
+}
+
+TextEditController *OverlayController::Active_text_edit() noexcept {
+    return annotation_controller_.Active_text_edit();
+}
+
+int32_t OverlayController::Text_point_size() const noexcept {
+    return annotation_controller_.Text_point_size();
+}
+
+void OverlayController::Set_text_point_size(int32_t point_size) noexcept {
+    annotation_controller_.Set_text_point_size(point_size);
+}
+
+bool OverlayController::Step_text_size(int delta_steps) {
+    std::optional<AnnotationToolId> const active_tool =
+        annotation_controller_.Active_tool();
+    if (delta_steps == 0 || state_.final_selection.Is_empty() ||
+        !active_tool.has_value() || *active_tool != AnnotationToolId::Text ||
+        annotation_controller_.Has_active_text_edit()) {
+        return false;
+    }
+    return annotation_controller_.Step_text_size(delta_steps);
+}
+
+TextFontChoice OverlayController::Text_current_font() const noexcept {
+    return annotation_controller_.Text_current_font();
+}
+
+void OverlayController::Set_text_current_font(TextFontChoice choice) noexcept {
+    annotation_controller_.Set_text_current_font(choice);
+}
+
+bool OverlayController::Commit_active_text_edit() {
+    TextEditController *const edit = annotation_controller_.Active_text_edit();
+    if (edit == nullptr) {
+        return false;
+    }
+
+    annotation_controller_.Commit_text_annotation(undo_stack_, edit->Commit());
+    return true;
+}
+
+void OverlayController::Cancel_text_draft() {
+    annotation_controller_.Cancel_text_draft();
+}
+
 bool OverlayController::Has_active_annotation_edit() const noexcept {
     return annotation_controller_.Has_active_edit_interaction();
 }
@@ -211,6 +273,7 @@ bool OverlayController::Should_show_annotation_toolbar() const noexcept {
 
 bool OverlayController::Can_interact_with_annotation_toolbar() const noexcept {
     return Should_show_annotation_toolbar() &&
+           !annotation_controller_.Has_active_text_edit() &&
            !annotation_controller_.Has_active_gesture();
 }
 
@@ -313,17 +376,23 @@ OverlayAction OverlayController::On_cancel() {
         state_.live_rect = {};
         return OverlayAction::Repaint;
     }
+    if (annotation_controller_.Has_active_text_edit()) {
+        annotation_controller_.Cancel_text_draft();
+        return OverlayAction::Repaint;
+    }
     if (std::optional<AnnotationToolId> const active_tool =
             annotation_controller_.Active_tool();
         active_tool.has_value()) {
-        bool const canceled_gesture = annotation_controller_.On_cancel();
-        bool const deselected_tool = annotation_controller_.Toggle_tool(*active_tool);
-        if (canceled_gesture || deselected_tool) {
+        if (annotation_controller_.Has_active_tool_gesture()) {
+            bool const canceled_gesture = annotation_controller_.On_cancel();
+            bool const deselected_tool =
+                annotation_controller_.Toggle_tool(*active_tool);
+            if (canceled_gesture || deselected_tool) {
+                return OverlayAction::Repaint;
+            }
+        } else if (annotation_controller_.Toggle_tool(*active_tool)) {
             return OverlayAction::Repaint;
         }
-    }
-    if (annotation_controller_.On_cancel()) {
-        return OverlayAction::Repaint;
     }
     if (annotation_controller_.Set_selected_annotation(std::nullopt)) {
         return OverlayAction::Repaint;
@@ -388,6 +457,29 @@ OverlayAction OverlayController::On_primary_press(
     // ---- When a committed selection exists, resolve resize / tool / move ----
     if (!state_.final_selection.Is_empty() && !state_.dragging &&
         !state_.handle_dragging && !state_.move_dragging) {
+        std::optional<AnnotationToolId> const active_tool =
+            annotation_controller_.Active_tool();
+        if (active_tool.has_value() && *active_tool == AnnotationToolId::Text) {
+            if (TextEditController *const edit =
+                    annotation_controller_.Active_text_edit();
+                edit != nullptr) {
+                TextDraftView const view = edit->Build_view();
+                if (!view.Hit_bounds().Contains(cursor_client)) {
+                    bool const has_text = view.annotation != nullptr &&
+                                          Text_annotation_has_text(*view.annotation);
+                    if (has_text) {
+                        annotation_controller_.Commit_text_annotation(undo_stack_,
+                                                                      edit->Commit());
+                    } else {
+                        annotation_controller_.Cancel_text_draft();
+                    }
+                    annotation_controller_.Begin_text_draft(cursor_client);
+                    return has_text ? OverlayAction::InvalidateFrozenCache
+                                    : OverlayAction::Repaint;
+                }
+            }
+        }
+
         std::optional<SelectionHandle> const hit =
             Hit_test_border_zone(state_.final_selection, cursor_client);
         if (hit.has_value()) {
@@ -399,9 +491,12 @@ OverlayAction OverlayController::On_primary_press(
             return OverlayAction::Repaint;
         }
 
-        std::optional<AnnotationToolId> const active_tool =
-            annotation_controller_.Active_tool();
         if (active_tool.has_value()) {
+            if (*active_tool == AnnotationToolId::Text &&
+                annotation_controller_.Active_text_edit() == nullptr) {
+                annotation_controller_.Begin_text_draft(cursor_client);
+                return OverlayAction::Repaint;
+            }
             return annotation_controller_.On_primary_press(cursor_client)
                        ? OverlayAction::Repaint
                        : OverlayAction::None;
@@ -488,10 +583,16 @@ OverlayAction OverlayController::On_pointer_move(
                                            state_.horizontal_edges, kSnapThresholdPx);
         }
         state_.live_rect = candidate;
+    } else if (annotation_controller_.Has_active_text_edit()) {
+        if (TextEditController *const text_edit =
+                annotation_controller_.Active_text_edit();
+            text_edit != nullptr) {
+            text_edit->On_pointer_move(cursor_client, mods.primary_down);
+        }
     } else if (annotation_controller_.Has_active_gesture()) {
         // Annotation gestures update their own draft/live state here; repaint cadence
         // is controlled by the shared throttle below.
-        (void)annotation_controller_.On_pointer_move(cursor_client);
+        (void)annotation_controller_.On_pointer_move(cursor_client, mods.primary_down);
     } else {
         Apply_modifier_preview(mods, cursor_screen, window_rect_screen,
                                virtual_desktop_bounds, monitor_index_under_cursor,
@@ -550,6 +651,15 @@ OverlayAction OverlayController::On_primary_release(OverlayModifierState mods,
         state_.selection_monitor_index = std::nullopt;
         state_.dragging = false;
         return OverlayAction::InvalidateFrozenCache;
+    }
+
+    if (annotation_controller_.Has_active_text_edit()) {
+        if (TextEditController *const text_edit =
+                annotation_controller_.Active_text_edit();
+            text_edit != nullptr) {
+            text_edit->On_pointer_release(cursor_client);
+            return OverlayAction::Repaint;
+        }
     }
 
     if (annotation_controller_.Has_active_gesture()) {

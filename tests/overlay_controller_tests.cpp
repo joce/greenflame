@@ -1,3 +1,4 @@
+#include "fake_text_layout_engine.h"
 #include "greenflame_core/monitor_rules.h"
 #include "greenflame_core/overlay_controller.h"
 #include "greenflame_core/snap_edge_builder.h"
@@ -879,6 +880,243 @@ TEST(overlay_controller, AnnotationToolHotkey_TogglesFilledRectangle) {
     EXPECT_EQ(c.Active_annotation_tool(), std::nullopt);
 }
 
+TEST(overlay_controller, AnnotationToolHotkey_TogglesText) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+
+    EXPECT_EQ(c.Active_annotation_tool(), std::nullopt);
+    EXPECT_EQ(c.On_annotation_tool_hotkey(L'T'), OverlayAction::Repaint);
+    EXPECT_EQ(c.Active_annotation_tool(),
+              std::optional<AnnotationToolId>{AnnotationToolId::Text});
+    EXPECT_EQ(c.On_annotation_tool_hotkey(L'T'), OverlayAction::Repaint);
+    EXPECT_EQ(c.Active_annotation_tool(), std::nullopt);
+}
+
+TEST(overlay_controller, CancelWithActiveTextDraft_CancelsDraftButKeepsToolArmed) {
+    auto c = Make_controller();
+    FakeTextLayoutEngine engine;
+    c.Set_text_layout_engine(&engine);
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'T'), OverlayAction::Repaint);
+    ASSERT_EQ(Press(c, {140, 140}), OverlayAction::Repaint);
+    ASSERT_TRUE(c.Has_active_text_edit());
+
+    c.Active_text_edit()->On_text_input(L"abc");
+    EXPECT_EQ(c.On_cancel(), OverlayAction::Repaint);
+    EXPECT_FALSE(c.Has_active_text_edit());
+    EXPECT_EQ(c.Active_annotation_tool(),
+              std::optional<AnnotationToolId>{AnnotationToolId::Text});
+    EXPECT_TRUE(c.Annotations().empty());
+}
+
+TEST(overlay_controller, CancelWithActiveTextDraft_DoesNotPushOverlayUndoStack) {
+    auto c = Make_controller();
+    FakeTextLayoutEngine engine;
+    c.Set_text_layout_engine(&engine);
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'T'), OverlayAction::Repaint);
+    ASSERT_EQ(Press(c, {140, 140}), OverlayAction::Repaint);
+    ASSERT_TRUE(c.Has_active_text_edit());
+
+    c.Active_text_edit()->On_text_input(L"seed");
+    ASSERT_TRUE(c.Commit_active_text_edit());
+    ASSERT_EQ(c.Annotations().size(), 1u);
+
+    ASSERT_EQ(Press(c, {220, 220}), OverlayAction::Repaint);
+    ASSERT_TRUE(c.Has_active_text_edit());
+    c.Active_text_edit()->On_text_input(L"draft");
+
+    EXPECT_EQ(c.On_cancel(), OverlayAction::Repaint);
+    EXPECT_FALSE(c.Has_active_text_edit());
+
+    c.Undo();
+    EXPECT_TRUE(c.Annotations().empty());
+
+    c.Redo();
+    ASSERT_EQ(c.Annotations().size(), 1u);
+    EXPECT_EQ(Flatten_text(std::get<TextAnnotation>(c.Annotations()[0].data).runs),
+              L"seed");
+}
+
+TEST(overlay_controller, AnnotationToolbar_TextDraftStaysVisibleButNonInteractive) {
+    auto c = Make_controller();
+    FakeTextLayoutEngine engine;
+    c.Set_text_layout_engine(&engine);
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'T'), OverlayAction::Repaint);
+
+    EXPECT_TRUE(c.Should_show_annotation_toolbar());
+    EXPECT_TRUE(c.Can_interact_with_annotation_toolbar());
+
+    ASSERT_EQ(Press(c, {150, 150}), OverlayAction::Repaint);
+    EXPECT_TRUE(c.Should_show_annotation_toolbar());
+    EXPECT_FALSE(c.Can_interact_with_annotation_toolbar());
+}
+
+TEST(overlay_controller, TextSizeStep_OnlyChangesWhileTextToolIsArmed) {
+    auto c = Make_controller();
+    FakeTextLayoutEngine engine;
+    c.Set_text_layout_engine(&engine);
+
+    EXPECT_FALSE(c.Step_text_size(1));
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+    EXPECT_FALSE(c.Step_text_size(1));
+
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'T'), OverlayAction::Repaint);
+    EXPECT_EQ(c.Text_point_size(), 12);
+    EXPECT_TRUE(c.Step_text_size(1));
+    EXPECT_EQ(c.Text_point_size(), 14);
+
+    ASSERT_EQ(Press(c, {150, 150}), OverlayAction::Repaint);
+    ASSERT_TRUE(c.Has_active_text_edit());
+    EXPECT_FALSE(c.Step_text_size(1));
+    EXPECT_EQ(c.Text_point_size(), 14);
+}
+
+TEST(overlay_controller, DraftLocalUndoRedo_DoesNotPushOverlayUndoStack) {
+    auto c = Make_controller();
+    FakeTextLayoutEngine engine;
+    c.Set_text_layout_engine(&engine);
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'T'), OverlayAction::Repaint);
+    ASSERT_EQ(Press(c, {140, 140}), OverlayAction::Repaint);
+    ASSERT_TRUE(c.Has_active_text_edit());
+
+    c.Active_text_edit()->On_text_input(L"seed");
+    ASSERT_TRUE(c.Commit_active_text_edit());
+    ASSERT_EQ(c.Annotations().size(), 1u);
+
+    ASSERT_EQ(Press(c, {220, 220}), OverlayAction::Repaint);
+    ASSERT_TRUE(c.Has_active_text_edit());
+    c.Active_text_edit()->On_text_input(L"draft");
+    EXPECT_EQ(Flatten_text(c.Active_text_edit()->Build_view().annotation->runs),
+              L"draft");
+
+    c.Active_text_edit()->Undo();
+    EXPECT_EQ(Flatten_text(c.Active_text_edit()->Build_view().annotation->runs), L"");
+
+    c.Active_text_edit()->Redo();
+    EXPECT_EQ(Flatten_text(c.Active_text_edit()->Build_view().annotation->runs),
+              L"draft");
+
+    c.Cancel_text_draft();
+    EXPECT_FALSE(c.Has_active_text_edit());
+
+    c.Undo();
+    EXPECT_TRUE(c.Annotations().empty());
+
+    c.Redo();
+    ASSERT_EQ(c.Annotations().size(), 1u);
+    EXPECT_EQ(Flatten_text(std::get<TextAnnotation>(c.Annotations()[0].data).runs),
+              L"seed");
+}
+
+TEST(overlay_controller, SetTextPointSize_UpdatesPendingTextDefaultWithoutArmingTool) {
+    auto c = Make_controller();
+
+    EXPECT_EQ(c.Text_point_size(), 12);
+    c.Set_text_point_size(13);
+    EXPECT_EQ(c.Text_point_size(), 12);
+
+    c.Set_text_point_size(70);
+    EXPECT_EQ(c.Text_point_size(), 72);
+}
+
+TEST(overlay_controller, TextTool_OutsideClickOnEmptyDraftStartsNewDraftWithoutCommit) {
+    auto c = Make_controller();
+    FakeTextLayoutEngine engine;
+    c.Set_text_layout_engine(&engine);
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'T'), OverlayAction::Repaint);
+    ASSERT_EQ(Press(c, {140, 140}), OverlayAction::Repaint);
+    ASSERT_TRUE(c.Has_active_text_edit());
+    ASSERT_NE(c.Active_text_edit()->Build_view().annotation, nullptr);
+    EXPECT_EQ(c.Active_text_edit()->Build_view().annotation->origin,
+              (PointPx{140, 140}));
+
+    EXPECT_EQ(Press(c, {220, 220}), OverlayAction::Repaint);
+    ASSERT_TRUE(c.Has_active_text_edit());
+    ASSERT_NE(c.Active_text_edit()->Build_view().annotation, nullptr);
+    EXPECT_EQ(c.Active_text_edit()->Build_view().annotation->origin,
+              (PointPx{220, 220}));
+    EXPECT_TRUE(c.Annotations().empty());
+}
+
+TEST(overlay_controller, TextTool_OutsideClickOnNonEmptyDraftCommitsAndStartsNewDraft) {
+    auto c = Make_controller();
+    FakeTextLayoutEngine engine;
+    c.Set_text_layout_engine(&engine);
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'T'), OverlayAction::Repaint);
+    ASSERT_EQ(Press(c, {140, 140}), OverlayAction::Repaint);
+    ASSERT_TRUE(c.Has_active_text_edit());
+
+    c.Active_text_edit()->On_text_input(L"abc");
+    EXPECT_EQ(Press(c, {220, 220}), OverlayAction::InvalidateFrozenCache);
+
+    ASSERT_EQ(c.Annotations().size(), 1u);
+    EXPECT_EQ(c.Annotations()[0].Kind(), AnnotationKind::Text);
+    EXPECT_EQ(Flatten_text(std::get<TextAnnotation>(c.Annotations()[0].data).runs),
+              L"abc");
+    ASSERT_TRUE(c.Has_active_text_edit());
+    ASSERT_NE(c.Active_text_edit()->Build_view().annotation, nullptr);
+    EXPECT_EQ(c.Active_text_edit()->Build_view().annotation->origin,
+              (PointPx{220, 220}));
+}
+
+TEST(overlay_controller, TextTool_BorderClickOnEmptyDraftStartsNewDraftWithoutResize) {
+    auto c = Make_controller();
+    FakeTextLayoutEngine engine;
+    c.Set_text_layout_engine(&engine);
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'T'), OverlayAction::Repaint);
+    ASSERT_EQ(Press(c, {140, 140}), OverlayAction::Repaint);
+    ASSERT_TRUE(c.Has_active_text_edit());
+
+    EXPECT_EQ(Press(c, {100, 160}), OverlayAction::Repaint);
+    EXPECT_TRUE(c.Annotations().empty());
+    EXPECT_FALSE(c.State().handle_dragging);
+    EXPECT_FALSE(c.State().move_dragging);
+    ASSERT_TRUE(c.Has_active_text_edit());
+    ASSERT_NE(c.Active_text_edit()->Build_view().annotation, nullptr);
+    EXPECT_EQ(c.Active_text_edit()->Build_view().annotation->origin,
+              (PointPx{100, 160}));
+}
+
+TEST(overlay_controller, TextTool_BorderClickOnNonEmptyDraftCommitsAndStartsNewDraft) {
+    auto c = Make_controller();
+    FakeTextLayoutEngine engine;
+    c.Set_text_layout_engine(&engine);
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'T'), OverlayAction::Repaint);
+    ASSERT_EQ(Press(c, {140, 140}), OverlayAction::Repaint);
+    ASSERT_TRUE(c.Has_active_text_edit());
+
+    c.Active_text_edit()->On_text_input(L"abc");
+    EXPECT_EQ(Press(c, {100, 160}), OverlayAction::InvalidateFrozenCache);
+
+    ASSERT_EQ(c.Annotations().size(), 1u);
+    EXPECT_EQ(c.Annotations()[0].Kind(), AnnotationKind::Text);
+    EXPECT_EQ(Flatten_text(std::get<TextAnnotation>(c.Annotations()[0].data).runs),
+              L"abc");
+    EXPECT_FALSE(c.State().handle_dragging);
+    EXPECT_FALSE(c.State().move_dragging);
+    ASSERT_TRUE(c.Has_active_text_edit());
+    ASSERT_NE(c.Active_text_edit()->Build_view().annotation, nullptr);
+    EXPECT_EQ(c.Active_text_edit()->Build_view().annotation->origin,
+              (PointPx{100, 160}));
+}
+
 TEST(overlay_controller, BrushWidthAdjust_IgnoresInactiveBrushTool) {
     auto c = Make_controller();
 
@@ -950,6 +1188,15 @@ TEST(overlay_controller, BrushWidthAdjust_IgnoresFilledRectangleTool) {
     Press(c, {100, 100});
     Release(c, {300, 300});
     ASSERT_EQ(c.On_annotation_tool_hotkey(L'F'), OverlayAction::Repaint);
+
+    EXPECT_EQ(c.Adjust_brush_width(1), std::nullopt);
+}
+
+TEST(overlay_controller, BrushWidthAdjust_IgnoresTextTool) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'T'), OverlayAction::Repaint);
 
     EXPECT_EQ(c.Adjust_brush_width(1), std::nullopt);
 }

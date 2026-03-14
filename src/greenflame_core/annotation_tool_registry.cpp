@@ -3,6 +3,7 @@
 #include "greenflame_core/freehand_annotation_tool.h"
 #include "greenflame_core/line_annotation_tool.h"
 #include "greenflame_core/rectangle_annotation_tool.h"
+#include "greenflame_core/text_annotation_tool.h"
 
 namespace greenflame::core {
 
@@ -37,6 +38,7 @@ AnnotationToolRegistry::AnnotationToolRegistry() {
                                  L"Filled rectangle tool", L'F', L"F",
                                  AnnotationToolbarGlyph::FilledRectangle},
         true));
+    tools_.push_back(std::make_unique<TextAnnotationTool>());
 }
 
 IAnnotationTool const *

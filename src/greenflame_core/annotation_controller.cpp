@@ -26,6 +26,55 @@ namespace {
     };
 }
 
+constexpr std::array<int32_t, 24> kAllowedTextPointSizes = {{
+    5,  8,  9,  10, 11, 12, 14, 16,  18,  20,  22,  24,
+    26, 28, 36, 48, 72, 84, 96, 108, 144, 192, 216, 288,
+}};
+
+[[nodiscard]] TextFontChoice
+Normalize_text_font_choice(TextFontChoice choice) noexcept {
+    switch (choice) {
+    case TextFontChoice::Sans:
+    case TextFontChoice::Serif:
+    case TextFontChoice::Mono:
+    case TextFontChoice::Art:
+        return choice;
+    }
+    return TextFontChoice::Sans;
+}
+
+[[nodiscard]] bool Text_annotation_has_text(TextAnnotation const &annotation) noexcept {
+    for (TextRun const &run : annotation.runs) {
+        if (!run.text.empty()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+[[nodiscard]] size_t Find_text_size_index(int32_t point_size) noexcept {
+    for (size_t index = 0; index < kAllowedTextPointSizes.size(); ++index) {
+        if (kAllowedTextPointSizes[index] == point_size) {
+            return index;
+        }
+    }
+
+    size_t nearest_index = 0;
+    int64_t nearest_distance =
+        std::abs(static_cast<int64_t>(point_size) -
+                 static_cast<int64_t>(kAllowedTextPointSizes.front()));
+    for (size_t index = 1; index < kAllowedTextPointSizes.size(); ++index) {
+        int64_t const distance =
+            std::abs(static_cast<int64_t>(point_size) -
+                     static_cast<int64_t>(kAllowedTextPointSizes[index]));
+        if (distance < nearest_distance) {
+            nearest_index = index;
+            nearest_distance = distance;
+        }
+    }
+    return nearest_index;
+}
+
 } // namespace
 
 std::vector<PointPx>
@@ -42,6 +91,10 @@ void AnnotationController::Reset_for_session() {
     brush_style_ = {};
     highlighter_style_ = Default_highlighter_style();
     active_edit_interaction_.reset();
+    text_layout_engine_ = nullptr;
+    text_edit_ctrl_.reset();
+    text_size_points_ = kDefaultTextAnnotationPointSize;
+    text_current_font_ = TextFontChoice::Sans;
     registry_.Reset_all();
 }
 
@@ -199,10 +252,103 @@ AnnotationController::Active_annotation_edit_handle() const noexcept {
 }
 
 bool AnnotationController::Has_active_gesture() const noexcept {
-    return Has_active_tool_gesture() || Has_active_edit_interaction();
+    return Has_active_tool_gesture() || Has_active_edit_interaction() ||
+           Has_active_text_edit();
+}
+
+void AnnotationController::Set_text_layout_engine(ITextLayoutEngine *engine) noexcept {
+    text_layout_engine_ = engine;
+}
+
+bool AnnotationController::Has_active_text_edit() const noexcept {
+    return text_edit_ctrl_.has_value();
+}
+
+TextEditController *AnnotationController::Active_text_edit() noexcept {
+    return text_edit_ctrl_.has_value() ? &*text_edit_ctrl_ : nullptr;
+}
+
+TextEditController const *AnnotationController::Active_text_edit() const noexcept {
+    return text_edit_ctrl_.has_value() ? &*text_edit_ctrl_ : nullptr;
+}
+
+void AnnotationController::Begin_text_draft(PointPx origin) {
+    if (!active_tool_.has_value() || *active_tool_ != AnnotationToolId::Text ||
+        Has_active_tool_gesture() || Has_active_edit_interaction()) {
+        return;
+    }
+
+    document_.selected_annotation_id = std::nullopt;
+    TextAnnotationBaseStyle const base_style{
+        brush_style_.color, Normalize_text_font_choice(text_current_font_),
+        kAllowedTextPointSizes[Find_text_size_index(text_size_points_)]};
+    text_edit_ctrl_.emplace(origin, base_style, text_layout_engine_);
+}
+
+void AnnotationController::Commit_text_annotation(UndoStack &undo_stack,
+                                                  TextAnnotation annotation) {
+    text_edit_ctrl_.reset();
+    if (!Text_annotation_has_text(annotation) || text_layout_engine_ == nullptr) {
+        return;
+    }
+
+    text_layout_engine_->Rasterize(annotation);
+    Annotation committed{};
+    committed.id = Next_annotation_id();
+    committed.data = std::move(annotation);
+    Commit_new_annotation(undo_stack, std::move(committed));
+}
+
+void AnnotationController::Cancel_text_draft() { text_edit_ctrl_.reset(); }
+
+int32_t AnnotationController::Text_point_size() const noexcept {
+    return text_size_points_;
+}
+
+void AnnotationController::Set_text_point_size(int32_t point_size) noexcept {
+    text_size_points_ = kAllowedTextPointSizes[Find_text_size_index(point_size)];
+}
+
+bool AnnotationController::Step_text_size(int delta_steps) {
+    if (delta_steps == 0) {
+        return false;
+    }
+
+    size_t const current_index = Find_text_size_index(text_size_points_);
+    int32_t next_index = static_cast<int32_t>(current_index) + delta_steps;
+    next_index = std::clamp(next_index, 0,
+                            static_cast<int32_t>(kAllowedTextPointSizes.size()) - 1);
+    int32_t const next_size = kAllowedTextPointSizes[static_cast<size_t>(next_index)];
+    if (text_size_points_ == next_size) {
+        return false;
+    }
+    text_size_points_ = next_size;
+    return true;
+}
+
+TextFontChoice AnnotationController::Text_current_font() const noexcept {
+    return text_current_font_;
+}
+
+void AnnotationController::Set_text_current_font(TextFontChoice choice) noexcept {
+    text_current_font_ = Normalize_text_font_choice(choice);
 }
 
 bool AnnotationController::On_primary_press(PointPx cursor) {
+    if (active_tool_ == AnnotationToolId::Text) {
+        if (!text_edit_ctrl_.has_value()) {
+            Begin_text_draft(cursor);
+            return text_edit_ctrl_.has_value();
+        }
+
+        TextDraftView const view = text_edit_ctrl_->Build_view();
+        if (!view.Hit_bounds().Contains(cursor)) {
+            return false;
+        }
+        text_edit_ctrl_->On_pointer_press(cursor);
+        return true;
+    }
+
     IAnnotationTool *const tool = Active_tool_impl();
     if (tool == nullptr) {
         return false;
@@ -210,9 +356,13 @@ bool AnnotationController::On_primary_press(PointPx cursor) {
     return tool->On_primary_press(*this, cursor);
 }
 
-bool AnnotationController::On_pointer_move(PointPx cursor) {
+bool AnnotationController::On_pointer_move(PointPx cursor, bool primary_down) {
     if (active_edit_interaction_ != nullptr) {
         return active_edit_interaction_->Update(*this, cursor);
+    }
+    if (text_edit_ctrl_.has_value()) {
+        text_edit_ctrl_->On_pointer_move(cursor, primary_down);
+        return true;
     }
     IAnnotationTool *const tool = Active_tool_impl();
     if (tool == nullptr) {
@@ -244,6 +394,11 @@ bool AnnotationController::On_primary_release(UndoStack &undo_stack) {
 }
 
 bool AnnotationController::On_cancel() {
+    if (text_edit_ctrl_.has_value()) {
+        text_edit_ctrl_->Cancel();
+        text_edit_ctrl_.reset();
+        return true;
+    }
     if (active_edit_interaction_ != nullptr) {
         bool const canceled = active_edit_interaction_->Cancel(*this);
         active_edit_interaction_.reset();
@@ -279,6 +434,7 @@ void AnnotationController::Clear_annotations() noexcept {
     document_.annotations.clear();
     document_.selected_annotation_id = std::nullopt;
     active_edit_interaction_.reset();
+    text_edit_ctrl_.reset();
     registry_.Reset_all();
 }
 

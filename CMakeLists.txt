@@ -75,6 +75,11 @@ set(GREENFLAME_FILLED_RECTANGLE_TOOL_GLYPH_PATH
 )
 file(TO_CMAKE_PATH "${GREENFLAME_FILLED_RECTANGLE_TOOL_GLYPH_PATH}"
      GREENFLAME_FILLED_RECTANGLE_TOOL_GLYPH_PATH)
+set(GREENFLAME_TEXT_TOOL_GLYPH_PATH
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/text-mask.png"
+)
+file(TO_CMAKE_PATH "${GREENFLAME_TEXT_TOOL_GLYPH_PATH}"
+     GREENFLAME_TEXT_TOOL_GLYPH_PATH)
 set(GREENFLAME_HELP_TOOL_GLYPH_PATH
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/help-mask.png"
 )
@@ -137,6 +142,12 @@ add_library(greenflame_core STATIC
     src/greenflame_core/annotation_hit_test.h
     src/greenflame_core/annotation_types.h
     src/greenflame_core/annotation_tool.h
+    src/greenflame_core/text_annotation_types.h
+    src/greenflame_core/text_layout_engine.h
+    src/greenflame_core/text_edit_controller.cpp
+    src/greenflame_core/text_edit_controller.h
+    src/greenflame_core/text_annotation_tool.cpp
+    src/greenflame_core/text_annotation_tool.h
     src/greenflame_core/freehand_annotation_tool.cpp
     src/greenflame_core/freehand_annotation_tool.h
     src/greenflame_core/line_annotation_tool.cpp
@@ -254,6 +265,8 @@ add_executable(greenflame WIN32
     src/greenflame/win/overlay_button.cpp
     src/greenflame/win/d2d_overlay_resources.h
     src/greenflame/win/d2d_overlay_resources.cpp
+    src/greenflame/win/d2d_text_layout_engine.h
+    src/greenflame/win/d2d_text_layout_engine.cpp
     src/greenflame/win/d2d_paint.h
     src/greenflame/win/d2d_paint.cpp
     ${CMAKE_CURRENT_BINARY_DIR}/app.manifest

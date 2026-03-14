@@ -144,6 +144,15 @@ constexpr float kArrowHeadShaftOverlapPerStrokePx = 2.0F;
                                 kFullOpacity);
 }
 
+[[nodiscard]] uint8_t Blend_premultiplied_channel(uint8_t dst, uint8_t src,
+                                                  uint8_t alpha) noexcept {
+    uint32_t const dst_term =
+        static_cast<uint32_t>(dst) * (static_cast<uint32_t>(kFullOpacity) - alpha);
+    uint32_t const blended =
+        static_cast<uint32_t>(src) + ((dst_term + kAlphaBlendRoundBias) / kFullOpacity);
+    return static_cast<uint8_t>(std::min(blended, static_cast<uint32_t>(kFullOpacity)));
+}
+
 [[nodiscard]] RectPx Centered_square_bounds(PointPx center, int32_t size) noexcept {
     int32_t const left = center.x - (size / 2);
     int32_t const top = center.y - (size / 2);
@@ -430,6 +439,90 @@ struct ArrowGeometry final {
                              std::max(a.right, b.right), std::max(a.bottom, b.bottom));
 }
 
+[[nodiscard]] bool Text_bitmap_is_valid(TextAnnotation const &annotation) noexcept {
+    if (annotation.bitmap_width_px <= 0 || annotation.bitmap_height_px <= 0 ||
+        annotation.bitmap_row_bytes < annotation.bitmap_width_px * 4) {
+        return false;
+    }
+    size_t const required_size = static_cast<size_t>(annotation.bitmap_row_bytes) *
+                                 static_cast<size_t>(annotation.bitmap_height_px);
+    return annotation.premultiplied_bgra.size() >= required_size;
+}
+
+[[nodiscard]] std::optional<size_t>
+Text_bitmap_pixel_offset(TextAnnotation const &annotation, PointPx point) noexcept {
+    if (!annotation.visual_bounds.Contains(point) ||
+        !Text_bitmap_is_valid(annotation)) {
+        return std::nullopt;
+    }
+
+    int32_t const rel_x = point.x - annotation.visual_bounds.left;
+    int32_t const rel_y = point.y - annotation.visual_bounds.top;
+    if (rel_x < 0 || rel_y < 0 || rel_x >= annotation.bitmap_width_px ||
+        rel_y >= annotation.bitmap_height_px) {
+        return std::nullopt;
+    }
+
+    size_t const offset =
+        static_cast<size_t>(rel_y) * static_cast<size_t>(annotation.bitmap_row_bytes) +
+        static_cast<size_t>(rel_x) * 4u;
+    if (offset + 3u >= annotation.premultiplied_bgra.size()) {
+        return std::nullopt;
+    }
+    return offset;
+}
+
+void Blend_text_annotation_onto_pixels(std::span<uint8_t> pixels, int row_bytes,
+                                       TextAnnotation const &annotation,
+                                       RectPx target_bounds,
+                                       RectPx clipped_bounds) noexcept {
+    if (!Text_bitmap_is_valid(annotation)) {
+        return;
+    }
+
+    for (int32_t y = clipped_bounds.top; y < clipped_bounds.bottom; ++y) {
+        int32_t const target_y = y - target_bounds.top;
+        int32_t const source_y = y - annotation.visual_bounds.top;
+        size_t const target_row_offset =
+            static_cast<size_t>(target_y) * static_cast<size_t>(row_bytes);
+        size_t const source_row_offset =
+            static_cast<size_t>(source_y) *
+            static_cast<size_t>(annotation.bitmap_row_bytes);
+
+        for (int32_t x = clipped_bounds.left; x < clipped_bounds.right; ++x) {
+            int32_t const source_x = x - annotation.visual_bounds.left;
+            size_t const source_offset =
+                source_row_offset + static_cast<size_t>(source_x) * 4u;
+            if (source_offset + 3u >= annotation.premultiplied_bgra.size()) {
+                continue;
+            }
+
+            uint8_t const alpha = annotation.premultiplied_bgra[source_offset + 3u];
+            if (alpha == 0) {
+                continue;
+            }
+
+            int32_t const target_x = x - target_bounds.left;
+            size_t const target_offset =
+                target_row_offset + static_cast<size_t>(target_x) * 4u;
+            if (target_offset + 3u >= pixels.size()) {
+                continue;
+            }
+
+            pixels[target_offset] = Blend_premultiplied_channel(
+                pixels[target_offset], annotation.premultiplied_bgra[source_offset],
+                alpha);
+            pixels[target_offset + 1u] = Blend_premultiplied_channel(
+                pixels[target_offset + 1u],
+                annotation.premultiplied_bgra[source_offset + 1u], alpha);
+            pixels[target_offset + 2u] = Blend_premultiplied_channel(
+                pixels[target_offset + 2u],
+                annotation.premultiplied_bgra[source_offset + 2u], alpha);
+            pixels[target_offset + 3u] = kFullOpacity;
+        }
+    }
+}
+
 } // namespace
 
 AnnotationKind Annotation::Kind() const noexcept {
@@ -442,6 +535,7 @@ AnnotationKind Annotation::Kind() const noexcept {
             [](RectangleAnnotation const &) noexcept {
                 return AnnotationKind::Rectangle;
             },
+            [](TextAnnotation const &) noexcept { return AnnotationKind::Text; },
         },
         data);
 }
@@ -488,6 +582,9 @@ RectPx Annotation_bounds(Annotation const &annotation) noexcept {
             [](RectangleAnnotation const &rect) -> RectPx {
                 return rect.outer_bounds.Normalized();
             },
+            [](TextAnnotation const &text) -> RectPx {
+                return text.visual_bounds.Normalized();
+            },
         },
         annotation.data);
 }
@@ -496,6 +593,7 @@ bool Annotation_shows_corner_brackets(AnnotationKind kind) noexcept {
     switch (kind) {
     case AnnotationKind::Freehand:
     case AnnotationKind::Line:
+    case AnnotationKind::Text:
         return true;
     case AnnotationKind::Rectangle:
         return false;
@@ -526,6 +624,9 @@ RectPx Annotation_visual_bounds(Annotation const &annotation) noexcept {
             },
             [&](RectangleAnnotation const &) -> RectPx {
                 return Annotation_bounds(annotation);
+            },
+            [](TextAnnotation const &text) -> RectPx {
+                return text.visual_bounds.Normalized();
             },
         },
         annotation.data);
@@ -599,6 +700,11 @@ bool Annotation_hits_point(Annotation const &annotation, PointPx point) noexcept
                 RectPx const inner = RectPx::From_ltrb(
                     r.left + inset, r.top + inset, r.right - inset, r.bottom - inset);
                 return inner.Is_empty() || !inner.Contains(point);
+            },
+            [&](TextAnnotation const &text) -> bool {
+                std::optional<size_t> const offset =
+                    Text_bitmap_pixel_offset(text, point);
+                return offset.has_value() && text.premultiplied_bgra[*offset + 3u] > 0;
             },
         },
         annotation.data);
@@ -816,6 +922,15 @@ Annotation Translate_annotation(Annotation annotation, PointPx delta) noexcept {
                                              rect.outer_bounds.right + delta.x,
                                              rect.outer_bounds.bottom + delta.y);
                    },
+                   [&](TextAnnotation &text) noexcept {
+                       text.origin.x += delta.x;
+                       text.origin.y += delta.y;
+                       text.visual_bounds =
+                           RectPx::From_ltrb(text.visual_bounds.left + delta.x,
+                                             text.visual_bounds.top + delta.y,
+                                             text.visual_bounds.right + delta.x,
+                                             text.visual_bounds.bottom + delta.y);
+                   },
                },
                annotation.data);
     return annotation;
@@ -847,18 +962,6 @@ void Blend_annotation_onto_pixels(std::span<uint8_t> pixels, int width, int heig
         return;
     }
 
-    // All three payload types have a .style member; extract it generically.
-    StrokeStyle const style =
-        std::visit([](auto const &d) noexcept { return d.style; }, annotation.data);
-
-    uint8_t const red = Colorref_red(style.color);
-    uint8_t const green = Colorref_green(style.color);
-    uint8_t const blue = Colorref_blue(style.color);
-    uint8_t const alpha = Opacity_percent_to_alpha(style.opacity_percent);
-    if (alpha == 0) {
-        return;
-    }
-
     // Pre-compute kind-specific rendering state once, before the pixel loop.
     struct FreehandState {
         std::span<const PointPx> points;
@@ -879,99 +982,123 @@ void Blend_annotation_onto_pixels(std::span<uint8_t> pixels, int width, int heig
     };
     using RenderState = std::variant<FreehandState, LineState, RectState>;
 
-    RenderState const rs = std::visit(
+    auto blend_stroke = [&](StrokeStyle const &style, RenderState rs) noexcept {
+        uint8_t const red = Colorref_red(style.color);
+        uint8_t const green = Colorref_green(style.color);
+        uint8_t const blue = Colorref_blue(style.color);
+        uint8_t const alpha = Opacity_percent_to_alpha(style.opacity_percent);
+        if (alpha == 0) {
+            return;
+        }
+
+        for (int32_t y = clipped->top; y < clipped->bottom; ++y) {
+            int32_t const target_y = y - target_bounds.top;
+            size_t const row_offset =
+                static_cast<size_t>(target_y) * static_cast<size_t>(row_bytes);
+
+            for (int32_t x = clipped->left; x < clipped->right; ++x) {
+                bool const covered = std::visit(
+                    Overloaded{
+                        [&](FreehandState const &s) noexcept {
+                            if (s.tip_shape == FreehandTipShape::Square) {
+                                return Pixel_covered_by_square_capped_polyline(
+                                    static_cast<float>(x) + kHalf,
+                                    static_cast<float>(y) + kHalf, s.points,
+                                    s.width_px);
+                            }
+                            return Pixel_covered_by_polyline(
+                                static_cast<float>(x) + kHalf,
+                                static_cast<float>(y) + kHalf, s.points, s.radius_sq);
+                        },
+                        [&](LineState const &s) noexcept {
+                            float const fx = static_cast<float>(x) + kHalf;
+                            float const fy = static_cast<float>(y) + kHalf;
+                            return s.is_arrow
+                                       ? Sample_covered_by_arrow(fx, fy, s.arrow)
+                                       : Point_inside_line_shape(fx, fy, s.frame);
+                        },
+                        [&](RectState const &s) noexcept {
+                            PointPx const pt{x, y};
+                            if (!s.r.Contains(pt)) {
+                                return false;
+                            }
+                            if (s.filled) {
+                                return true;
+                            }
+                            return !s.has_inner || !s.inner.Contains(pt);
+                        },
+                    },
+                    rs);
+
+                if (!covered) {
+                    continue;
+                }
+
+                int32_t const target_x = x - target_bounds.left;
+                size_t const pixel_offset =
+                    row_offset + static_cast<size_t>(target_x) * 4;
+                if (pixel_offset + 3 >= pixels.size()) {
+                    continue;
+                }
+
+                if (alpha == kFullOpacity) {
+                    pixels[pixel_offset] = blue;
+                    pixels[pixel_offset + 1] = green;
+                    pixels[pixel_offset + 2] = red;
+                    pixels[pixel_offset + 3] = kFullOpacity;
+                    continue;
+                }
+
+                pixels[pixel_offset] = Blend_channel(pixels[pixel_offset], blue, alpha);
+                pixels[pixel_offset + 1] =
+                    Blend_channel(pixels[pixel_offset + 1], green, alpha);
+                pixels[pixel_offset + 2] =
+                    Blend_channel(pixels[pixel_offset + 2], red, alpha);
+                pixels[pixel_offset + 3] = kFullOpacity;
+            }
+        }
+    };
+
+    std::visit(
         Overloaded{
-            [](FreehandStrokeAnnotation const &fh) -> RenderState {
-                float const r =
-                    std::max(1.0F, static_cast<float>(fh.style.width_px)) * kHalf;
-                return FreehandState{fh.points, r * r, fh.style.width_px,
-                                     fh.freehand_tip_shape};
+            [&](TextAnnotation const &text) noexcept {
+                Blend_text_annotation_onto_pixels(pixels, row_bytes, text,
+                                                  target_bounds, *clipped);
             },
-            [](LineAnnotation const &line) -> RenderState {
+            [&](FreehandStrokeAnnotation const &freehand) noexcept {
+                float const r =
+                    std::max(1.0F, static_cast<float>(freehand.style.width_px)) * kHalf;
+                blend_stroke(freehand.style,
+                             FreehandState{freehand.points, r * r,
+                                           freehand.style.width_px,
+                                           freehand.freehand_tip_shape});
+            },
+            [&](LineAnnotation const &line) noexcept {
                 PointF const sf = To_point_f(line.start);
                 PointF const ef = To_point_f(line.end);
                 if (line.arrow_head) {
-                    return LineState{
-                        {}, Build_arrow_geometry(sf, ef, line.style), true};
+                    blend_stroke(
+                        line.style,
+                        LineState{{}, Build_arrow_geometry(sf, ef, line.style), true});
+                } else {
+                    blend_stroke(line.style,
+                                 LineState{Build_line_raster_frame(sf, ef, line.style),
+                                           {},
+                                           false});
                 }
-                return LineState{
-                    Build_line_raster_frame(sf, ef, line.style), {}, false};
             },
-            [](RectangleAnnotation const &rect) -> RenderState {
+            [&](RectangleAnnotation const &rect) noexcept {
                 RectPx const r = rect.outer_bounds.Normalized();
                 int32_t const inset =
                     std::max<int32_t>(StrokeStyle::kMinWidthPx, rect.style.width_px);
                 RectPx const inner = RectPx::From_ltrb(
                     r.left + inset, r.top + inset, r.right - inset, r.bottom - inset);
-                return RectState{r, inner, !inner.Is_empty() && !rect.filled,
-                                 rect.filled};
+                blend_stroke(rect.style,
+                             RectState{r, inner, !inner.Is_empty() && !rect.filled,
+                                       rect.filled});
             },
         },
         annotation.data);
-
-    for (int32_t y = clipped->top; y < clipped->bottom; ++y) {
-        int32_t const target_y = y - target_bounds.top;
-        size_t const row_offset =
-            static_cast<size_t>(target_y) * static_cast<size_t>(row_bytes);
-
-        for (int32_t x = clipped->left; x < clipped->right; ++x) {
-            bool const covered = std::visit(
-                Overloaded{
-                    [&](FreehandState const &s) noexcept {
-                        if (s.tip_shape == FreehandTipShape::Square) {
-                            return Pixel_covered_by_square_capped_polyline(
-                                static_cast<float>(x) + kHalf,
-                                static_cast<float>(y) + kHalf, s.points, s.width_px);
-                        }
-                        return Pixel_covered_by_polyline(static_cast<float>(x) + kHalf,
-                                                         static_cast<float>(y) + kHalf,
-                                                         s.points, s.radius_sq);
-                    },
-                    [&](LineState const &s) noexcept {
-                        float const fx = static_cast<float>(x) + kHalf;
-                        float const fy = static_cast<float>(y) + kHalf;
-                        return s.is_arrow ? Sample_covered_by_arrow(fx, fy, s.arrow)
-                                          : Point_inside_line_shape(fx, fy, s.frame);
-                    },
-                    [&](RectState const &s) noexcept {
-                        PointPx const pt{x, y};
-                        if (!s.r.Contains(pt)) {
-                            return false;
-                        }
-                        if (s.filled) {
-                            return true;
-                        }
-                        return !s.has_inner || !s.inner.Contains(pt);
-                    },
-                },
-                rs);
-
-            if (!covered) {
-                continue;
-            }
-
-            int32_t const target_x = x - target_bounds.left;
-            size_t const pixel_offset = row_offset + static_cast<size_t>(target_x) * 4;
-            if (pixel_offset + 3 >= pixels.size()) {
-                continue;
-            }
-
-            if (alpha == kFullOpacity) {
-                pixels[pixel_offset] = blue;
-                pixels[pixel_offset + 1] = green;
-                pixels[pixel_offset + 2] = red;
-                pixels[pixel_offset + 3] = kFullOpacity;
-                continue;
-            }
-
-            pixels[pixel_offset] = Blend_channel(pixels[pixel_offset], blue, alpha);
-            pixels[pixel_offset + 1] =
-                Blend_channel(pixels[pixel_offset + 1], green, alpha);
-            pixels[pixel_offset + 2] =
-                Blend_channel(pixels[pixel_offset + 2], red, alpha);
-            pixels[pixel_offset + 3] = kFullOpacity;
-        }
-    }
 }
 
 } // namespace greenflame::core

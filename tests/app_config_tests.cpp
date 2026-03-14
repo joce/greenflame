@@ -45,3 +45,45 @@ TEST(app_config, Defaults_UseBlackFirstPaletteEntryAndCurrentSlotZero) {
     EXPECT_EQ(config.current_highlighter_color_index, 0);
     EXPECT_EQ(config.highlighter_opacity_percent, 50);
 }
+
+TEST(app_config, Normalize_ClampsTextSizeToNearestAllowedValue) {
+    AppConfig config{};
+    config.text_size_points = 13;
+
+    config.Normalize();
+
+    EXPECT_EQ(config.text_size_points, 12);
+}
+
+TEST(app_config, Normalize_ResetsInvalidCurrentTextFontChoice) {
+    AppConfig config{};
+    config.text_current_font = static_cast<TextFontChoice>(99);
+
+    config.Normalize();
+
+    EXPECT_EQ(config.text_current_font, TextFontChoice::Sans);
+}
+
+TEST(app_config, Normalize_UsesDefaultFontFamiliesWhenTrimmedValueIsEmpty) {
+    AppConfig config{};
+    config.text_font_sans = L"   ";
+    config.text_font_serif = L"\t";
+    config.text_font_mono = L"\r\n";
+    config.text_font_art = L"  \t  ";
+
+    config.Normalize();
+
+    EXPECT_EQ(config.text_font_sans, L"Arial");
+    EXPECT_EQ(config.text_font_serif, L"Times New Roman");
+    EXPECT_EQ(config.text_font_mono, L"Courier New");
+    EXPECT_EQ(config.text_font_art, L"Comic Sans MS");
+}
+
+TEST(app_config, Normalize_TruncatesTextFontFamiliesTo128CodeUnits) {
+    AppConfig config{};
+    config.text_font_sans.assign(140, L'a');
+
+    config.Normalize();
+
+    EXPECT_EQ(config.text_font_sans.size(), 128u);
+}

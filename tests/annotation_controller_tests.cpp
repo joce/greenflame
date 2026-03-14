@@ -1,3 +1,4 @@
+#include "fake_text_layout_engine.h"
 #include "greenflame_core/annotation_controller.h"
 #include "greenflame_core/annotation_hit_test.h"
 #include "greenflame_core/undo_stack.h"
@@ -42,6 +43,36 @@ Annotation Make_rectangle(uint64_t id, RectPx outer_bounds, int32_t width_px,
     return annotation;
 }
 
+Annotation Make_text(uint64_t id, PointPx origin, RectPx visual_bounds,
+                     std::wstring text = L"abc") {
+    Annotation annotation{};
+    annotation.id = id;
+
+    TextAnnotation text_annotation{};
+    text_annotation.origin = origin;
+    text_annotation.base_style = {
+        .color = RGB(0x11, 0x22, 0x33),
+        .font_choice = TextFontChoice::Sans,
+        .point_size = 12,
+    };
+    text_annotation.runs = {TextRun{std::move(text), {}}};
+    text_annotation.visual_bounds = visual_bounds;
+    text_annotation.bitmap_width_px = visual_bounds.Width();
+    text_annotation.bitmap_height_px = visual_bounds.Height();
+    text_annotation.bitmap_row_bytes = text_annotation.bitmap_width_px * 4;
+    text_annotation.premultiplied_bgra.assign(
+        static_cast<size_t>(text_annotation.bitmap_row_bytes) *
+            static_cast<size_t>(text_annotation.bitmap_height_px),
+        0);
+    for (size_t index = 3; index < text_annotation.premultiplied_bgra.size();
+         index += 4) {
+        text_annotation.premultiplied_bgra[index] = 255;
+    }
+
+    annotation.data = std::move(text_annotation);
+    return annotation;
+}
+
 } // namespace
 
 TEST(annotation_controller, InitialState_DefaultsToNoActiveTool) {
@@ -59,7 +90,7 @@ TEST(annotation_controller, ToolbarViews_ExposeAnnotationTools) {
     std::vector<AnnotationToolbarButtonView> const views =
         controller.Build_toolbar_button_views();
 
-    ASSERT_EQ(views.size(), 6u);
+    ASSERT_EQ(views.size(), 7u);
     EXPECT_EQ(views[0].id, AnnotationToolId::Freehand);
     EXPECT_EQ(views[0].label, L"B");
     EXPECT_EQ(views[0].tooltip, L"Brush tool");
@@ -90,6 +121,11 @@ TEST(annotation_controller, ToolbarViews_ExposeAnnotationTools) {
     EXPECT_EQ(views[5].tooltip, L"Filled rectangle tool");
     EXPECT_EQ(views[5].glyph, AnnotationToolbarGlyph::FilledRectangle);
     EXPECT_FALSE(views[5].active);
+    EXPECT_EQ(views[6].id, AnnotationToolId::Text);
+    EXPECT_EQ(views[6].label, L"T");
+    EXPECT_EQ(views[6].tooltip, L"Text tool");
+    EXPECT_EQ(views[6].glyph, AnnotationToolbarGlyph::Text);
+    EXPECT_FALSE(views[6].active);
 }
 
 TEST(annotation_controller, ToggleToolByHotkey_ActivatesAndDeactivatesFreehand) {
@@ -158,6 +194,180 @@ TEST(annotation_controller, ToggleToolByHotkey_ActivatesAndDeactivatesFilledRect
               std::optional<AnnotationToolId>{AnnotationToolId::FilledRectangle});
     EXPECT_TRUE(controller.Toggle_tool_by_hotkey(L'f'));
     EXPECT_EQ(controller.Active_tool(), std::nullopt);
+}
+
+TEST(annotation_controller, ToggleToolByHotkey_ActivatesAndDeactivatesText) {
+    AnnotationController controller;
+
+    EXPECT_TRUE(controller.Toggle_tool_by_hotkey(L'T'));
+    EXPECT_EQ(controller.Active_tool(),
+              std::optional<AnnotationToolId>{AnnotationToolId::Text});
+    EXPECT_TRUE(controller.Toggle_tool_by_hotkey(L't'));
+    EXPECT_EQ(controller.Active_tool(), std::nullopt);
+}
+
+TEST(annotation_controller, BeginTextDraft_CapturesCurrentColorFontAndPointSize) {
+    AnnotationController controller;
+    FakeTextLayoutEngine engine;
+    COLORREF const green = RGB(0x12, 0xA4, 0x56);
+
+    controller.Set_text_layout_engine(&engine);
+    EXPECT_TRUE(controller.Set_annotation_color(green));
+    EXPECT_TRUE(controller.Step_text_size(2));
+    controller.Set_text_current_font(TextFontChoice::Mono);
+    EXPECT_TRUE(controller.Toggle_tool(AnnotationToolId::Text));
+
+    EXPECT_TRUE(controller.On_primary_press({50, 60}));
+    ASSERT_TRUE(controller.Has_active_text_edit());
+
+    TextDraftView const view = controller.Active_text_edit()->Build_view();
+    ASSERT_NE(view.annotation, nullptr);
+    EXPECT_EQ(view.annotation->origin, (PointPx{50, 60}));
+    EXPECT_EQ(view.annotation->base_style.color, green);
+    EXPECT_EQ(view.annotation->base_style.font_choice, TextFontChoice::Mono);
+    EXPECT_EQ(view.annotation->base_style.point_size, 16);
+    EXPECT_TRUE(view.annotation->runs.empty());
+    EXPECT_TRUE(view.insert_mode);
+
+    controller.Active_text_edit()->On_text_input(L"x");
+    TextDraftView const typed_view = controller.Active_text_edit()->Build_view();
+    ASSERT_NE(typed_view.annotation, nullptr);
+    ASSERT_EQ(typed_view.annotation->runs.size(), 1u);
+    EXPECT_EQ(typed_view.annotation->runs[0].text, L"x");
+    EXPECT_FALSE(typed_view.annotation->runs[0].flags.bold);
+    EXPECT_FALSE(typed_view.annotation->runs[0].flags.italic);
+    EXPECT_FALSE(typed_view.annotation->runs[0].flags.underline);
+    EXPECT_FALSE(typed_view.annotation->runs[0].flags.strikethrough);
+}
+
+TEST(annotation_controller, CommitTextAnnotation_AddsUndoableTextAnnotation) {
+    AnnotationController controller;
+    FakeTextLayoutEngine engine;
+    UndoStack undo_stack;
+
+    controller.Set_text_layout_engine(&engine);
+    EXPECT_TRUE(controller.Toggle_tool(AnnotationToolId::Text));
+    EXPECT_TRUE(controller.On_primary_press({20, 30}));
+    ASSERT_TRUE(controller.Has_active_text_edit());
+
+    controller.Active_text_edit()->On_text_input(L"abc");
+    EXPECT_EQ(undo_stack.Count(), 0u);
+    EXPECT_EQ(undo_stack.Index(), 0);
+    controller.Commit_text_annotation(undo_stack,
+                                      controller.Active_text_edit()->Commit());
+
+    EXPECT_FALSE(controller.Has_active_text_edit());
+    EXPECT_EQ(undo_stack.Count(), 1u);
+    EXPECT_EQ(undo_stack.Index(), 1);
+    ASSERT_EQ(controller.Annotations().size(), 1u);
+    EXPECT_EQ(controller.Annotations()[0].Kind(), AnnotationKind::Text);
+    {
+        auto const &text = std::get<TextAnnotation>(controller.Annotations()[0].data);
+        EXPECT_EQ(Flatten_text(text.runs), L"abc");
+        EXPECT_EQ(text.origin, (PointPx{20, 30}));
+        EXPECT_EQ(text.bitmap_width_px, text.visual_bounds.Width());
+        EXPECT_EQ(text.bitmap_height_px, text.visual_bounds.Height());
+    }
+
+    undo_stack.Undo();
+    EXPECT_EQ(undo_stack.Count(), 1u);
+    EXPECT_EQ(undo_stack.Index(), 0);
+    EXPECT_TRUE(controller.Annotations().empty());
+
+    undo_stack.Redo();
+    EXPECT_EQ(undo_stack.Count(), 1u);
+    EXPECT_EQ(undo_stack.Index(), 1);
+    ASSERT_EQ(controller.Annotations().size(), 1u);
+    EXPECT_EQ(controller.Annotations()[0].Kind(), AnnotationKind::Text);
+}
+
+TEST(annotation_controller, CommitTextAnnotation_PreservesInsertedNewlines) {
+    AnnotationController controller;
+    FakeTextLayoutEngine engine;
+    UndoStack undo_stack;
+
+    controller.Set_text_layout_engine(&engine);
+    EXPECT_TRUE(controller.Toggle_tool(AnnotationToolId::Text));
+    EXPECT_TRUE(controller.On_primary_press({20, 30}));
+    ASSERT_TRUE(controller.Has_active_text_edit());
+
+    controller.Active_text_edit()->On_text_input(L"alpha\nbeta");
+    controller.Commit_text_annotation(undo_stack,
+                                      controller.Active_text_edit()->Commit());
+
+    ASSERT_EQ(controller.Annotations().size(), 1u);
+    ASSERT_EQ(controller.Annotations()[0].Kind(), AnnotationKind::Text);
+    EXPECT_EQ(
+        Flatten_text(std::get<TextAnnotation>(controller.Annotations()[0].data).runs),
+        L"alpha\nbeta");
+}
+
+TEST(annotation_controller, CancelTextDraft_ClearsDraftWithoutCommit) {
+    AnnotationController controller;
+    FakeTextLayoutEngine engine;
+    UndoStack undo_stack;
+
+    controller.Set_text_layout_engine(&engine);
+    EXPECT_TRUE(controller.Toggle_tool(AnnotationToolId::Text));
+    EXPECT_TRUE(controller.On_primary_press({10, 20}));
+    ASSERT_TRUE(controller.Has_active_text_edit());
+
+    controller.Active_text_edit()->On_text_input(L"abc");
+    EXPECT_EQ(undo_stack.Count(), 0u);
+    EXPECT_EQ(undo_stack.Index(), 0);
+    EXPECT_TRUE(controller.On_cancel());
+    EXPECT_FALSE(controller.Has_active_text_edit());
+    EXPECT_TRUE(controller.Annotations().empty());
+    EXPECT_EQ(undo_stack.Count(), 0u);
+    EXPECT_EQ(undo_stack.Index(), 0);
+}
+
+TEST(annotation_controller, CommittedTextAnnotation_IsSelectableMovableAndDeletable) {
+    AnnotationController controller;
+    UndoStack undo_stack;
+    Annotation const original =
+        Make_text(1, {20, 30}, RectPx::From_ltrb(20, 30, 50, 50));
+
+    controller.Insert_annotation_at(0, original, std::nullopt);
+
+    EXPECT_TRUE(controller.Select_topmost_annotation({25, 35}));
+    EXPECT_EQ(controller.Selected_annotation_id(), std::optional<uint64_t>{1});
+
+    ASSERT_TRUE(controller.Begin_annotation_edit(
+        AnnotationEditTarget{1, AnnotationEditTargetKind::Body}, {25, 35}));
+    EXPECT_TRUE(controller.On_pointer_move({35, 45}));
+    {
+        auto const &moved_text =
+            std::get<TextAnnotation>(controller.Annotations()[0].data);
+        EXPECT_EQ(moved_text.origin, (PointPx{30, 40}));
+        EXPECT_EQ(moved_text.visual_bounds, (RectPx::From_ltrb(30, 40, 60, 60)));
+    }
+    EXPECT_TRUE(controller.On_primary_release(undo_stack));
+
+    Annotation const moved = controller.Annotations()[0];
+
+    undo_stack.Undo();
+    ASSERT_EQ(controller.Annotations().size(), 1u);
+    EXPECT_EQ(controller.Annotations()[0], original);
+    EXPECT_EQ(controller.Selected_annotation_id(), std::optional<uint64_t>{1});
+
+    undo_stack.Redo();
+    ASSERT_EQ(controller.Annotations().size(), 1u);
+    EXPECT_EQ(controller.Annotations()[0], moved);
+    EXPECT_EQ(controller.Selected_annotation_id(), std::optional<uint64_t>{1});
+
+    EXPECT_TRUE(controller.Delete_selected_annotation(undo_stack));
+    EXPECT_TRUE(controller.Annotations().empty());
+    EXPECT_EQ(controller.Selected_annotation_id(), std::nullopt);
+
+    undo_stack.Undo();
+    ASSERT_EQ(controller.Annotations().size(), 1u);
+    EXPECT_EQ(controller.Annotations()[0], moved);
+    EXPECT_EQ(controller.Selected_annotation_id(), std::optional<uint64_t>{1});
+
+    undo_stack.Redo();
+    EXPECT_TRUE(controller.Annotations().empty());
+    EXPECT_EQ(controller.Selected_annotation_id(), std::nullopt);
 }
 
 TEST(annotation_controller, AnnotationIdAt_ReturnsTopmostAnnotationByCoveredPixel) {

@@ -1,6 +1,7 @@
 #include "greenflame_core/freehand_annotation_tool.h"
 #include "greenflame_core/line_annotation_tool.h"
 #include "greenflame_core/rectangle_annotation_tool.h"
+#include "greenflame_core/text_annotation_tool.h"
 #include "greenflame_core/undo_stack.h"
 
 using namespace greenflame::core;
@@ -292,4 +293,21 @@ TEST(annotation_tool, FilledRectangleTool_UsesCurrentColorAndCommit) {
         EXPECT_TRUE(committed_rect.filled);
         EXPECT_EQ(committed_rect.style.color, host.stroke_style.color);
     }
+}
+
+TEST(annotation_tool, TextTool_DescriptorAndNoGestureBehavior) {
+    RecordingAnnotationToolHost host;
+    UndoStack undo_stack;
+    TextAnnotationTool tool;
+
+    EXPECT_EQ(tool.Descriptor().id, AnnotationToolId::Text);
+    EXPECT_EQ(tool.Descriptor().name, L"Text tool");
+    EXPECT_EQ(tool.Descriptor().hotkey, L'T');
+    EXPECT_EQ(tool.Descriptor().toolbar_label, L"T");
+    EXPECT_EQ(tool.Descriptor().toolbar_glyph, AnnotationToolbarGlyph::Text);
+    EXPECT_FALSE(tool.Has_active_gesture());
+    EXPECT_FALSE(tool.On_primary_press(host, {10, 10}));
+    EXPECT_FALSE(tool.On_pointer_move(host, {20, 20}));
+    EXPECT_FALSE(tool.On_primary_release(host, undo_stack));
+    EXPECT_FALSE(tool.On_cancel(host));
 }

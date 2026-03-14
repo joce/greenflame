@@ -31,6 +31,7 @@ enum class OverlayToolbarGlyphId : uint8_t {
     Arrow,
     Rectangle,
     FilledRectangle,
+    Text,
     Help,
     Count,
 };

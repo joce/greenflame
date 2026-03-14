@@ -21,6 +21,11 @@ struct D2DPaintInput {
     std::span<const core::RectPx> monitor_rects_client = {};
     std::span<const core::Annotation> annotations = {};
     core::Annotation const *draft_annotation = nullptr;
+    core::TextAnnotation const *draft_text_annotation = nullptr;
+    std::vector<core::RectPx> draft_text_selection_rects = {};
+    core::RectPx draft_text_caret_rect = {};
+    bool draft_text_insert_mode = true;
+    bool draft_text_blink_visible = true;
     std::span<const core::PointPx> draft_freehand_points = {};
     std::optional<core::StrokeStyle> draft_freehand_style = std::nullopt;
     core::FreehandTipShape draft_freehand_tip_shape = core::FreehandTipShape::Round;
@@ -50,6 +55,9 @@ struct D2DPaintInput {
     size_t color_wheel_segment_count = 0;
     std::optional<size_t> color_wheel_selected_segment = std::nullopt;
     std::optional<size_t> color_wheel_hovered_segment = std::nullopt;
+    bool color_wheel_is_text_style = false;
+    core::TextFontChoice color_wheel_text_selected_font = core::TextFontChoice::Sans;
+    std::array<std::wstring_view, 4> color_wheel_font_families = {};
 };
 
 // Rebuild the annotations off-screen bitmap from committed annotations.

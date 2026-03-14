@@ -3,6 +3,7 @@
 #include "greenflame_core/overlay_controller.h"
 #include "greenflame_core/overlay_help_content.h"
 #include "greenflame_core/rect_px.h"
+#include "win/d2d_text_layout_engine.h"
 #include "win/overlay_button.h"
 #include "win/overlay_help_overlay.h"
 
@@ -78,6 +79,7 @@ class OverlayWindow final {
     void Apply_action(core::OverlayAction action);
     LRESULT On_key_down(WPARAM wparam, LPARAM lparam);
     LRESULT On_key_up(WPARAM wparam, LPARAM lparam);
+    LRESULT On_char(WPARAM wparam);
     LRESULT On_l_button_down();
     LRESULT On_mouse_move();
     LRESULT On_mouse_wheel(WPARAM wparam);
@@ -106,8 +108,13 @@ class OverlayWindow final {
     void Refresh_cursor();
     bool Refresh_hover_handle();
     [[nodiscard]] bool Handle_brush_width_delta(int32_t delta_steps);
+    [[nodiscard]] bool Handle_text_size_delta(int32_t delta_steps);
     void Show_brush_size_overlay(int32_t width_px);
-    void Clear_brush_size_overlay(bool repaint);
+    void Show_text_size_overlay(int32_t size_pt);
+    void Clear_transient_center_label(bool repaint);
+    [[nodiscard]] bool Read_clipboard_text(std::wstring &out) const;
+    void Write_clipboard_text(std::wstring_view text) const;
+    void Reset_caret_blink();
     void Handle_device_loss();
     [[nodiscard]] bool Can_show_color_wheel() const noexcept;
     [[nodiscard]] std::span<const COLORREF> Current_tool_color_palette() const noexcept;
@@ -164,11 +171,14 @@ class OverlayWindow final {
     core::OverlayController controller_;
     std::unique_ptr<OverlayResources> resources_;
     std::unique_ptr<D2DOverlayResources> d2d_resources_;
+    std::unique_ptr<D2DTextLayoutEngine> text_layout_engine_;
     std::optional<core::SelectionHandle> last_hover_handle_;
     OverlayHelpOverlay hotkey_help_overlay_ = {};
     bool testing_toolbar_ = false;
     int mouse_wheel_delta_remainder_ = 0;
-    std::wstring brush_size_overlay_text_ = {};
+    int text_wheel_delta_remainder_ = 0;
+    std::wstring transient_center_label_text_ = {};
+    bool caret_blink_visible_ = true;
     bool suppress_next_lbutton_up_ = false;
     std::vector<ToolbarButtonEntry> toolbar_buttons_;
     ColorWheelState color_wheel_ = {};

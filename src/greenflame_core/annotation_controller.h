@@ -2,6 +2,7 @@
 
 #include "greenflame_core/annotation_edit_interaction.h"
 #include "greenflame_core/annotation_tool_registry.h"
+#include "greenflame_core/text_edit_controller.h"
 
 namespace greenflame::core {
 
@@ -88,6 +89,18 @@ class AnnotationController final : public IAnnotationToolHost,
     [[nodiscard]] bool Has_active_tool_gesture() const noexcept;
     [[nodiscard]] bool Has_active_edit_interaction() const noexcept;
     [[nodiscard]] bool Has_active_gesture() const noexcept;
+    void Set_text_layout_engine(ITextLayoutEngine *engine) noexcept;
+    [[nodiscard]] bool Has_active_text_edit() const noexcept;
+    [[nodiscard]] TextEditController *Active_text_edit() noexcept;
+    [[nodiscard]] TextEditController const *Active_text_edit() const noexcept;
+    void Begin_text_draft(PointPx origin);
+    void Commit_text_annotation(UndoStack &undo_stack, TextAnnotation annotation);
+    void Cancel_text_draft();
+    [[nodiscard]] int32_t Text_point_size() const noexcept;
+    void Set_text_point_size(int32_t point_size) noexcept;
+    [[nodiscard]] bool Step_text_size(int delta_steps);
+    [[nodiscard]] TextFontChoice Text_current_font() const noexcept;
+    void Set_text_current_font(TextFontChoice choice) noexcept;
     [[nodiscard]] bool Has_annotations() const noexcept {
         return !document_.annotations.empty();
     }
@@ -99,7 +112,7 @@ class AnnotationController final : public IAnnotationToolHost,
     Active_annotation_edit_handle() const noexcept;
 
     [[nodiscard]] bool On_primary_press(PointPx cursor);
-    [[nodiscard]] bool On_pointer_move(PointPx cursor);
+    [[nodiscard]] bool On_pointer_move(PointPx cursor, bool primary_down = false);
     [[nodiscard]] bool On_primary_release(UndoStack &undo_stack);
     [[nodiscard]] bool On_cancel();
     [[nodiscard]] bool Delete_selected_annotation(UndoStack &undo_stack);
@@ -141,6 +154,10 @@ class AnnotationController final : public IAnnotationToolHost,
     StrokeStyle brush_style_ = {};
     StrokeStyle highlighter_style_ = {};
     std::unique_ptr<IAnnotationEditInteraction> active_edit_interaction_ = {};
+    ITextLayoutEngine *text_layout_engine_ = nullptr;
+    std::optional<TextEditController> text_edit_ctrl_ = std::nullopt;
+    int32_t text_size_points_ = kDefaultTextAnnotationPointSize;
+    TextFontChoice text_current_font_ = TextFontChoice::Sans;
 };
 
 } // namespace greenflame::core

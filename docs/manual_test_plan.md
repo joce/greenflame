@@ -7,7 +7,7 @@ audience:
 status: reference
 owners:
   - core-team
-last_updated: 2026-03-10
+last_updated: 2026-03-14
 tags:
   - testing
   - manual
@@ -330,6 +330,7 @@ unless a real end-to-end bug escapes into the Win32 shell:
   - The `Help` button stays last on the right and is visually separated from the
     annotation tools by one reserved button slot of space.
   - Hovering shows the full tool name.
+  - Hovering any visible toolbar button shows the standard pointer cursor.
   - Button state tracks the active tool correctly.
 
 ## Annotations
@@ -340,7 +341,7 @@ unless a real end-to-end bug escapes into the Win32 shell:
 - Run on: `ENV-A`
 - Steps:
   1. Create a selection.
-  2. Toggle `B`, `H`, `L`, `A`, `R`, and `F` from the keyboard.
+  2. Toggle `B`, `H`, `L`, `A`, `R`, `F`, and `T` from the keyboard.
   3. Toggle the same tools from the toolbar.
   4. Activate the same tool twice in a row.
 - Expected:
@@ -482,6 +483,82 @@ unless a real end-to-end bug escapes into the Win32 shell:
   - The committed stroke matches what was shown during the live preview.
   - The selected-annotation brackets enclose all visible highlighter pixels.
 
+### GF-MAN-ANN-011 - Text Tool Activation And Style Defaults
+
+- Priority: `P1`
+- Run on: `ENV-A`
+- Steps:
+  1. Create a selection and activate the Text tool with `T`.
+  2. Move the pointer inside the selection, then left-click to start a text draft.
+  3. Cancel the draft, keep the Text tool armed, and right-click inside the selection.
+  4. Hover and pick entries from the left and right halves of the 12-segment text style wheel.
+  5. Use the mouse wheel and `Ctrl + =` / `Ctrl + -` before starting the next draft.
+  6. Start a new draft and inspect the initial font, color, and point size.
+- Expected:
+  - The armed Text tool shows an `I-beam` cursor.
+  - Left-click inside the selection starts a live text draft at the click point.
+  - Right-click while the Text tool is armed opens the 12-segment text style wheel.
+  - The left half updates the default text color and the right half updates the default font for the next draft.
+  - Pre-draft size stepping changes the default text point size for the next draft.
+  - The next draft uses the chosen color, font, and point size.
+
+### GF-MAN-ANN-012 - Text Draft Editing, Navigation, And Formatting
+
+- Priority: `P1`
+- Run on: `ENV-A`
+- Steps:
+  1. Create a selection, activate the Text tool, and start a non-empty text draft.
+  2. Enter printable text, then use `Insert` to switch between insert and overwrite mode.
+  3. Drag with the mouse to create and adjust a selection.
+  4. Exercise caret motion and selection extension with `Ctrl + Arrow`, `Home`, `End`, `PgUp`, and `PgDn`.
+  5. Exercise `Ctrl + A`, `Ctrl + C`, `Ctrl + X`, `Ctrl + V`, `Ctrl + Z`, and `Ctrl + Shift + Z`.
+  6. Exercise `Ctrl + B`, `Ctrl + I`, `Ctrl + U`, `Alt + Shift + 5`, and `Ctrl + Enter`.
+  7. Right-click while actively editing, then try mouse wheel and `Ctrl + =` / `Ctrl + -`.
+- Expected:
+  - `WM_CHAR` entry inserts printable characters at the caret.
+  - Insert mode shows a thin caret and overwrite mode shows a block caret.
+  - Caret blink timing follows the platform blink setting.
+  - Mouse dragging updates the text selection highlight correctly.
+  - Navigation and selection extension follow the expected word, line, and document boundaries.
+  - Copy, cut, paste, select-all, and draft-local undo/redo affect only the active draft and do not trigger overlay-global undo/redo.
+  - Bold, italic, underline, and strikethrough toggles apply correctly and do not insert extra text.
+  - `Ctrl + Enter` inserts a newline into the active draft.
+  - Right-click while actively editing does not open the style wheel.
+  - Size stepping is ignored while actively editing.
+
+### GF-MAN-ANN-013 - Text Draft Commit, Cancel, And Toolbar Interaction
+
+- Priority: `P1`
+- Run on: `ENV-A`
+- Steps:
+  1. Start an empty text draft and click outside it inside the selection.
+  2. Start a non-empty text draft and click outside it inside the selection.
+  3. Start an empty text draft and click a toolbar button.
+  4. Start a non-empty text draft and click a toolbar button.
+  5. Start a non-empty text draft and press `Enter`.
+  6. Start another non-empty text draft and press `Esc`.
+- Expected:
+  - Clicking outside an empty draft discards it and starts the next draft at the new click point.
+  - Clicking outside a non-empty draft commits it and starts the next draft at the new click point.
+  - Clicking a toolbar button while editing discards an empty draft or commits a non-empty draft, then applies the button action without starting a new text draft at the button location.
+  - `Enter` commits the active draft.
+  - `Esc` cancels the active draft and keeps the Text tool armed.
+
+### GF-MAN-ANN-014 - Committed Text Behavior And Output
+
+- Priority: `P1`
+- Run on: `ENV-A`
+- Steps:
+  1. Create and commit a text annotation.
+  2. Return to default mode, select the committed text, move it, and delete it.
+  3. Create and commit another text annotation, then attempt to re-enter text-editing on it.
+  4. With a live draft still visible, save or copy the selection.
+- Expected:
+  - Committed text annotations can be selected, moved, and deleted.
+  - Committed text annotations are not re-editable as text.
+  - Saved or copied output includes committed text annotations.
+  - Saved or copied output excludes live draft caret, selection highlight, and other draft chrome.
+
 ## Output, Clipboard, And Notifications
 
 ### GF-MAN-OUT-001 - Copy Selection To Clipboard
@@ -614,6 +691,18 @@ unless a real end-to-end bug escapes into the Win32 shell:
   - The saved stroke width is restored.
   - Custom brush and highlighter palette colors appear in their configured wheel
     slots.
+
+### GF-MAN-CFG-005 - Text Point Size Persistence
+
+- Priority: `P1`
+- Run on: `ENV-A`
+- Steps:
+  1. Start a capture, activate the Text tool, and set a non-default text point size before drafting.
+  2. Cancel or finish the capture, then exit Greenflame.
+  3. Relaunch Greenflame, start a fresh capture, activate the Text tool, and start a new draft.
+- Expected:
+  - The chosen text point size persists after closing and reopening the app.
+  - The new draft starts with the previously chosen point size.
 
 ## Mixed-DPI And Multi-Monitor
 

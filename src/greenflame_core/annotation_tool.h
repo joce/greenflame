@@ -13,6 +13,7 @@ enum class AnnotationToolId : uint8_t {
     Arrow,
     Rectangle,
     FilledRectangle,
+    Text,
 };
 
 enum class AnnotationToolbarGlyph : uint8_t {
@@ -23,6 +24,7 @@ enum class AnnotationToolbarGlyph : uint8_t {
     Arrow,
     Rectangle,
     FilledRectangle,
+    Text,
 };
 
 struct AnnotationToolDescriptor final {

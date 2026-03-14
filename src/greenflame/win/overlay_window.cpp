@@ -33,17 +33,36 @@ constexpr int kArrowToolGlyphResourceId = 106;
 constexpr int kRectangleToolGlyphResourceId = 107;
 constexpr int kFilledRectangleToolGlyphResourceId = 108;
 constexpr int kHelpToolGlyphResourceId = 109;
+constexpr int kTextToolGlyphResourceId =
+    110; // Appended after Help; IDs are insertion-ordered.
 constexpr UINT_PTR kBrushSizeOverlayTimerId = 1;
+constexpr UINT_PTR kCaretBlinkTimerId = 2;
 
 constexpr int kThumbnailMaxWidth = 320;
 constexpr int kThumbnailMaxHeight = 120;
+constexpr size_t kTextColorWheelColorSegmentCount = 8;
+constexpr std::array<greenflame::core::TextFontChoice, 4> kTextColorWheelFontChoices = {
+    {greenflame::core::TextFontChoice::Sans, greenflame::core::TextFontChoice::Serif,
+     greenflame::core::TextFontChoice::Mono, greenflame::core::TextFontChoice::Art}};
+constexpr size_t kTextColorWheelSegmentCount =
+    kTextColorWheelColorSegmentCount + kTextColorWheelFontChoices.size();
+
+[[nodiscard]] bool
+Text_annotation_has_text(greenflame::core::TextAnnotation const &annotation) noexcept {
+    for (greenflame::core::TextRun const &run : annotation.runs) {
+        if (!run.text.empty()) {
+            return true;
+        }
+    }
+    return false;
+}
 
 struct ToolbarGlyphResourceSpec final {
     greenflame::OverlayToolbarGlyphId glyph = greenflame::OverlayToolbarGlyphId::None;
     int resource_id = 0;
 };
 
-constexpr std::array<ToolbarGlyphResourceSpec, 7> kToolbarGlyphResourceSpecs = {{
+constexpr std::array<ToolbarGlyphResourceSpec, 8> kToolbarGlyphResourceSpecs = {{
     {greenflame::OverlayToolbarGlyphId::Brush, kBrushToolGlyphResourceId},
     {greenflame::OverlayToolbarGlyphId::Highlighter, kHighlighterToolGlyphResourceId},
     {greenflame::OverlayToolbarGlyphId::Line, kLineToolGlyphResourceId},
@@ -51,6 +70,7 @@ constexpr std::array<ToolbarGlyphResourceSpec, 7> kToolbarGlyphResourceSpecs = {
     {greenflame::OverlayToolbarGlyphId::Rectangle, kRectangleToolGlyphResourceId},
     {greenflame::OverlayToolbarGlyphId::FilledRectangle,
      kFilledRectangleToolGlyphResourceId},
+    {greenflame::OverlayToolbarGlyphId::Text, kTextToolGlyphResourceId},
     {greenflame::OverlayToolbarGlyphId::Help, kHelpToolGlyphResourceId},
 }};
 
@@ -253,6 +273,91 @@ Selection_handle_for_active_annotation_edit(
     default:
         return std::nullopt;
     }
+}
+
+[[nodiscard]] std::array<std::wstring_view, 4>
+Resolve_text_font_families(greenflame::core::AppConfig const *config) noexcept {
+    if (config == nullptr) {
+        return greenflame::core::kDefaultTextFontFamilies;
+    }
+    return {{config->text_font_sans, config->text_font_serif, config->text_font_mono,
+             config->text_font_art}};
+}
+
+[[nodiscard]] std::optional<greenflame::core::TextNavigationAction>
+Text_navigation_action_for_key(WPARAM wparam, bool ctrl) noexcept {
+    using Navigation = greenflame::core::TextNavigationAction;
+    switch (wparam) {
+    case VK_LEFT:
+        return ctrl ? Navigation::WordLeft : Navigation::Left;
+    case VK_RIGHT:
+        return ctrl ? Navigation::WordRight : Navigation::Right;
+    case VK_UP:
+        return Navigation::Up;
+    case VK_DOWN:
+        return Navigation::Down;
+    case VK_HOME:
+        return ctrl ? Navigation::DocHome : Navigation::Home;
+    case VK_END:
+        return ctrl ? Navigation::DocEnd : Navigation::End;
+    case VK_PRIOR:
+        return Navigation::PgUp;
+    case VK_NEXT:
+        return Navigation::PgDn;
+    default:
+        return std::nullopt;
+    }
+}
+
+[[nodiscard]] std::wstring Normalize_text_for_clipboard(std::wstring_view text) {
+    std::wstring normalized;
+    normalized.reserve(text.size() * 2);
+
+    for (size_t index = 0; index < text.size(); ++index) {
+        wchar_t const ch = text[index];
+        if (ch == L'\r') {
+            normalized += L"\r\n";
+            if (index + 1 < text.size() && text[index + 1] == L'\n') {
+                ++index;
+            }
+            continue;
+        }
+        if (ch == L'\n') {
+            normalized += L"\r\n";
+            continue;
+        }
+        normalized.push_back(ch);
+    }
+
+    return normalized;
+}
+
+[[nodiscard]] std::wstring Normalize_text_from_clipboard(std::wstring_view text) {
+    std::wstring normalized;
+    normalized.reserve(text.size());
+
+    for (size_t index = 0; index < text.size(); ++index) {
+        wchar_t const ch = text[index];
+        if (ch == L'\r') {
+            normalized.push_back(L'\n');
+            if (index + 1 < text.size() && text[index + 1] == L'\n') {
+                ++index;
+            }
+            continue;
+        }
+        normalized.push_back(ch);
+    }
+
+    return normalized;
+}
+
+[[nodiscard]] std::optional<greenflame::core::TextFontChoice>
+Text_font_choice_for_wheel_segment(size_t index) noexcept {
+    if (index < kTextColorWheelColorSegmentCount ||
+        index >= kTextColorWheelSegmentCount) {
+        return std::nullopt;
+    }
+    return kTextColorWheelFontChoices[index - kTextColorWheelColorSegmentCount];
 }
 
 template <typename T> struct ComPtr {
@@ -560,6 +665,8 @@ void OverlayWindow::Rebuild_toolbar_buttons() {
             return OverlayToolbarGlyphId::Rectangle;
         case core::AnnotationToolbarGlyph::FilledRectangle:
             return OverlayToolbarGlyphId::FilledRectangle;
+        case core::AnnotationToolbarGlyph::Text:
+            return OverlayToolbarGlyphId::Text;
         case core::AnnotationToolbarGlyph::None:
             return OverlayToolbarGlyphId::None;
         }
@@ -647,9 +754,12 @@ bool OverlayWindow::Create_and_show(HINSTANCE hinstance) {
     hinstance_ = hinstance;
     resources_->Reset();
     mouse_wheel_delta_remainder_ = 0;
-    brush_size_overlay_text_.clear();
+    text_wheel_delta_remainder_ = 0;
+    transient_center_label_text_.clear();
+    caret_blink_visible_ = true;
     suppress_next_lbutton_up_ = false;
     color_wheel_ = {};
+    text_layout_engine_.reset();
 
     core::RectPx const bounds = Get_virtual_desktop_bounds_px();
     HWND const hwnd = CreateWindowExW(
@@ -680,9 +790,15 @@ bool OverlayWindow::Create_and_show(HINSTANCE hinstance) {
         auto const glyphs = resources_->Glyph_pointers();
         (void)d2d_resources_->Upload_glyph_bitmaps(
             std::span<OverlayButtonGlyph const *const>(glyphs));
+        if (d2d_resources_->factory && d2d_resources_->dwrite_factory) {
+            text_layout_engine_ = std::make_unique<D2DTextLayoutEngine>(
+                d2d_resources_->factory.Get(), d2d_resources_->dwrite_factory.Get());
+            text_layout_engine_->Set_font_families(Resolve_text_font_families(config_));
+        }
     }
 
     controller_.Reset_for_session(Get_monitors_with_bounds());
+    controller_.Set_text_layout_engine(text_layout_engine_.get());
     controller_.Refresh_snap_edges(Collect_visible_snap_edges(), bounds.left,
                                    bounds.top);
     controller_.Set_brush_width_px(config_ != nullptr
@@ -703,6 +819,11 @@ bool OverlayWindow::Create_and_show(HINSTANCE hinstance) {
     controller_.Set_highlighter_opacity_percent(
         config_ != nullptr ? config_->highlighter_opacity_percent
                            : core::kDefaultHighlighterOpacityPercent);
+    controller_.Set_text_point_size(config_ != nullptr
+                                        ? config_->text_size_points
+                                        : core::AppConfig::kDefaultTextPointSize);
+    controller_.Set_text_current_font(config_ != nullptr ? config_->text_current_font
+                                                         : core::TextFontChoice::Sans);
     ShowWindow(hwnd, SW_SHOW);
     return true;
 }
@@ -751,33 +872,156 @@ bool OverlayWindow::Handle_brush_width_delta(int32_t delta_steps) {
     return true;
 }
 
+bool OverlayWindow::Handle_text_size_delta(int32_t delta_steps) {
+    if (!controller_.Step_text_size(delta_steps)) {
+        return false;
+    }
+    if (config_ != nullptr) {
+        config_->text_size_points = controller_.Text_point_size();
+        config_->Normalize();
+        (void)Save_app_config(*config_);
+    }
+    Show_text_size_overlay(controller_.Text_point_size());
+    return true;
+}
+
 void OverlayWindow::Show_brush_size_overlay(int32_t width_px) {
     int32_t const duration_ms =
         (config_ != nullptr) ? config_->tool_size_overlay_duration_ms
                              : core::AppConfig::kDefaultToolSizeOverlayDurationMs;
     if (duration_ms <= 0) {
-        Clear_brush_size_overlay(true);
+        Clear_transient_center_label(true);
         return;
     }
 
-    brush_size_overlay_text_ = std::to_wstring(width_px);
-    brush_size_overlay_text_ += L" px";
+    transient_center_label_text_ = std::to_wstring(width_px);
+    transient_center_label_text_ += L" px";
     (void)SetTimer(hwnd_, kBrushSizeOverlayTimerId, static_cast<UINT>(duration_ms),
                    nullptr);
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
-void OverlayWindow::Clear_brush_size_overlay(bool repaint) {
+void OverlayWindow::Show_text_size_overlay(int32_t size_pt) {
+    int32_t const duration_ms =
+        (config_ != nullptr) ? config_->tool_size_overlay_duration_ms
+                             : core::AppConfig::kDefaultToolSizeOverlayDurationMs;
+    if (duration_ms <= 0) {
+        Clear_transient_center_label(true);
+        return;
+    }
+
+    transient_center_label_text_ = std::to_wstring(size_pt);
+    transient_center_label_text_ += L" pt";
+    (void)SetTimer(hwnd_, kBrushSizeOverlayTimerId, static_cast<UINT>(duration_ms),
+                   nullptr);
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void OverlayWindow::Clear_transient_center_label(bool repaint) {
     if (hwnd_ != nullptr) {
         (void)KillTimer(hwnd_, kBrushSizeOverlayTimerId);
     }
-    if (brush_size_overlay_text_.empty()) {
+    if (transient_center_label_text_.empty()) {
         return;
     }
-    brush_size_overlay_text_.clear();
+    transient_center_label_text_.clear();
     if (repaint && hwnd_ != nullptr) {
         InvalidateRect(hwnd_, nullptr, FALSE);
     }
+}
+
+bool OverlayWindow::Read_clipboard_text(std::wstring &out) const {
+    out.clear();
+    HWND const clipboard_owner =
+        (hwnd_ != nullptr && IsWindow(hwnd_) != 0) ? hwnd_ : nullptr;
+    if (OpenClipboard(clipboard_owner) == 0) {
+        return false;
+    }
+
+    bool read_text = false;
+    HGLOBAL clipboard_data = nullptr;
+    do {
+        if (IsClipboardFormatAvailable(CF_UNICODETEXT) == 0) {
+            break;
+        }
+        clipboard_data = GetClipboardData(CF_UNICODETEXT);
+        if (clipboard_data == nullptr) {
+            break;
+        }
+        void const *const raw = GlobalLock(clipboard_data);
+        if (raw == nullptr) {
+            break;
+        }
+
+        size_t const wchar_capacity = GlobalSize(clipboard_data) / sizeof(wchar_t);
+        std::vector<wchar_t> chars(wchar_capacity);
+        std::copy_n(static_cast<wchar_t const *>(raw), wchar_capacity, chars.begin());
+        auto const terminator = std::find(chars.begin(), chars.end(), L'\0');
+        out = Normalize_text_from_clipboard(std::wstring_view(
+            chars.data(),
+            static_cast<size_t>(std::distance(chars.begin(), terminator))));
+        GlobalUnlock(clipboard_data);
+        read_text = true;
+    } while (false);
+
+    CloseClipboard();
+    return read_text;
+}
+
+void OverlayWindow::Write_clipboard_text(std::wstring_view text) const {
+    if (text.empty()) {
+        return;
+    }
+
+    std::wstring const clipboard_text = Normalize_text_for_clipboard(text);
+    size_t const bytes = (clipboard_text.size() + 1) * sizeof(wchar_t);
+    HGLOBAL clipboard_data = GlobalAlloc(GMEM_MOVEABLE, bytes);
+    if (clipboard_data == nullptr) {
+        return;
+    }
+
+    void *const raw = GlobalLock(clipboard_data);
+    if (raw == nullptr) {
+        GlobalFree(clipboard_data);
+        return;
+    }
+
+    std::copy_n(clipboard_text.c_str(), clipboard_text.size() + 1,
+                static_cast<wchar_t *>(raw));
+    GlobalUnlock(clipboard_data);
+
+    HWND const clipboard_owner =
+        (hwnd_ != nullptr && IsWindow(hwnd_) != 0) ? hwnd_ : nullptr;
+    if (OpenClipboard(clipboard_owner) == 0) {
+        GlobalFree(clipboard_data);
+        return;
+    }
+
+    if (EmptyClipboard() != 0 &&
+        SetClipboardData(CF_UNICODETEXT, clipboard_data) != nullptr) {
+        clipboard_data = nullptr;
+    }
+    CloseClipboard();
+    if (clipboard_data != nullptr) {
+        GlobalFree(clipboard_data);
+    }
+}
+
+void OverlayWindow::Reset_caret_blink() {
+    caret_blink_visible_ = true;
+    if (hwnd_ == nullptr || !controller_.Has_active_text_edit()) {
+        if (hwnd_ != nullptr) {
+            (void)KillTimer(hwnd_, kCaretBlinkTimerId);
+        }
+        return;
+    }
+
+    UINT const interval = GetCaretBlinkTime();
+    if (interval == 0 || interval == INFINITE) {
+        (void)KillTimer(hwnd_, kCaretBlinkTimerId);
+        return;
+    }
+    (void)SetTimer(hwnd_, kCaretBlinkTimerId, interval, nullptr);
 }
 
 bool OverlayWindow::Can_show_color_wheel() const noexcept {
@@ -818,6 +1062,9 @@ size_t OverlayWindow::Current_annotation_color_index() const noexcept {
 }
 
 size_t OverlayWindow::Current_color_wheel_segment_count() const noexcept {
+    if (controller_.Active_annotation_tool() == core::AnnotationToolId::Text) {
+        return kTextColorWheelSegmentCount;
+    }
     return Current_tool_color_palette().size();
 }
 
@@ -862,6 +1109,30 @@ bool OverlayWindow::Update_color_wheel_hover(core::PointPx cursor) {
 
 void OverlayWindow::Select_color_wheel_segment(size_t index) {
     std::span<const COLORREF> const palette = Current_tool_color_palette();
+    if (controller_.Active_annotation_tool() == core::AnnotationToolId::Text) {
+        if (index < palette.size()) {
+            controller_.Set_brush_annotation_color(palette[index]);
+            if (config_ != nullptr) {
+                config_->current_annotation_color_index = static_cast<int32_t>(index);
+                config_->Normalize();
+                (void)Save_app_config(*config_);
+            }
+            return;
+        }
+
+        if (std::optional<core::TextFontChoice> const font_choice =
+                Text_font_choice_for_wheel_segment(index);
+            font_choice.has_value()) {
+            controller_.Set_text_current_font(*font_choice);
+            if (config_ != nullptr) {
+                config_->text_current_font = *font_choice;
+                config_->Normalize();
+                (void)Save_app_config(*config_);
+            }
+        }
+        return;
+    }
+
     if (index >= palette.size()) {
         return;
     }
@@ -1074,6 +1345,7 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
     bool const eff_ctrl = ctrl || (wparam == VK_CONTROL);
     bool const eff_shift = shift || (wparam == VK_SHIFT);
     bool const eff_alt = alt || (wparam == VK_MENU);
+    bool const had_text_edit = controller_.Has_active_text_edit();
 
     if (wparam == VK_ESCAPE) {
         if (color_wheel_.visible) {
@@ -1084,10 +1356,129 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
             Hide_help_overlay(false);
             return 0;
         }
-        Apply_action(controller_.On_cancel());
+        core::OverlayAction const action = controller_.On_cancel();
+        Apply_action(action);
+        if (!Is_open()) {
+            return 0;
+        }
+        if (!controller_.Has_active_text_edit() && hwnd_ != nullptr) {
+            caret_blink_visible_ = true;
+            (void)KillTimer(hwnd_, kCaretBlinkTimerId);
+        }
+        (void)Refresh_hover_handle();
+        Refresh_cursor();
         return 0;
     }
     if (color_wheel_.visible) {
+        return 0;
+    }
+    if (had_text_edit) {
+        core::TextEditController *const text_edit = controller_.Active_text_edit();
+        if (text_edit == nullptr) {
+            return 0;
+        }
+
+        auto repaint_text_draft = [&]() {
+            Reset_caret_blink();
+            Refresh_cursor();
+            InvalidateRect(hwnd_, nullptr, FALSE);
+        };
+
+        if (wparam == VK_RETURN) {
+            if (eff_ctrl) {
+                text_edit->On_text_input(L"\n");
+                repaint_text_draft();
+            } else if (controller_.Commit_active_text_edit()) {
+                if (d2d_resources_) {
+                    d2d_resources_->Invalidate_annotations();
+                }
+                caret_blink_visible_ = true;
+                (void)KillTimer(hwnd_, kCaretBlinkTimerId);
+                (void)Refresh_hover_handle();
+                Refresh_cursor();
+                InvalidateRect(hwnd_, nullptr, FALSE);
+            }
+            return 0;
+        }
+        if (std::optional<core::TextNavigationAction> const action =
+                Text_navigation_action_for_key(wparam, eff_ctrl);
+            action.has_value()) {
+            text_edit->On_navigation(*action, eff_shift);
+            repaint_text_draft();
+            return 0;
+        }
+        if (wparam == VK_BACK) {
+            text_edit->On_backspace(eff_ctrl);
+            repaint_text_draft();
+            return 0;
+        }
+        if (wparam == VK_DELETE) {
+            text_edit->On_delete(eff_ctrl);
+            repaint_text_draft();
+            return 0;
+        }
+        if (wparam == VK_INSERT) {
+            text_edit->Toggle_insert_mode();
+            repaint_text_draft();
+            return 0;
+        }
+        if (eff_ctrl && wparam == L'B') {
+            text_edit->Toggle_style(core::TextStyleToggle::Bold);
+            repaint_text_draft();
+            return 0;
+        }
+        if (eff_ctrl && wparam == L'I') {
+            text_edit->Toggle_style(core::TextStyleToggle::Italic);
+            repaint_text_draft();
+            return 0;
+        }
+        if (eff_ctrl && wparam == L'U') {
+            text_edit->Toggle_style(core::TextStyleToggle::Underline);
+            repaint_text_draft();
+            return 0;
+        }
+        if (eff_alt && eff_shift && wparam == L'5') {
+            text_edit->Toggle_style(core::TextStyleToggle::Strikethrough);
+            repaint_text_draft();
+            return 0;
+        }
+        if (eff_ctrl && wparam == L'A') {
+            text_edit->On_select_all();
+            repaint_text_draft();
+            return 0;
+        }
+        if (eff_ctrl && wparam == L'C') {
+            std::wstring const copied_text = text_edit->Copy_selected_text();
+            if (!copied_text.empty()) {
+                Write_clipboard_text(copied_text);
+            }
+            return 0;
+        }
+        if (eff_ctrl && wparam == L'X') {
+            std::wstring const cut_text = text_edit->Cut_selected_text();
+            if (!cut_text.empty()) {
+                Write_clipboard_text(cut_text);
+                repaint_text_draft();
+            }
+            return 0;
+        }
+        if (eff_ctrl && wparam == L'V') {
+            std::wstring clipboard_text;
+            if (Read_clipboard_text(clipboard_text)) {
+                text_edit->Paste_text(clipboard_text);
+                repaint_text_draft();
+            }
+            return 0;
+        }
+        if (eff_ctrl && wparam == L'Z') {
+            if (eff_shift) {
+                text_edit->Redo();
+            } else {
+                text_edit->Undo();
+            }
+            repaint_text_draft();
+            return 0;
+        }
         return 0;
     }
     if (eff_ctrl && wparam == L'H') {
@@ -1129,7 +1520,11 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
     if (eff_ctrl && !eff_alt) {
         if (std::optional<int32_t> const delta = Brush_width_delta_for_key(wparam);
             delta.has_value()) {
-            (void)Handle_brush_width_delta(*delta);
+            if (controller_.Active_annotation_tool() == core::AnnotationToolId::Text) {
+                (void)Handle_text_size_delta(*delta);
+            } else {
+                (void)Handle_brush_width_delta(*delta);
+            }
             return 0;
         }
     }
@@ -1191,6 +1586,9 @@ LRESULT OverlayWindow::On_key_up(WPARAM wparam, LPARAM lparam) {
     if (hotkey_help_overlay_.Is_visible()) {
         return 0;
     }
+    if (controller_.Has_active_text_edit()) {
+        return 0;
+    }
 
     // Force-clear the released key from the effective modifier state.
     bool const eff_shift =
@@ -1209,15 +1607,43 @@ LRESULT OverlayWindow::On_key_up(WPARAM wparam, LPARAM lparam) {
     return DefWindowProcW(hwnd_, message_id, wparam, lparam);
 }
 
+LRESULT OverlayWindow::On_char(WPARAM wparam) {
+    core::TextEditController *const text_edit = controller_.Active_text_edit();
+    if (text_edit == nullptr) {
+        return 0;
+    }
+
+    // Ctrl+letter accelerators can still generate WM_CHAR (for example Ctrl+I as
+    // tab). The shortcut is already handled in WM_KEYDOWN, so suppress the char.
+    bool const ctrl_down = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+    bool const alt_down = (GetKeyState(VK_MENU) & 0x8000) != 0;
+    if (ctrl_down || alt_down) {
+        return 0;
+    }
+
+    wchar_t const code_unit = static_cast<wchar_t>(wparam);
+    if (code_unit < 32 && code_unit != L'\t') {
+        return 0;
+    }
+
+    std::array<wchar_t, 1> text = {{code_unit}};
+    text_edit->On_text_input(
+        std::wstring_view(text.data(), static_cast<size_t>(text.size())));
+    Reset_caret_blink();
+    InvalidateRect(hwnd_, nullptr, FALSE);
+    return 0;
+}
+
 LRESULT OverlayWindow::On_l_button_down() {
     if (!resources_->capture.Is_valid()) {
         return 0;
     }
+    bool const had_text_edit = controller_.Has_active_text_edit();
+    core::PointPx const cur = Get_client_cursor_pos_px(hwnd_);
     if (color_wheel_.visible) {
         suppress_next_lbutton_up_ = true;
         std::optional<size_t> const segment = core::Hit_test_color_wheel_segment(
-            color_wheel_.center, Get_client_cursor_pos_px(hwnd_),
-            Current_color_wheel_segment_count());
+            color_wheel_.center, cur, Current_color_wheel_segment_count());
         Dismiss_color_wheel(false);
         if (segment.has_value()) {
             Select_color_wheel_segment(*segment);
@@ -1232,13 +1658,46 @@ LRESULT OverlayWindow::On_l_button_down() {
     }
     // Route click to any toolbar button under the cursor (consume — do not start
     // dragging).
-    if (controller_.Can_interact_with_annotation_toolbar() &&
-        !toolbar_buttons_.empty()) {
-        core::PointPx const cur = Get_client_cursor_pos_px(hwnd_);
-        (void)Update_toolbar_hover_states(cur);
-        for (auto const &btn : toolbar_buttons_) {
+    if (!toolbar_buttons_.empty()) {
+        ToolbarButtonEntry *hit_button = nullptr;
+        for (auto &btn : toolbar_buttons_) {
             if (btn.button && btn.button->Hit_test(cur)) {
-                btn.button->On_mouse_down(cur);
+                hit_button = &btn;
+                break;
+            }
+        }
+
+        if (hit_button != nullptr) {
+            if (controller_.Can_interact_with_annotation_toolbar()) {
+                (void)Update_toolbar_hover_states(cur);
+                hit_button->button->On_mouse_down(cur);
+                InvalidateRect(hwnd_, nullptr, FALSE);
+                return 0;
+            }
+
+            if (had_text_edit) {
+                if (core::TextEditController *const text_edit =
+                        controller_.Active_text_edit();
+                    text_edit != nullptr) {
+                    core::TextDraftView const view = text_edit->Build_view();
+                    bool const has_text = view.annotation != nullptr &&
+                                          Text_annotation_has_text(*view.annotation);
+                    if (has_text) {
+                        (void)controller_.Commit_active_text_edit();
+                        if (d2d_resources_) {
+                            d2d_resources_->Invalidate_annotations();
+                        }
+                    } else {
+                        controller_.Cancel_text_draft();
+                    }
+                    caret_blink_visible_ = true;
+                    if (hwnd_ != nullptr) {
+                        (void)KillTimer(hwnd_, kCaretBlinkTimerId);
+                    }
+                }
+                (void)Update_toolbar_hover_states(cur);
+                hit_button->button->On_mouse_down(cur);
+                Refresh_cursor();
                 InvalidateRect(hwnd_, nullptr, FALSE);
                 return 0;
             }
@@ -1249,7 +1708,7 @@ LRESULT OverlayWindow::On_l_button_down() {
     bool const ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
     bool const alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
     core::OverlayModifierState mods{shift, ctrl, alt};
-    core::PointPx const cursor_client = Get_client_cursor_pos_px(hwnd_);
+    core::PointPx const cursor_client = cur;
     core::PointPx const cursor_screen = Get_cursor_pos_px();
     RECT wr{};
     GetWindowRect(hwnd_, &wr);
@@ -1275,6 +1734,12 @@ LRESULT OverlayWindow::On_l_button_down() {
         controller_.On_primary_press(mods, cursor_client, cursor_screen, win_handle,
                                      monitor_idx, std::optional<core::RectPx>{}, vdesk,
                                      Collect_visible_snap_edges(), wr.left, wr.top));
+    if (controller_.Has_active_text_edit()) {
+        Reset_caret_blink();
+    } else if (had_text_edit && hwnd_ != nullptr) {
+        caret_blink_visible_ = true;
+        (void)KillTimer(hwnd_, kCaretBlinkTimerId);
+    }
     bool const hover_changed = Refresh_hover_handle();
     Refresh_cursor();
     if (hover_changed) {
@@ -1318,7 +1783,8 @@ LRESULT OverlayWindow::On_mouse_move() {
     bool const shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
     bool const ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
     bool const alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
-    core::OverlayModifierState mods{shift, ctrl, alt};
+    bool const primary_down = (GetKeyState(VK_LBUTTON) & 0x8000) != 0;
+    core::OverlayModifierState mods{shift, ctrl, alt, primary_down};
     core::PointPx const cursor_client = Get_client_cursor_pos_px(hwnd_);
 
     // Resolve expensive screen queries lazily — only when a preview update is needed.
@@ -1348,6 +1814,9 @@ LRESULT OverlayWindow::On_mouse_move() {
     core::OverlayAction const action = controller_.On_pointer_move(
         mods, cursor_client, cursor_screen, win_rect, vdesk, monitor_idx, ox, oy);
     Apply_action(action);
+    if (controller_.Has_active_text_edit() && (GetKeyState(VK_LBUTTON) & 0x8000) != 0) {
+        Reset_caret_blink();
+    }
 
     if (Refresh_hover_handle()) {
         InvalidateRect(hwnd_, nullptr, TRUE);
@@ -1375,12 +1844,41 @@ LRESULT OverlayWindow::On_mouse_wheel(WPARAM wparam) {
     }
     std::optional<core::AnnotationToolId> const active_tool =
         controller_.Active_annotation_tool();
-    if (!active_tool.has_value() ||
-        (*active_tool != core::AnnotationToolId::Freehand &&
-         *active_tool != core::AnnotationToolId::Highlighter &&
-         *active_tool != core::AnnotationToolId::Line &&
-         *active_tool != core::AnnotationToolId::Arrow &&
-         *active_tool != core::AnnotationToolId::Rectangle)) {
+    if (!active_tool.has_value()) {
+        mouse_wheel_delta_remainder_ = 0;
+        text_wheel_delta_remainder_ = 0;
+        return 0;
+    }
+
+    if (*active_tool == core::AnnotationToolId::Text) {
+        mouse_wheel_delta_remainder_ = 0;
+        if (controller_.Has_active_text_edit()) {
+            text_wheel_delta_remainder_ = 0;
+            return 0;
+        }
+
+        text_wheel_delta_remainder_ += GET_WHEEL_DELTA_WPARAM(wparam);
+        int32_t delta_steps = 0;
+        while (text_wheel_delta_remainder_ >= WHEEL_DELTA) {
+            ++delta_steps;
+            text_wheel_delta_remainder_ -= WHEEL_DELTA;
+        }
+        while (text_wheel_delta_remainder_ <= -WHEEL_DELTA) {
+            --delta_steps;
+            text_wheel_delta_remainder_ += WHEEL_DELTA;
+        }
+        if (delta_steps != 0) {
+            (void)Handle_text_size_delta(delta_steps);
+        }
+        return 0;
+    }
+
+    text_wheel_delta_remainder_ = 0;
+    if (*active_tool != core::AnnotationToolId::Freehand &&
+        *active_tool != core::AnnotationToolId::Highlighter &&
+        *active_tool != core::AnnotationToolId::Line &&
+        *active_tool != core::AnnotationToolId::Arrow &&
+        *active_tool != core::AnnotationToolId::Rectangle) {
         mouse_wheel_delta_remainder_ = 0;
         return 0;
     }
@@ -1406,6 +1904,7 @@ LRESULT OverlayWindow::On_l_button_up() {
         suppress_next_lbutton_up_ = false;
         return 0;
     }
+    bool const had_text_edit = controller_.Has_active_text_edit();
     if (hotkey_help_overlay_.Is_visible()) {
         return 0;
     }
@@ -1452,6 +1951,12 @@ LRESULT OverlayWindow::On_l_button_up() {
     core::OverlayModifierState mods{};
     mods.alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
     Apply_action(controller_.On_primary_release(mods, Get_client_cursor_pos_px(hwnd_)));
+    if (controller_.Has_active_text_edit()) {
+        Reset_caret_blink();
+    } else if (had_text_edit && hwnd_ != nullptr) {
+        caret_blink_visible_ = true;
+        (void)KillTimer(hwnd_, kCaretBlinkTimerId);
+    }
     bool const hover_changed = Refresh_hover_handle();
     Refresh_cursor();
     if (hover_changed) {
@@ -1496,7 +2001,17 @@ LRESULT OverlayWindow::On_r_button_down() {
 
 LRESULT OverlayWindow::On_timer(WPARAM wparam) {
     if (wparam == kBrushSizeOverlayTimerId) {
-        Clear_brush_size_overlay(true);
+        Clear_transient_center_label(true);
+        return 0;
+    }
+    if (wparam == kCaretBlinkTimerId) {
+        if (!controller_.Has_active_text_edit()) {
+            caret_blink_visible_ = true;
+            (void)KillTimer(hwnd_, kCaretBlinkTimerId);
+            return 0;
+        }
+        caret_blink_visible_ = !caret_blink_visible_;
+        InvalidateRect(hwnd_, nullptr, FALSE);
         return 0;
     }
     return DefWindowProcW(hwnd_, WM_TIMER, wparam, 0);
@@ -1531,6 +2046,8 @@ LRESULT OverlayWindow::Wnd_proc(UINT msg, WPARAM wparam, LPARAM lparam) {
     case WM_KEYUP:
     case WM_SYSKEYUP:
         return On_key_up(wparam, lparam);
+    case WM_CHAR:
+        return On_char(wparam);
     case WM_LBUTTONDOWN:
         return On_l_button_down();
     case WM_MOUSEMOVE:
@@ -1967,6 +2484,11 @@ LRESULT OverlayWindow::On_paint() {
         }
 
         D2DPaintInput input{};
+        std::optional<core::TextDraftView> draft_text_view = std::nullopt;
+        if (core::TextEditController *const text_edit = controller_.Active_text_edit();
+            text_edit != nullptr) {
+            draft_text_view = text_edit->Build_view();
+        }
         input.dragging = s.dragging;
         input.handle_dragging = s.handle_dragging;
         input.move_dragging = s.move_dragging;
@@ -1999,14 +2521,23 @@ LRESULT OverlayWindow::On_paint() {
                       core::StrokeStyle::kMaxOpacityPercent)) /
                       100.f
                 : 1.0f;
-        if (!input.draft_freehand_style.has_value()) {
+        if (draft_text_view.has_value()) {
+            input.draft_text_annotation = draft_text_view->annotation;
+            input.draft_text_selection_rects =
+                std::move(draft_text_view->selection_rects);
+            input.draft_text_caret_rect = draft_text_view->insert_mode
+                                              ? draft_text_view->caret_rect
+                                              : draft_text_view->overwrite_caret_rect;
+            input.draft_text_insert_mode = draft_text_view->insert_mode;
+            input.draft_text_blink_visible = caret_blink_visible_;
+        } else if (!input.draft_freehand_style.has_value()) {
             input.draft_annotation = controller_.Draft_annotation();
         }
         if (controller_.Should_show_selected_annotation_handles()) {
             input.selected_annotation = controller_.Selected_annotation();
             input.selected_annotation_bounds = controller_.Selected_annotation_bounds();
         }
-        input.transient_center_label_text = brush_size_overlay_text_;
+        input.transient_center_label_text = transient_center_label_text_;
         input.toolbar_tooltip_text = Hovered_toolbar_tooltip_text();
         input.hovered_toolbar_bounds = Hovered_toolbar_button_bounds();
         input.show_color_wheel = color_wheel_.visible;
@@ -2015,6 +2546,10 @@ LRESULT OverlayWindow::On_paint() {
         input.color_wheel_segment_count = Current_color_wheel_segment_count();
         input.color_wheel_selected_segment = Current_annotation_color_index();
         input.color_wheel_hovered_segment = color_wheel_.hovered_segment;
+        input.color_wheel_is_text_style =
+            controller_.Active_annotation_tool() == core::AnnotationToolId::Text;
+        input.color_wheel_text_selected_font = controller_.Text_current_font();
+        input.color_wheel_font_families = Resolve_text_font_families(config_);
         if (s.handle_dragging && s.resize_handle.has_value()) {
             input.highlight_handle = s.resize_handle;
         } else if (!s.move_dragging && !s.dragging && !s.modifier_preview &&
@@ -2053,8 +2588,6 @@ void OverlayWindow::Handle_device_loss() {
     if (!d2d_resources_ || !resources_->capture.Is_valid()) {
         return;
     }
-    RECT rect{};
-    GetClientRect(hwnd_, &rect);
     int const w = resources_->capture.width;
     int const h = resources_->capture.height;
 
@@ -2063,6 +2596,8 @@ void OverlayWindow::Handle_device_loss() {
         !d2d_resources_->Upload_screenshot(resources_->capture) ||
         !d2d_resources_->Create_shared_resources() ||
         !d2d_resources_->Create_cache_targets(w, h)) {
+        controller_.Set_text_layout_engine(nullptr);
+        text_layout_engine_.reset();
         d2d_resources_.reset();
         InvalidateRect(hwnd_, nullptr, TRUE);
         return;
@@ -2070,16 +2605,30 @@ void OverlayWindow::Handle_device_loss() {
     auto const glyphs = resources_->Glyph_pointers();
     (void)d2d_resources_->Upload_glyph_bitmaps(
         std::span<OverlayButtonGlyph const *const>(glyphs));
+    if (!text_layout_engine_ && d2d_resources_->factory &&
+        d2d_resources_->dwrite_factory) {
+        text_layout_engine_ = std::make_unique<D2DTextLayoutEngine>(
+            d2d_resources_->factory.Get(), d2d_resources_->dwrite_factory.Get());
+    }
+    if (text_layout_engine_) {
+        text_layout_engine_->Set_font_families(Resolve_text_font_families(config_));
+    }
+    controller_.Set_text_layout_engine(text_layout_engine_.get());
     d2d_resources_->Invalidate_annotations();
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
 LRESULT OverlayWindow::On_destroy() {
-    Clear_brush_size_overlay(false);
+    Clear_transient_center_label(false);
+    caret_blink_visible_ = true;
+    (void)KillTimer(hwnd_, kCaretBlinkTimerId);
     mouse_wheel_delta_remainder_ = 0;
+    text_wheel_delta_remainder_ = 0;
     suppress_next_lbutton_up_ = false;
     color_wheel_ = {};
     toolbar_buttons_.clear();
+    controller_.Set_text_layout_engine(nullptr);
+    text_layout_engine_.reset();
     if (d2d_resources_) {
         d2d_resources_->Release_all();
         d2d_resources_.reset();
@@ -2106,6 +2655,15 @@ void OverlayWindow::Refresh_cursor() {
         SetCursor(LoadCursorW(nullptr, IDC_ARROW));
         return;
     }
+    if (!toolbar_buttons_.empty()) {
+        core::PointPx const cursor = Get_client_cursor_pos_px(hwnd_);
+        for (auto const &entry : toolbar_buttons_) {
+            if (entry.button != nullptr && entry.button->Hit_test(cursor)) {
+                SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+                return;
+            }
+        }
+    }
 
     auto const &s = controller_.State();
     if (s.move_dragging || controller_.Is_annotation_dragging()) {
@@ -2122,6 +2680,10 @@ void OverlayWindow::Refresh_cursor() {
         } else {
             SetCursor(Load_annotation_tool_cursor(hinstance_));
         }
+        return;
+    }
+    if (controller_.Has_active_text_edit()) {
+        SetCursor(LoadCursorW(nullptr, IDC_IBEAM));
         return;
     }
     if (controller_.Has_active_annotation_gesture()) {
@@ -2172,9 +2734,15 @@ void OverlayWindow::Refresh_cursor() {
             *active_tool == core::AnnotationToolId::Rectangle ||
             *active_tool == core::AnnotationToolId::FilledRectangle) {
             SetCursor(Load_annotation_tool_cursor(hinstance_));
+        } else if (*active_tool == core::AnnotationToolId::Text) {
+            SetCursor(LoadCursorW(nullptr, IDC_IBEAM));
         } else {
             SetCursor(LoadCursorW(nullptr, IDC_ARROW));
         }
+        return;
+    }
+    if (controller_.Active_annotation_tool() == core::AnnotationToolId::Text) {
+        SetCursor(LoadCursorW(nullptr, IDC_IBEAM));
         return;
     }
     SetCursor(LoadCursorW(nullptr, IDC_CROSS));

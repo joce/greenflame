@@ -2,6 +2,7 @@
 
 #include "greenflame_core/rect_px.h"
 #include "greenflame_core/selection_handles.h"
+#include "greenflame_core/text_annotation_types.h"
 
 namespace greenflame::core {
 
@@ -9,6 +10,7 @@ enum class AnnotationKind : uint8_t {
     Freehand,
     Line,
     Rectangle,
+    Text,
 };
 
 enum class FreehandTipShape : uint8_t {
@@ -59,8 +61,8 @@ struct RectangleAnnotation final {
     constexpr bool operator==(RectangleAnnotation const &) const noexcept = default;
 };
 
-using AnnotationData =
-    std::variant<FreehandStrokeAnnotation, LineAnnotation, RectangleAnnotation>;
+using AnnotationData = std::variant<FreehandStrokeAnnotation, LineAnnotation,
+                                    RectangleAnnotation, TextAnnotation>;
 
 template <class... Ts> struct Overloaded : Ts... {
     using Ts::operator()...;

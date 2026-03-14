@@ -9,6 +9,72 @@ constexpr size_t kMaxWindowsPathChars = 260;
 constexpr size_t kMaxConfigPathChars = kMaxWindowsPathChars - 1;
 constexpr int32_t kMinBrushWidthPx = 1;
 constexpr int32_t kMaxBrushWidthPx = 50;
+constexpr size_t kMaxTextFontFamilyChars = 128;
+constexpr std::array<int32_t, 24> kAllowedTextPointSizes = {{
+    5,  8,  9,  10, 11, 12, 14, 16,  18,  20,  22,  24,
+    26, 28, 36, 48, 72, 84, 96, 108, 144, 192, 216, 288,
+}};
+
+[[nodiscard]] int32_t Normalize_text_point_size(int32_t point_size) noexcept {
+    int32_t nearest = kAllowedTextPointSizes.front();
+    int64_t nearest_distance =
+        std::abs(static_cast<int64_t>(point_size) - static_cast<int64_t>(nearest));
+    for (int32_t const allowed_size : kAllowedTextPointSizes) {
+        int64_t const distance = std::abs(static_cast<int64_t>(point_size) -
+                                          static_cast<int64_t>(allowed_size));
+        if (distance < nearest_distance) {
+            nearest = allowed_size;
+            nearest_distance = distance;
+        }
+    }
+    return nearest;
+}
+
+[[nodiscard]] TextFontChoice
+Normalize_text_font_choice(TextFontChoice choice) noexcept {
+    switch (choice) {
+    case TextFontChoice::Sans:
+    case TextFontChoice::Serif:
+    case TextFontChoice::Mono:
+    case TextFontChoice::Art:
+        return choice;
+    }
+    return TextFontChoice::Sans;
+}
+
+[[nodiscard]] std::wstring_view
+Default_text_font_family(TextFontChoice choice) noexcept {
+    switch (choice) {
+    case TextFontChoice::Sans:
+        return L"Arial";
+    case TextFontChoice::Serif:
+        return L"Times New Roman";
+    case TextFontChoice::Mono:
+        return L"Courier New";
+    case TextFontChoice::Art:
+        return L"Comic Sans MS";
+    }
+    return L"Arial";
+}
+
+void Normalize_text_font_family(std::wstring &value, TextFontChoice choice) {
+    size_t begin = 0;
+    size_t end = value.size();
+    while (begin < end && std::iswspace(value[begin]) != 0) {
+        ++begin;
+    }
+    while (end > begin && std::iswspace(value[end - 1]) != 0) {
+        --end;
+    }
+
+    value = value.substr(begin, end - begin);
+    if (value.size() > kMaxTextFontFamilyChars) {
+        value.resize(kMaxTextFontFamilyChars);
+    }
+    if (value.empty()) {
+        value.assign(Default_text_font_family(choice));
+    }
+}
 
 } // namespace
 
@@ -37,6 +103,12 @@ void AppConfig::Normalize() {
     highlighter_opacity_percent =
         std::clamp(highlighter_opacity_percent, StrokeStyle::kMinOpacityPercent,
                    StrokeStyle::kMaxOpacityPercent);
+    text_size_points = Normalize_text_point_size(text_size_points);
+    text_current_font = Normalize_text_font_choice(text_current_font);
+    Normalize_text_font_family(text_font_sans, TextFontChoice::Sans);
+    Normalize_text_font_family(text_font_serif, TextFontChoice::Serif);
+    Normalize_text_font_family(text_font_mono, TextFontChoice::Mono);
+    Normalize_text_font_family(text_font_art, TextFontChoice::Art);
     tool_size_overlay_duration_ms = std::max(tool_size_overlay_duration_ms, 0);
 
     if (default_save_format.empty()) {

@@ -460,7 +460,7 @@ OverlayAction OverlayController::On_primary_press(
         }
         state_.modifier_preview = false;
         state_.live_rect = {};
-        return OverlayAction::Repaint;
+        return OverlayAction::InvalidateFrozenCache;
     }
 
     // ---- When a committed selection exists, resolve resize / tool / move ----

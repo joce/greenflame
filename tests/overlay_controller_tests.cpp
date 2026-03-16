@@ -293,7 +293,7 @@ TEST(overlay_controller, D_CtrlPreview_PressCommitsWindow) {
         Ctrl_only(), {200, 150}, {200, 150}, std::optional<HWND>{fake_hwnd},
         std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0, 0);
 
-    EXPECT_EQ(action, OverlayAction::Repaint);
+    EXPECT_EQ(action, OverlayAction::InvalidateFrozenCache);
     EXPECT_FALSE(c.State().modifier_preview);
     EXPECT_EQ(c.State().final_selection, win_screen);
     EXPECT_EQ(c.State().selection_source, SaveSelectionSource::Window);
@@ -311,7 +311,7 @@ TEST(overlay_controller, D_ShiftPreview_PressCommitsMonitor) {
         Shift_only(), {500, 300}, {500, 300}, std::nullopt, std::optional<size_t>{0u},
         std::nullopt, {}, Make_snap_edges(c), 0, 0);
 
-    EXPECT_EQ(action, OverlayAction::Repaint);
+    EXPECT_EQ(action, OverlayAction::InvalidateFrozenCache);
     EXPECT_EQ(c.State().selection_source, SaveSelectionSource::Monitor);
     EXPECT_EQ(c.State().selection_monitor_index, std::optional<size_t>{0u});
     EXPECT_FALSE(c.State().dragging);
@@ -328,7 +328,7 @@ TEST(overlay_controller, D_ShiftCtrlPreview_PressCommitsDesktop) {
         c.On_primary_press(Shift_ctrl(), {1000, 500}, {1000, 500}, std::nullopt,
                            std::nullopt, std::nullopt, vdesk, Make_snap_edges(c), 0, 0);
 
-    EXPECT_EQ(action, OverlayAction::Repaint);
+    EXPECT_EQ(action, OverlayAction::InvalidateFrozenCache);
     EXPECT_EQ(c.State().selection_source, SaveSelectionSource::Desktop);
     EXPECT_FALSE(c.State().dragging);
 }

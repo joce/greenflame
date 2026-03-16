@@ -424,12 +424,22 @@ void Draw_selection_border(ID2D1RenderTarget *rt, D2DOverlayResources &res,
     }
     res.solid_brush->SetColor(kBorderColor);
     D2D1_RECT_F const rf = Rect(sel);
-    D2D1_RECT_F const inset =
-        D2D1::RectF(rf.left + kHalfPixel, rf.top + kHalfPixel, rf.right - kHalfPixel,
-                    rf.bottom - kHalfPixel);
+    float const l = rf.left + kHalfPixel;
+    float const r = rf.right - kHalfPixel;
+    float const t = rf.top + kHalfPixel;
+    float const b = rf.bottom - kHalfPixel;
     ID2D1StrokeStyle *style =
         dashed ? res.dashed_style.Get() : res.flat_cap_style.Get();
-    rt->DrawRectangle(inset, res.solid_brush.Get(), 1.f, style);
+    // Four distinct lines (no marquee): horizontals both left-to-right,
+    // verticals both top-to-bottom.
+    rt->DrawLine(D2D1::Point2F(l, t), D2D1::Point2F(r, t), res.solid_brush.Get(),
+                 1.f, style);
+    rt->DrawLine(D2D1::Point2F(l, b), D2D1::Point2F(r, b), res.solid_brush.Get(),
+                 1.f, style);
+    rt->DrawLine(D2D1::Point2F(l, t), D2D1::Point2F(l, b), res.solid_brush.Get(),
+                 1.f, style);
+    rt->DrawLine(D2D1::Point2F(r, t), D2D1::Point2F(r, b), res.solid_brush.Get(),
+                 1.f, style);
 }
 
 // ---------------------------------------------------------------------------

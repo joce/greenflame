@@ -188,6 +188,19 @@ TEST(annotation_tool, LineTool_UsesHostStyleAngleAndCommit) {
     }
 }
 
+TEST(annotation_tool, LineTool_ClickWithoutDragDoesNotCommit) {
+    RecordingAnnotationToolHost host;
+    UndoStack undo_stack;
+    LineAnnotationTool tool(Line_tool_descriptor(), false);
+
+    EXPECT_TRUE(tool.On_primary_press(host, {15, 20}));
+    ASSERT_NE(tool.Draft_annotation(host), nullptr);
+    EXPECT_FALSE(tool.On_primary_release(host, undo_stack));
+    EXPECT_FALSE(tool.Has_active_gesture());
+    EXPECT_EQ(tool.Draft_annotation(host), nullptr);
+    EXPECT_TRUE(host.committed_annotations.empty());
+}
+
 TEST(annotation_tool, LineTool_RefreshesDraftAfterStyleChangeNotification) {
     RecordingAnnotationToolHost host;
     LineAnnotationTool tool(Line_tool_descriptor(), false);
@@ -271,6 +284,19 @@ TEST(annotation_tool, RectangleTool_UsesHostStyleAndCommit) {
         EXPECT_EQ(committed_rect.style, host.stroke_style);
         EXPECT_EQ(committed_rect.outer_bounds, (RectPx::From_ltrb(15, 20, 46, 61)));
     }
+}
+
+TEST(annotation_tool, RectangleTool_ClickWithoutDragDoesNotCommit) {
+    RecordingAnnotationToolHost host;
+    UndoStack undo_stack;
+    RectangleAnnotationTool tool(Rectangle_tool_descriptor(), false);
+
+    EXPECT_TRUE(tool.On_primary_press(host, {15, 20}));
+    ASSERT_NE(tool.Draft_annotation(host), nullptr);
+    EXPECT_FALSE(tool.On_primary_release(host, undo_stack));
+    EXPECT_FALSE(tool.Has_active_gesture());
+    EXPECT_EQ(tool.Draft_annotation(host), nullptr);
+    EXPECT_TRUE(host.committed_annotations.empty());
 }
 
 TEST(annotation_tool, RectangleTool_RefreshesDraftAfterStyleChangeNotification) {

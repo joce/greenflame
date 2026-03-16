@@ -464,6 +464,21 @@ TEST(annotation_controller, LineRelease_AddsAnnotationAndKeepsSelectionEmpty) {
     }
 }
 
+TEST(annotation_controller, LineClickWithoutDrag_DoesNotCommitOrPushUndo) {
+    AnnotationController controller;
+    UndoStack undo_stack;
+    EXPECT_TRUE(controller.Toggle_tool(AnnotationToolId::Line));
+
+    EXPECT_TRUE(controller.On_primary_press({15, 25}));
+    ASSERT_NE(controller.Draft_annotation(), nullptr);
+    EXPECT_FALSE(controller.On_primary_release(undo_stack));
+
+    EXPECT_TRUE(controller.Annotations().empty());
+    EXPECT_EQ(controller.Draft_annotation(), nullptr);
+    EXPECT_EQ(undo_stack.Count(), 0u);
+    EXPECT_EQ(undo_stack.Index(), 0);
+}
+
 TEST(annotation_controller, ArrowRelease_AddsAnnotationAndKeepsSelectionEmpty) {
     AnnotationController controller;
     UndoStack undo_stack;
@@ -484,6 +499,21 @@ TEST(annotation_controller, ArrowRelease_AddsAnnotationAndKeepsSelectionEmpty) {
         EXPECT_EQ(arrow.start, (PointPx{15, 25}));
         EXPECT_EQ(arrow.end, (PointPx{45, 55}));
     }
+}
+
+TEST(annotation_controller, ArrowClickWithoutDrag_DoesNotCommitOrPushUndo) {
+    AnnotationController controller;
+    UndoStack undo_stack;
+    EXPECT_TRUE(controller.Toggle_tool(AnnotationToolId::Arrow));
+
+    EXPECT_TRUE(controller.On_primary_press({15, 25}));
+    ASSERT_NE(controller.Draft_annotation(), nullptr);
+    EXPECT_FALSE(controller.On_primary_release(undo_stack));
+
+    EXPECT_TRUE(controller.Annotations().empty());
+    EXPECT_EQ(controller.Draft_annotation(), nullptr);
+    EXPECT_EQ(undo_stack.Count(), 0u);
+    EXPECT_EQ(undo_stack.Index(), 0);
 }
 
 TEST(annotation_controller, LineToolSelectionClearsSelectedAnnotation) {
@@ -532,6 +562,21 @@ TEST(annotation_controller, RectangleRelease_AddsAnnotationAndKeepsSelectionEmpt
     }
 }
 
+TEST(annotation_controller, RectangleClickWithoutDrag_DoesNotCommitOrPushUndo) {
+    AnnotationController controller;
+    UndoStack undo_stack;
+    EXPECT_TRUE(controller.Toggle_tool(AnnotationToolId::Rectangle));
+
+    EXPECT_TRUE(controller.On_primary_press({15, 25}));
+    ASSERT_NE(controller.Draft_annotation(), nullptr);
+    EXPECT_FALSE(controller.On_primary_release(undo_stack));
+
+    EXPECT_TRUE(controller.Annotations().empty());
+    EXPECT_EQ(controller.Draft_annotation(), nullptr);
+    EXPECT_EQ(undo_stack.Count(), 0u);
+    EXPECT_EQ(undo_stack.Index(), 0);
+}
+
 TEST(annotation_controller,
      FilledRectangleRelease_AddsAnnotationAndKeepsSelectionEmpty) {
     AnnotationController controller;
@@ -550,6 +595,21 @@ TEST(annotation_controller,
         EXPECT_TRUE(rect.filled);
         EXPECT_EQ(rect.outer_bounds, (RectPx::From_ltrb(20, 30, 36, 41)));
     }
+}
+
+TEST(annotation_controller, FilledRectangleClickWithoutDrag_DoesNotCommitOrPushUndo) {
+    AnnotationController controller;
+    UndoStack undo_stack;
+    EXPECT_TRUE(controller.Toggle_tool(AnnotationToolId::FilledRectangle));
+
+    EXPECT_TRUE(controller.On_primary_press({15, 25}));
+    ASSERT_NE(controller.Draft_annotation(), nullptr);
+    EXPECT_FALSE(controller.On_primary_release(undo_stack));
+
+    EXPECT_TRUE(controller.Annotations().empty());
+    EXPECT_EQ(controller.Draft_annotation(), nullptr);
+    EXPECT_EQ(undo_stack.Count(), 0u);
+    EXPECT_EQ(undo_stack.Index(), 0);
 }
 
 TEST(annotation_controller, FreehandDraftPointsTrackActiveGesture) {

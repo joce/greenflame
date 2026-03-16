@@ -49,6 +49,12 @@ bool RectangleAnnotationTool::On_primary_release(IAnnotationToolHost &host,
     }
 
     drawing_ = false;
+    if (start_ == end_) {
+        start_ = {};
+        end_ = {};
+        Invalidate_draft();
+        return false;
+    }
     Annotation annotation = Build_annotation(host, start_, end_);
     start_ = {};
     end_ = {};

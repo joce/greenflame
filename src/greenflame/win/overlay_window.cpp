@@ -2583,7 +2583,8 @@ LRESULT OverlayWindow::On_paint() {
                                               : draft_text_view->overwrite_caret_rect;
             input.draft_text_insert_mode = draft_text_view->insert_mode;
             input.draft_text_blink_visible = caret_blink_visible_;
-        } else if (!input.draft_freehand_style.has_value()) {
+        } else if (!input.draft_freehand_style.has_value() ||
+                   input.draft_freehand_points.size() == 1) {
             input.draft_annotation = controller_.Draft_annotation();
         }
         if (controller_.Should_show_selected_annotation_handles()) {

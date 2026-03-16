@@ -355,14 +355,18 @@ unless a real end-to-end bug escapes into the Win32 shell:
 - Run on: `ENV-A`
 - Steps:
   1. Activate the Brush tool and move the cursor without drawing.
-  2. Draw a freehand brush stroke.
-  3. Activate the Highlighter tool and move the cursor without drawing.
-  4. Draw a highlighter stroke across visible text or another detailed background.
-  5. Return to default mode and click each stroke.
-  6. Drag each selected stroke.
+  2. Press and hold the left mouse button once without moving the cursor.
+  3. Draw a freehand brush stroke.
+  4. Activate the Highlighter tool and move the cursor without drawing.
+  5. Press and hold the left mouse button once without moving the cursor.
+  6. Draw a highlighter stroke across visible text or another detailed background.
+  7. Return to default mode and click each stroke.
+  8. Drag each selected stroke.
 - Expected:
   - The Brush tool shows a circular size preview.
+  - Pressing the left mouse button with the Brush tool shows an initial circular mark immediately, before any mouse movement.
   - The Highlighter tool shows an axis-aligned square size preview.
+  - Pressing the left mouse button with the Highlighter tool shows an initial square mark immediately, before any mouse movement.
   - Both committed strokes render cleanly.
   - The Highlighter stroke remains semi-transparent and the underlying content stays visible.
   - Selecting either stroke shows L-bracket corner markers hugging the tight bounding box of the stroke geometry.

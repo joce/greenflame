@@ -1,3 +1,4 @@
+#include "greenflame_core/bubble_annotation_tool.h"
 #include "greenflame_core/freehand_annotation_tool.h"
 #include "greenflame_core/line_annotation_tool.h"
 #include "greenflame_core/rectangle_annotation_tool.h"
@@ -47,6 +48,31 @@ class RecordingAnnotationToolHost final : public IAnnotationToolHost {
         return {points.begin(), points.end()};
     }
 
+    [[nodiscard]] std::optional<Annotation>
+    Build_bubble_annotation(PointPx cursor) const override {
+        if (!bubble_build_enabled) {
+            return std::nullopt;
+        }
+
+        Annotation annotation{};
+        annotation.id = next_annotation_id;
+        annotation.data = BubbleAnnotation{
+            .center = cursor,
+            .diameter_px = stroke_style.width_px,
+            .color = stroke_style.color,
+            .font_choice = bubble_font_choice,
+            .counter_value = bubble_counter_value,
+            .bitmap_width_px = stroke_style.width_px,
+            .bitmap_height_px = stroke_style.width_px,
+            .bitmap_row_bytes = stroke_style.width_px * 4,
+            .premultiplied_bgra = std::vector<uint8_t>(
+                static_cast<size_t>(stroke_style.width_px) *
+                    static_cast<size_t>(stroke_style.width_px) * 4u,
+                0xFF),
+        };
+        return annotation;
+    }
+
     void Commit_new_annotation(UndoStack &undo_stack, Annotation annotation) override {
         (void)undo_stack;
         committed_annotations.push_back(std::move(annotation));
@@ -56,6 +82,9 @@ class RecordingAnnotationToolHost final : public IAnnotationToolHost {
     StrokeStyle stroke_style = {};
     uint64_t next_annotation_id = 1;
     std::optional<std::vector<PointPx>> smoothed_points_override = std::nullopt;
+    bool bubble_build_enabled = true;
+    int32_t bubble_counter_value = 1;
+    TextFontChoice bubble_font_choice = TextFontChoice::Sans;
     std::vector<Annotation> committed_annotations = {};
 };
 
@@ -310,4 +339,46 @@ TEST(annotation_tool, TextTool_DescriptorAndNoGestureBehavior) {
     EXPECT_FALSE(tool.On_pointer_move(host, {20, 20}));
     EXPECT_FALSE(tool.On_primary_release(host, undo_stack));
     EXPECT_FALSE(tool.On_cancel(host));
+}
+
+TEST(annotation_tool, BubbleTool_ShowsSingleDraftAndCommitsAtLatestCursor) {
+    RecordingAnnotationToolHost host;
+    UndoStack undo_stack;
+    BubbleAnnotationTool tool;
+
+    host.next_annotation_id = 23;
+    host.stroke_style = StrokeStyle{12, RGB(0x11, 0x22, 0x33)};
+    host.bubble_counter_value = 5;
+    host.bubble_font_choice = TextFontChoice::Art;
+
+    EXPECT_TRUE(tool.On_primary_press(host, {30, 40}));
+    EXPECT_TRUE(tool.Has_active_gesture());
+    ASSERT_NE(tool.Draft_annotation(host), nullptr);
+    EXPECT_EQ(tool.Draft_annotation(host)->Kind(), AnnotationKind::Bubble);
+    EXPECT_EQ(tool.Draft_annotation(host)->id, 23u);
+    {
+        auto const &draft_bubble =
+            std::get<BubbleAnnotation>(tool.Draft_annotation(host)->data);
+        EXPECT_EQ(draft_bubble.center, (PointPx{30, 40}));
+        EXPECT_EQ(draft_bubble.diameter_px, 12);
+        EXPECT_EQ(draft_bubble.color, host.stroke_style.color);
+        EXPECT_EQ(draft_bubble.font_choice, TextFontChoice::Art);
+        EXPECT_EQ(draft_bubble.counter_value, 5);
+    }
+    EXPECT_TRUE(host.committed_annotations.empty());
+
+    EXPECT_TRUE(tool.On_pointer_move(host, {60, 70}));
+    ASSERT_NE(tool.Draft_annotation(host), nullptr);
+    EXPECT_EQ(std::get<BubbleAnnotation>(tool.Draft_annotation(host)->data).center,
+              (PointPx{60, 70}));
+    EXPECT_TRUE(host.committed_annotations.empty());
+
+    EXPECT_TRUE(tool.On_primary_release(host, undo_stack));
+    EXPECT_FALSE(tool.Has_active_gesture());
+    EXPECT_EQ(tool.Draft_annotation(host), nullptr);
+    ASSERT_EQ(host.committed_annotations.size(), 1u);
+    EXPECT_EQ(host.committed_annotations[0].Kind(), AnnotationKind::Bubble);
+    EXPECT_EQ(host.committed_annotations[0].id, 23u);
+    EXPECT_EQ(std::get<BubbleAnnotation>(host.committed_annotations[0].data).center,
+              (PointPx{60, 70}));
 }

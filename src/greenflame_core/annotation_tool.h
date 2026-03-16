@@ -58,6 +58,8 @@ class IAnnotationToolHost {
     [[nodiscard]] virtual uint64_t Next_annotation_id() const noexcept = 0;
     [[nodiscard]] virtual std::vector<PointPx>
     Smooth_points(std::span<const PointPx> points) const = 0;
+    [[nodiscard]] virtual std::optional<Annotation>
+    Build_bubble_annotation(PointPx cursor) const = 0;
     virtual void Commit_new_annotation(UndoStack &undo_stack,
                                        Annotation annotation) = 0;
 };

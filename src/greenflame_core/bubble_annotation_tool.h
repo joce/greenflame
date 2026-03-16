@@ -19,9 +19,17 @@ class BubbleAnnotationTool final : public IAnnotationTool {
     [[nodiscard]] bool On_primary_release(IAnnotationToolHost &host,
                                           UndoStack &undo_stack) override;
     [[nodiscard]] bool On_cancel(IAnnotationToolHost &host) override;
+    [[nodiscard]] Annotation const *
+    Draft_annotation(IAnnotationToolHost const &host) const noexcept override;
+    void On_stroke_style_changed() noexcept override;
 
   private:
+    void Invalidate_draft() noexcept;
+
     AnnotationToolDescriptor descriptor_ = {};
+    bool drawing_ = false;
+    PointPx cursor_ = {};
+    mutable std::optional<Annotation> draft_annotation_cache_ = std::nullopt;
 };
 
 } // namespace greenflame::core

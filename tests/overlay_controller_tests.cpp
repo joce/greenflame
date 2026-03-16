@@ -625,6 +625,42 @@ TEST(overlay_controller, G_Cancel_ActiveToolGesture_ClearsDraftAndDeselectsTool)
     EXPECT_EQ(c.Active_annotation_tool(), std::nullopt);
 }
 
+TEST(overlay_controller,
+     G_BubbleTool_ShowsSingleDraftOnPressTracksDragAndCommitsAtMouseUp) {
+    auto c = Make_controller();
+    FakeTextLayoutEngine engine;
+    c.Set_text_layout_engine(&engine);
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'N'), OverlayAction::Repaint);
+
+    ASSERT_EQ(c.On_primary_press(No_mods(), {140, 140}, {140, 140}, std::nullopt,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
+                                 0),
+              OverlayAction::Repaint);
+    ASSERT_TRUE(c.Has_active_annotation_gesture());
+    ASSERT_NE(c.Draft_annotation(), nullptr);
+    EXPECT_TRUE(c.Annotations().empty());
+    EXPECT_EQ(std::get<BubbleAnnotation>(c.Draft_annotation()->data).center,
+              (PointPx{140, 140}));
+
+    ASSERT_EQ(c.On_pointer_move(No_mods(), {200, 180}, {200, 180}, std::nullopt, {},
+                                std::nullopt, 0, 0),
+              OverlayAction::Repaint);
+    ASSERT_NE(c.Draft_annotation(), nullptr);
+    EXPECT_TRUE(c.Annotations().empty());
+    EXPECT_EQ(std::get<BubbleAnnotation>(c.Draft_annotation()->data).center,
+              (PointPx{200, 180}));
+
+    EXPECT_EQ(c.On_primary_release(No_mods(), {220, 190}),
+              OverlayAction::InvalidateFrozenCache);
+    EXPECT_FALSE(c.Has_active_annotation_gesture());
+    EXPECT_EQ(c.Draft_annotation(), nullptr);
+    ASSERT_EQ(c.Annotations().size(), 1u);
+    EXPECT_EQ(std::get<BubbleAnnotation>(c.Annotations()[0].data).center,
+              (PointPx{220, 190}));
+}
+
 TEST(overlay_controller, G_Cancel_SelectedAnnotation_DeselectsWithoutClearingRegion) {
     auto c = Make_controller();
     Press(c, {100, 100});

@@ -1262,6 +1262,27 @@ TEST(annotation_controller, BubbleCounter_InitialValueIsOne) {
     EXPECT_EQ(controller.Current_bubble_counter(), 1);
 }
 
+TEST(annotation_controller, BubblePlacement_ShowsSingleDraftOnPressAndMove) {
+    AnnotationController controller;
+    FakeTextLayoutEngine engine;
+    controller.Set_text_layout_engine(&engine);
+    EXPECT_TRUE(controller.Toggle_tool(AnnotationToolId::Bubble));
+
+    EXPECT_TRUE(controller.On_primary_press({50, 50}));
+    EXPECT_TRUE(controller.Has_active_gesture());
+    EXPECT_TRUE(controller.Annotations().empty());
+    ASSERT_NE(controller.Draft_annotation(), nullptr);
+    EXPECT_EQ(controller.Draft_annotation()->Kind(), AnnotationKind::Bubble);
+    EXPECT_EQ(std::get<BubbleAnnotation>(controller.Draft_annotation()->data).center,
+              (PointPx{50, 50}));
+
+    EXPECT_TRUE(controller.On_pointer_move({80, 90}));
+    EXPECT_TRUE(controller.Annotations().empty());
+    ASSERT_NE(controller.Draft_annotation(), nullptr);
+    EXPECT_EQ(std::get<BubbleAnnotation>(controller.Draft_annotation()->data).center,
+              (PointPx{80, 90}));
+}
+
 TEST(annotation_controller, BubblePlacement_PlacesWithCurrentCounterThenIncrements) {
     AnnotationController controller;
     FakeTextLayoutEngine engine;

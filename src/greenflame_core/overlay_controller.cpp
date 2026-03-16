@@ -672,6 +672,7 @@ OverlayAction OverlayController::On_primary_release(OverlayModifierState mods,
     }
 
     if (annotation_controller_.Has_active_gesture()) {
+        (void)annotation_controller_.On_pointer_move(cursor_client, mods.primary_down);
         return annotation_controller_.On_primary_release(undo_stack_)
                    ? OverlayAction::InvalidateFrozenCache
                    : OverlayAction::None;

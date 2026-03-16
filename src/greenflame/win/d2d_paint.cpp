@@ -432,14 +432,14 @@ void Draw_selection_border(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         dashed ? res.dashed_style.Get() : res.flat_cap_style.Get();
     // Four distinct lines (no marquee): horizontals both left-to-right,
     // verticals both top-to-bottom.
-    rt->DrawLine(D2D1::Point2F(l, t), D2D1::Point2F(r, t), res.solid_brush.Get(),
-                 1.f, style);
-    rt->DrawLine(D2D1::Point2F(l, b), D2D1::Point2F(r, b), res.solid_brush.Get(),
-                 1.f, style);
-    rt->DrawLine(D2D1::Point2F(l, t), D2D1::Point2F(l, b), res.solid_brush.Get(),
-                 1.f, style);
-    rt->DrawLine(D2D1::Point2F(r, t), D2D1::Point2F(r, b), res.solid_brush.Get(),
-                 1.f, style);
+    rt->DrawLine(D2D1::Point2F(l, t), D2D1::Point2F(r, t), res.solid_brush.Get(), 1.f,
+                 style);
+    rt->DrawLine(D2D1::Point2F(l, b), D2D1::Point2F(r, b), res.solid_brush.Get(), 1.f,
+                 style);
+    rt->DrawLine(D2D1::Point2F(l, t), D2D1::Point2F(l, b), res.solid_brush.Get(), 1.f,
+                 style);
+    rt->DrawLine(D2D1::Point2F(r, t), D2D1::Point2F(r, b), res.solid_brush.Get(), 1.f,
+                 style);
 }
 
 // ---------------------------------------------------------------------------

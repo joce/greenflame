@@ -153,6 +153,8 @@ class AnnotationController final : public IAnnotationToolHost,
     [[nodiscard]] uint64_t Next_annotation_id() const noexcept override;
     [[nodiscard]] std::vector<PointPx>
     Smooth_points(std::span<const PointPx> points) const override;
+    [[nodiscard]] std::optional<Annotation>
+    Build_bubble_annotation(PointPx cursor) const override;
     void Commit_new_annotation(UndoStack &undo_stack, Annotation annotation) override;
     [[nodiscard]] Annotation const *Annotation_at(size_t index) const noexcept override;
 
@@ -173,7 +175,6 @@ class AnnotationController final : public IAnnotationToolHost,
     TextFontChoice text_current_font_ = TextFontChoice::Sans;
     int32_t bubble_counter_ = 1;
     TextFontChoice bubble_current_font_ = TextFontChoice::Sans;
-    std::optional<PointPx> pending_bubble_cursor_ = std::nullopt;
 };
 
 } // namespace greenflame::core

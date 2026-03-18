@@ -10,6 +10,8 @@ struct OverlayHelpEntry final {
 struct OverlayHelpSection final {
     std::wstring title = {};
     std::vector<OverlayHelpEntry> entries = {};
+    bool new_column = false;
+    bool gap_before = false;
 };
 
 struct OverlayHelpContent final {

@@ -25,6 +25,7 @@ constexpr float kHelpRowHeightPxF = 34.f;
 constexpr float kHelpSectionGapPxF = 8.f;
 constexpr float kHelpTextMeasureExtentPxF = 8192.f;
 constexpr float kHelpPanelBorderInsetPxF = 0.5f;
+constexpr float kHelpTwoColGapPxF = 32.f;
 constexpr float kBackdropAlphaF =
     static_cast<float>(kOverlayBackdropAlpha) / kColorChannelMaxF;
 constexpr float kPanelFillAlphaF =
@@ -287,41 +288,121 @@ bool OverlayHelpOverlay::Paint_d2d(ID2D1RenderTarget *rt, IDWriteFactory *dwrite
         }
     }
     key_col_w += kHelpKeyColumnGapPxF;
-    float const max_key_col_w = content_w / 2.f;
-    if (key_col_w > max_key_col_w) {
-        key_col_w = max_key_col_w;
-    }
-    float const desc_l = content_l + key_col_w + kHelpKeyColumnGapPxF;
-    float row_y = sep_y + static_cast<float>(kRowsTopPaddingPx);
 
+    float row_y = sep_y + static_cast<float>(kRowsTopPaddingPx);
+    float const bottom_limit = panel_b - static_cast<float>(kPanelBottomPaddingPx);
+    float const available_h = bottom_limit - row_y;
+
+    float total_h = 0.f;
     for (core::OverlayHelpSection const &section : content_->sections) {
         if (section.entries.empty()) {
             continue;
         }
-        if (row_y + kHelpRowHeightPxF >
-            panel_b - static_cast<float>(kPanelBottomPaddingPx)) {
-            break;
-        }
-
-        draw_text(dwrite_section_.Get(), section.title, desc_l, row_y,
-                  content_r - desc_l, kHelpRowHeightPxF, kBorderColor);
-        row_y += kHelpRowHeightPxF + 2.f;
-
+        total_h += kHelpRowHeightPxF + 2.f;
         for (core::OverlayHelpEntry const &entry : section.entries) {
-            if (row_y + kHelpRowHeightPxF >
-                panel_b - static_cast<float>(kPanelBottomPaddingPx)) {
-                break;
+            if (!entry.shortcut.empty()) {
+                total_h += kHelpRowHeightPxF;
             }
-            if (entry.shortcut.empty()) {
+        }
+        total_h += kHelpSectionGapPxF;
+    }
+
+    bool const two_col = total_h > available_h;
+
+    if (!two_col) {
+        float const max_key_col_w = content_w / 2.f;
+        if (key_col_w > max_key_col_w) {
+            key_col_w = max_key_col_w;
+        }
+        float const desc_l = content_l + key_col_w + kHelpKeyColumnGapPxF;
+
+        for (core::OverlayHelpSection const &section : content_->sections) {
+            if (section.entries.empty()) {
                 continue;
             }
-            draw_text(dwrite_key_.Get(), entry.shortcut, content_l, row_y, key_col_w,
-                      kHelpRowHeightPxF, kHelpShortcutColor);
-            draw_text(dwrite_body_.Get(), entry.description, desc_l, row_y,
-                      content_r - desc_l, kHelpRowHeightPxF, kHelpBodyColor);
-            row_y += kHelpRowHeightPxF;
+            if (row_y + kHelpRowHeightPxF > bottom_limit) {
+                break;
+            }
+            if (section.gap_before) {
+                row_y += kHelpRowHeightPxF;
+            }
+            draw_text(dwrite_section_.Get(), section.title, desc_l, row_y,
+                      content_r - desc_l, kHelpRowHeightPxF, kBorderColor);
+            row_y += kHelpRowHeightPxF + 2.f;
+
+            for (core::OverlayHelpEntry const &entry : section.entries) {
+                if (row_y + kHelpRowHeightPxF > bottom_limit) {
+                    break;
+                }
+                if (entry.shortcut.empty()) {
+                    continue;
+                }
+                draw_text(dwrite_key_.Get(), entry.shortcut, content_l, row_y,
+                          key_col_w, kHelpRowHeightPxF, kHelpShortcutColor);
+                draw_text(dwrite_body_.Get(), entry.description, desc_l, row_y,
+                          content_r - desc_l, kHelpRowHeightPxF, kHelpBodyColor);
+                row_y += kHelpRowHeightPxF;
+            }
+            row_y += kHelpSectionGapPxF;
         }
-        row_y += kHelpSectionGapPxF;
+    } else {
+        float const col_w = (content_w - kHelpTwoColGapPxF) / 2.f;
+        float const max_key_col_w = col_w / 2.f;
+        if (key_col_w > max_key_col_w) {
+            key_col_w = max_key_col_w;
+        }
+
+        int col = 0;
+        float col_l = content_l;
+        float col_r = content_l + col_w;
+        float col_desc_l = col_l + key_col_w + kHelpKeyColumnGapPxF;
+
+        auto switch_to_col2 = [&]() {
+            col = 1;
+            col_l = content_l + col_w + kHelpTwoColGapPxF;
+            col_r = content_r;
+            col_desc_l = col_l + key_col_w + kHelpKeyColumnGapPxF;
+            row_y = sep_y + static_cast<float>(kRowsTopPaddingPx);
+        };
+
+        for (core::OverlayHelpSection const &section : content_->sections) {
+            if (section.entries.empty()) {
+                continue;
+            }
+            bool const needs_col2 =
+                (section.new_column && col == 0) ||
+                (row_y + kHelpRowHeightPxF > bottom_limit && col == 0);
+            if (needs_col2) {
+                switch_to_col2();
+            } else if (row_y + kHelpRowHeightPxF > bottom_limit) {
+                break;
+            }
+            if (section.gap_before && col == 0) {
+                row_y += kHelpRowHeightPxF;
+            }
+            draw_text(dwrite_section_.Get(), section.title, col_desc_l, row_y,
+                      col_r - col_desc_l, kHelpRowHeightPxF, kBorderColor);
+            row_y += kHelpRowHeightPxF + 2.f;
+
+            for (core::OverlayHelpEntry const &entry : section.entries) {
+                if (row_y + kHelpRowHeightPxF > bottom_limit) {
+                    if (col == 0) {
+                        switch_to_col2();
+                    } else {
+                        break;
+                    }
+                }
+                if (entry.shortcut.empty()) {
+                    continue;
+                }
+                draw_text(dwrite_key_.Get(), entry.shortcut, col_l, row_y, key_col_w,
+                          kHelpRowHeightPxF, kHelpShortcutColor);
+                draw_text(dwrite_body_.Get(), entry.description, col_desc_l, row_y,
+                          col_r - col_desc_l, kHelpRowHeightPxF, kHelpBodyColor);
+                row_y += kHelpRowHeightPxF;
+            }
+            row_y += kHelpSectionGapPxF;
+        }
     }
 
     return true;

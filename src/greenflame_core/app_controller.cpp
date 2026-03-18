@@ -209,8 +209,19 @@ core::OverlayHelpContent AppController::Build_overlay_help_content() const {
     };
     content.sections.push_back(std::move(copy_and_save));
 
+    core::OverlayHelpSection edit{};
+    edit.title = L"Edit";
+    edit.gap_before = true;
+    edit.entries = {
+        {L"Delete", L"Delete selected annotation"},
+        {L"Ctrl + Z", L"Undo last region or annotation change"},
+        {L"Ctrl + Shift + Z", L"Redo last undone change"},
+    };
+    content.sections.push_back(std::move(edit));
+
     core::OverlayHelpSection tools{};
     tools.title = L"Annotation Tools";
+    tools.new_column = true;
     tools.entries = {
         {L"B", L"Toggle Brush tool"},
         {L"H", L"Toggle Highlighter tool"},
@@ -218,6 +229,8 @@ core::OverlayHelpContent AppController::Build_overlay_help_content() const {
         {L"A", L"Toggle Arrow tool"},
         {L"R", L"Toggle Rectangle tool"},
         {L"F", L"Toggle Filled rectangle tool"},
+        {L"T", L"Toggle Text tool"},
+        {L"N", L"Toggle Bubble tool"},
         {L"Right Click", L"Open the active tool's color wheel at cursor"},
         {L"Wheel Up / Ctrl + =",
          L"Increase Brush/Highlighter/Line/Arrow/Rectangle width"},
@@ -225,15 +238,6 @@ core::OverlayHelpContent AppController::Build_overlay_help_content() const {
          L"Decrease Brush/Highlighter/Line/Arrow/Rectangle width"},
     };
     content.sections.push_back(std::move(tools));
-
-    core::OverlayHelpSection edit{};
-    edit.title = L"Edit";
-    edit.entries = {
-        {L"Delete", L"Delete selected annotation"},
-        {L"Ctrl + Z", L"Undo last region or annotation change"},
-        {L"Ctrl + Shift + Z", L"Redo last undone change"},
-    };
-    content.sections.push_back(std::move(edit));
 
     return content;
 }

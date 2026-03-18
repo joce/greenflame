@@ -2,6 +2,7 @@
 
 #include "greenflame/win/gdi_capture.h"
 #include "greenflame/win/overlay_button.h"
+#include "greenflame_core/text_annotation_types.h"
 
 namespace greenflame {
 
@@ -51,6 +52,17 @@ struct D2DOverlayResources final {
     // Cleared on Invalidate_annotations() and Release_device_resources().
     std::unordered_map<uint64_t, Microsoft::WRL::ComPtr<ID2D1Bitmap>> text_bitmaps;
     std::unordered_map<uint64_t, Microsoft::WRL::ComPtr<ID2D1Bitmap>> bubble_bitmaps;
+
+    // Cached glyph outline geometry for the text cursor preview ("A").
+    // Device-independent (path geometry from factory); cleared only in Release_all().
+    // The geometries are built at layout origin (0,0) with y-flip applied;
+    // a render-target translation to the cursor position is pushed at draw time.
+    struct TextCursorPreviewCache {
+        core::TextFontChoice font_choice = core::TextFontChoice::Sans;
+        int32_t point_size = 0;
+        std::vector<Microsoft::WRL::ComPtr<ID2D1TransformedGeometry>> geometries;
+    };
+    std::optional<TextCursorPreviewCache> text_cursor_preview_cache;
 
     bool annotations_valid = false;
     bool frozen_valid = false;

@@ -282,6 +282,23 @@ void D2DTextLayoutEngine::Set_font_families(std::array<std::wstring_view, 4> fam
     }
 }
 
+int32_t D2DTextLayoutEngine::Line_ascent(core::TextAnnotationBaseStyle const &style) {
+    Microsoft::WRL::ComPtr<IDWriteTextFormat> format =
+        Create_text_format(dwrite_factory_, style, font_families_);
+    if (!format) {
+        return 0;
+    }
+    Microsoft::WRL::ComPtr<IDWriteTextLayout> layout =
+        Create_text_layout(dwrite_factory_, format.Get(), L"A");
+    if (!layout) {
+        return 0;
+    }
+    DWRITE_LINE_METRICS metrics{};
+    UINT32 count = 1;
+    (void)layout->GetLineMetrics(&metrics, 1, &count);
+    return static_cast<int32_t>(std::round(metrics.baseline));
+}
+
 core::DraftTextLayoutResult
 D2DTextLayoutEngine::Build_draft_layout(core::TextDraftBuffer const &buf,
                                         core::PointPx origin) {

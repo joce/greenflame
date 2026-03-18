@@ -47,6 +47,10 @@ using namespace greenflame::core;
 
 class FakeTextLayoutEngine final : public ITextLayoutEngine {
   public:
+    [[nodiscard]] int32_t Line_ascent(TextAnnotationBaseStyle const &) override {
+        return 0;
+    }
+
     [[nodiscard]] DraftTextLayoutResult Build_draft_layout(TextDraftBuffer const &buf,
                                                            PointPx origin) override {
         constexpr int32_t char_width_px = 10;

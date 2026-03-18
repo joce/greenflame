@@ -276,7 +276,17 @@ void AnnotationController::Begin_text_draft(PointPx origin) {
     TextAnnotationBaseStyle const base_style{
         brush_style_.color, Normalize_text_font_choice(text_current_font_),
         kAllowedTextPointSizes[Find_text_size_index(text_size_points_)]};
-    text_edit_ctrl_.emplace(origin, base_style, text_layout_engine_);
+    // Place text so the baseline lands at the click point, adjusted by the same
+    // visual offset applied to the cursor preview in Draw_text_cursor_preview
+    // (x_offset / y_offset constants there must match kTextPreviewXOffsetPx /
+    // kTextPreviewYOffsetPx here).
+    constexpr int32_t x_offset_px = 11;
+    constexpr int32_t y_offset_px = 10;
+    int32_t const ascent =
+        text_layout_engine_ ? text_layout_engine_->Line_ascent(base_style) : 0;
+    PointPx const adjusted_origin{origin.x + x_offset_px,
+                                  origin.y - ascent + y_offset_px};
+    text_edit_ctrl_.emplace(adjusted_origin, base_style, text_layout_engine_);
 }
 
 void AnnotationController::Commit_text_annotation(UndoStack &undo_stack,

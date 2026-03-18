@@ -159,6 +159,10 @@ class FakeTextLayoutEngine final : public ITextLayoutEngine {
             0);
     }
 
+    [[nodiscard]] int32_t Line_ascent(TextAnnotationBaseStyle const &) override {
+        return 0;
+    }
+
     void Rasterize_bubble(BubbleAnnotation &annotation) override {
         int32_t const d = annotation.diameter_px;
         annotation.bitmap_width_px = d;

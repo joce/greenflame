@@ -383,6 +383,7 @@ void D2DOverlayResources::Release_device_resources() {
 
 void D2DOverlayResources::Release_all() {
     Release_device_resources();
+    text_cursor_preview_cache.reset();
     dwrite_factory.Reset();
     factory.Reset();
 }

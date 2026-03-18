@@ -1249,7 +1249,8 @@ bool OverlayWindow::Should_show_square_cursor_preview() const {
     return active_tool.has_value() &&
            (*active_tool == core::AnnotationToolId::Highlighter ||
             *active_tool == core::AnnotationToolId::Line ||
-            *active_tool == core::AnnotationToolId::Arrow) &&
+            *active_tool == core::AnnotationToolId::Arrow ||
+            *active_tool == core::AnnotationToolId::Rectangle) &&
            !s.final_selection.Is_empty() && !s.dragging && !s.handle_dragging &&
            !s.move_dragging && !s.modifier_preview && !last_hover_handle_.has_value() &&
            !controller_.Has_active_annotation_gesture();
@@ -1870,7 +1871,8 @@ LRESULT OverlayWindow::On_mouse_move() {
     }
 
     if (!controller_.Has_active_annotation_gesture() &&
-        (Should_show_brush_cursor_preview() || Should_show_square_cursor_preview())) {
+        (Should_show_brush_cursor_preview() || Should_show_square_cursor_preview() ||
+         controller_.Active_annotation_tool() == core::AnnotationToolId::Text)) {
         RedrawWindow(hwnd_, nullptr, nullptr,
                      RDW_INVALIDATE | RDW_NOERASE | RDW_UPDATENOW);
     }
@@ -2635,6 +2637,18 @@ LRESULT OverlayWindow::On_paint() {
             } else {
                 input.square_cursor_preview_width_px = controller_.Brush_width_px();
             }
+        }
+        if (!color_wheel_.visible && !s.final_selection.Is_empty() && !s.dragging &&
+            !s.handle_dragging && !s.move_dragging && !s.modifier_preview &&
+            !last_hover_handle_.has_value() &&
+            !controller_.Has_active_annotation_gesture() &&
+            controller_.Active_annotation_tool() == core::AnnotationToolId::Text) {
+            input.text_cursor_preview_style = core::TextAnnotationBaseStyle{
+                controller_.Annotation_color(),
+                controller_.Text_current_font(),
+                controller_.Text_point_size(),
+            };
+            input.color_wheel_font_families = Resolve_text_font_families(config_);
         }
         input.toolbar_buttons = std::span<IOverlayButton *const>(btn_ptrs);
         input.toolbar_button_glyphs = std::span<ID2D1Bitmap *const>(btn_glyphs);

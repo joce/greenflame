@@ -6,6 +6,7 @@
 #include "greenflame_core/color_wheel.h"
 #include "greenflame_core/rect_px.h"
 #include "greenflame_core/selection_handles.h"
+#include "greenflame_core/text_annotation_types.h"
 
 namespace greenflame {
 
@@ -33,6 +34,8 @@ struct D2DPaintInput {
     std::optional<int32_t> brush_cursor_preview_width_px = std::nullopt;
     std::optional<int32_t> square_cursor_preview_width_px = std::nullopt;
     std::optional<int32_t> arrow_cursor_preview_width_px = std::nullopt;
+    std::optional<core::TextAnnotationBaseStyle> text_cursor_preview_style =
+        std::nullopt;
     bool dragging = false;
     bool handle_dragging = false;
     bool move_dragging = false;

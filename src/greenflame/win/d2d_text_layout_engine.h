@@ -12,6 +12,8 @@ class D2DTextLayoutEngine final : public core::ITextLayoutEngine {
                         IDWriteFactory *dwrite_factory) noexcept;
     void Set_font_families(std::array<std::wstring_view, 4> families);
 
+    [[nodiscard]] int32_t
+    Line_ascent(core::TextAnnotationBaseStyle const &style) override;
     [[nodiscard]] core::DraftTextLayoutResult
     Build_draft_layout(core::TextDraftBuffer const &buf, core::PointPx origin) override;
     [[nodiscard]] int32_t Hit_test_point(core::TextDraftBuffer const &buf,

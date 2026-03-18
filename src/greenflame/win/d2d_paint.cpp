@@ -1278,6 +1278,171 @@ void Draw_brush_cursor_preview(ID2D1RenderTarget *rt, D2DOverlayResources &res,
     rt->DrawEllipse(ell, res.solid_brush.Get(), black_w, res.flat_cap_style.Get());
 }
 
+// Minimal IDWriteTextRenderer that collects glyph run outlines as
+// ID2D1TransformedGeometry objects (y-flipped, at layout origin 0,0).
+// Stack-lifetime only — AddRef/Release are no-ops.
+class GlyphOutlineRenderer final : public IDWriteTextRenderer {
+  public:
+    GlyphOutlineRenderer(
+        ID2D1Factory *factory,
+        std::vector<Microsoft::WRL::ComPtr<ID2D1TransformedGeometry>> &out)
+        : factory_(factory), geometries_(out) {}
+    GlyphOutlineRenderer(GlyphOutlineRenderer const &) = delete;
+    GlyphOutlineRenderer(GlyphOutlineRenderer &&) = delete;
+    GlyphOutlineRenderer &operator=(GlyphOutlineRenderer const &) = delete;
+    GlyphOutlineRenderer &operator=(GlyphOutlineRenderer &&) = delete;
+
+    // IUnknown (stack lifetime — no ref counting)
+    ULONG STDMETHODCALLTYPE AddRef() noexcept override { return 1; }
+    ULONG STDMETHODCALLTYPE Release() noexcept override { return 1; }
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **) noexcept override {
+        return E_NOINTERFACE;
+    }
+
+    // IDWritePixelSnapping
+    HRESULT STDMETHODCALLTYPE
+    IsPixelSnappingDisabled(void *, BOOL *disabled) noexcept override {
+        *disabled = TRUE;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetCurrentTransform(void *,
+                                                  DWRITE_MATRIX *t) noexcept override {
+        *t = {1.f, 0.f, 0.f, 1.f, 0.f, 0.f};
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetPixelsPerDip(void *, float *ppd) noexcept override {
+        *ppd = 1.f;
+        return S_OK;
+    }
+
+    // IDWriteTextRenderer
+    HRESULT STDMETHODCALLTYPE DrawGlyphRun(void *, float bx, float by,
+                                           DWRITE_MEASURING_MODE,
+                                           DWRITE_GLYPH_RUN const *run,
+                                           DWRITE_GLYPH_RUN_DESCRIPTION const *,
+                                           IUnknown *) noexcept override {
+        Microsoft::WRL::ComPtr<ID2D1PathGeometry> path;
+        if (FAILED(factory_->CreatePathGeometry(path.GetAddressOf()))) {
+            return S_OK;
+        }
+        Microsoft::WRL::ComPtr<ID2D1GeometrySink> sink;
+        if (FAILED(path->Open(sink.GetAddressOf()))) {
+            return S_OK;
+        }
+        (void)run->fontFace->GetGlyphRunOutline(
+            run->fontEmSize, run->glyphIndices, run->glyphAdvances, run->glyphOffsets,
+            run->glyphCount, run->isSideways, run->bidiLevel % 2 != 0, sink.Get());
+        sink->Close();
+
+        // Glyph outlines are already in D2D's y-down coordinate system (DirectWrite
+        // uses the same orientation). Translate to the baseline origin.
+        D2D1::Matrix3x2F const xform = D2D1::Matrix3x2F::Translation(bx, by);
+        Microsoft::WRL::ComPtr<ID2D1TransformedGeometry> tgeom;
+        if (FAILED(factory_->CreateTransformedGeometry(path.Get(), xform,
+                                                       tgeom.GetAddressOf()))) {
+            return S_OK;
+        }
+        geometries_.push_back(std::move(tgeom));
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE DrawUnderline(void *, float, float,
+                                            DWRITE_UNDERLINE const *,
+                                            IUnknown *) noexcept override {
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE DrawStrikethrough(void *, float, float,
+                                                DWRITE_STRIKETHROUGH const *,
+                                                IUnknown *) noexcept override {
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE DrawInlineObject(void *, float, float,
+                                               IDWriteInlineObject *, BOOL, BOOL,
+                                               IUnknown *) noexcept override {
+        return S_OK;
+    }
+
+  private:
+    ID2D1Factory *factory_;
+    std::vector<Microsoft::WRL::ComPtr<ID2D1TransformedGeometry>> &geometries_;
+};
+
+void Draw_text_cursor_preview(ID2D1RenderTarget *rt, D2DOverlayResources &res,
+                              core::PointPx cursor,
+                              core::TextAnnotationBaseStyle const &style,
+                              std::array<std::wstring_view, 4> const &font_families) {
+    if (res.dwrite_factory == nullptr || res.factory == nullptr) {
+        return;
+    }
+
+    // Rebuild the cached glyph outline if font or size changed.
+    bool const cache_valid =
+        res.text_cursor_preview_cache.has_value() &&
+        res.text_cursor_preview_cache->font_choice == style.font_choice &&
+        res.text_cursor_preview_cache->point_size == style.point_size;
+    if (!cache_valid) {
+        std::wstring_view const family =
+            Resolve_text_font_family(style.font_choice, font_families);
+        Microsoft::WRL::ComPtr<IDWriteTextFormat> format = Create_text_format(
+            res.dwrite_factory.Get(), family, static_cast<float>(style.point_size));
+        if (format == nullptr) {
+            return;
+        }
+        Microsoft::WRL::ComPtr<IDWriteTextLayout> layout =
+            Create_text_layout(res.dwrite_factory.Get(), format.Get(), L"A");
+        if (layout == nullptr) {
+            return;
+        }
+        // Offset by -baseline so the cached geometry has its baseline at y=0.
+        // At draw time the cursor translation will then place the baseline at the
+        // cursor tip (rather than the top-left of the layout box).
+        DWRITE_LINE_METRICS line_metrics{};
+        UINT32 line_count = 1;
+        (void)layout->GetLineMetrics(&line_metrics, 1, &line_count);
+        float const baseline_offset = -(line_count > 0 ? line_metrics.baseline : 0.f);
+
+        D2DOverlayResources::TextCursorPreviewCache cache;
+        cache.font_choice = style.font_choice;
+        cache.point_size = style.point_size;
+        GlyphOutlineRenderer renderer(res.factory.Get(), cache.geometries);
+        (void)layout->Draw(nullptr, &renderer, 0.f, baseline_offset);
+        res.text_cursor_preview_cache = std::move(cache);
+    }
+
+    if (res.text_cursor_preview_cache->geometries.empty()) {
+        return;
+    }
+
+    // Translate to the cursor position for this frame, with a small visual offset:
+    // right a few pixels so the cursor tip sits to the left of the letter, and
+    // up a few pixels so the baseline aligns with the visible bottom of the cursor
+    // arrow rather than the hotspot (which is at the tip, above the arrow tail).
+    // These constants must match kTextPreviewXOffsetPx/kTextPreviewYOffsetPx in
+    // annotation_controller.cpp so preview and placement stay in sync.
+    constexpr float x_offset = 11.f;
+    constexpr float y_offset = 10.f;
+    D2D1_MATRIX_3X2_F old_transform{};
+    rt->GetTransform(&old_transform);
+    D2D1::Matrix3x2F const translation =
+        D2D1::Matrix3x2F::Translation(static_cast<float>(cursor.x) + x_offset,
+                                      static_cast<float>(cursor.y) + y_offset);
+    D2D1::Matrix3x2F combined;
+    D2D1::Matrix3x2F::ReinterpretBaseType(&combined)->SetProduct(
+        *D2D1::Matrix3x2F::ReinterpretBaseType(&old_transform),
+        *D2D1::Matrix3x2F::ReinterpretBaseType(&translation));
+    rt->SetTransform(combined);
+
+    constexpr float white_w = 3.f;
+    constexpr float black_w = 1.f;
+    for (auto const &geom : res.text_cursor_preview_cache->geometries) {
+        res.solid_brush->SetColor(D2D1::ColorF(1.f, 1.f, 1.f));
+        rt->DrawGeometry(geom.Get(), res.solid_brush.Get(), white_w, nullptr);
+        res.solid_brush->SetColor(D2D1::ColorF(0.f, 0.f, 0.f));
+        rt->DrawGeometry(geom.Get(), res.solid_brush.Get(), black_w, nullptr);
+    }
+
+    rt->SetTransform(old_transform);
+}
+
 void Draw_arrow_cursor_preview(ID2D1RenderTarget *rt, D2DOverlayResources &res,
                                core::PointPx cursor, int32_t width_px) {
     float const w =
@@ -1289,13 +1454,12 @@ void Draw_arrow_cursor_preview(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         kArrowBaseLength + w * (kArrowLengthPerStroke - kArrowOverlapPerStroke);
     float const head_half = (kArrowBaseWidth + w * kArrowWidthPerStroke) / 2.f;
     float const stub_length = head_length * 0.25f;
-    float const total_width = stub_length + head_length;
 
     float const cx = static_cast<float>(cursor.x);
     float const cy = static_cast<float>(cursor.y);
 
-    // Pointing right. Center the entire shape (stub + head) at (cx, cy).
-    float const tip_x = cx + total_width * 0.5f;
+    // Pointing right. Tip at (cx, cy) so the arrowhead points at the cursor.
+    float const tip_x = cx;
     float const base_x = tip_x - head_length;
     float const stub_start_x = base_x - stub_length;
 
@@ -1313,7 +1477,8 @@ void Draw_arrow_cursor_preview(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         return;
     }
     float const shaft_half = w * kHalfPixel;
-    sink->BeginFigure(D2D1::Point2F(stub_start_x, cy - shaft_half), D2D1_FIGURE_BEGIN_HOLLOW);
+    sink->BeginFigure(D2D1::Point2F(stub_start_x, cy - shaft_half),
+                      D2D1_FIGURE_BEGIN_HOLLOW);
     sink->AddLine(D2D1::Point2F(base_x, cy - shaft_half));
     sink->AddLine(D2D1::Point2F(base_x, cy - head_half));
     sink->AddLine(D2D1::Point2F(tip_x, cy));
@@ -1982,7 +2147,8 @@ void Draw_live_layer(ID2D1RenderTarget *rt, D2DOverlayResources &res,
     // Cursor previews (clipped to final selection).
     if (input.brush_cursor_preview_width_px.has_value() ||
         input.square_cursor_preview_width_px.has_value() ||
-        input.arrow_cursor_preview_width_px.has_value()) {
+        input.arrow_cursor_preview_width_px.has_value() ||
+        input.text_cursor_preview_style.has_value()) {
         // Push clip to final selection.
         bool has_clip = false;
         Microsoft::WRL::ComPtr<ID2D1Layer> clip_layer;
@@ -2005,6 +2171,11 @@ void Draw_live_layer(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         if (input.arrow_cursor_preview_width_px.has_value()) {
             Draw_arrow_cursor_preview(rt, res, input.cursor_client_px,
                                       *input.arrow_cursor_preview_width_px);
+        }
+        if (input.text_cursor_preview_style.has_value()) {
+            Draw_text_cursor_preview(rt, res, input.cursor_client_px,
+                                     *input.text_cursor_preview_style,
+                                     input.color_wheel_font_families);
         }
 
         if (has_clip) {

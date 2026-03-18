@@ -22,6 +22,7 @@ class ITextLayoutEngine {
     ITextLayoutEngine &operator=(ITextLayoutEngine &&) = default;
     virtual ~ITextLayoutEngine() = default;
 
+    [[nodiscard]] virtual int32_t Line_ascent(TextAnnotationBaseStyle const &style) = 0;
     [[nodiscard]] virtual DraftTextLayoutResult
     Build_draft_layout(TextDraftBuffer const &buf, PointPx origin) = 0;
     [[nodiscard]] virtual int32_t Hit_test_point(TextDraftBuffer const &buf,

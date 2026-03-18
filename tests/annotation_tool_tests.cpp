@@ -405,3 +405,72 @@ TEST(annotation_tool, BubbleTool_ShowsSingleDraftAndCommitsAtLatestCursor) {
     EXPECT_EQ(std::get<BubbleAnnotation>(host.committed_annotations[0].data).center,
               (PointPx{60, 70}));
 }
+
+TEST(annotation_tool, FreehandTool_Straighten_CollapsesFreehandToTwoPoints) {
+    RecordingAnnotationToolHost host;
+    UndoStack undo_stack;
+    FreehandAnnotationTool tool(AnnotationToolDescriptor{}, FreehandTipShape::Square);
+
+    EXPECT_TRUE(tool.On_primary_press(host, {10, 20}));
+    EXPECT_TRUE(tool.On_pointer_move(host, {30, 40}));
+    EXPECT_TRUE(tool.On_pointer_move(host, {50, 60}));
+    EXPECT_EQ(tool.Draft_freehand_points().size(), 3u);
+
+    tool.Straighten();
+
+    EXPECT_EQ(tool.Draft_freehand_points().size(), 2u);
+    EXPECT_EQ(tool.Draft_freehand_points()[0], (PointPx{10, 20}));
+    EXPECT_EQ(tool.Draft_freehand_points()[1], (PointPx{50, 60}));
+}
+
+TEST(annotation_tool, FreehandTool_Straighten_EndTracksMouseAfterStraighten) {
+    RecordingAnnotationToolHost host;
+    UndoStack undo_stack;
+    FreehandAnnotationTool tool(AnnotationToolDescriptor{}, FreehandTipShape::Square);
+
+    EXPECT_TRUE(tool.On_primary_press(host, {10, 20}));
+    EXPECT_TRUE(tool.On_pointer_move(host, {30, 40}));
+    tool.Straighten();
+    EXPECT_TRUE(tool.On_pointer_move(host, {70, 80}));
+
+    EXPECT_EQ(tool.Draft_freehand_points().size(), 2u);
+    EXPECT_EQ(tool.Draft_freehand_points()[0], (PointPx{10, 20}));
+    EXPECT_EQ(tool.Draft_freehand_points()[1], (PointPx{70, 80}));
+}
+
+TEST(annotation_tool, FreehandTool_Straighten_CommitsWithTwoPointsNoSmoothing) {
+    RecordingAnnotationToolHost host;
+    UndoStack undo_stack;
+    FreehandAnnotationTool tool(AnnotationToolDescriptor{}, FreehandTipShape::Square);
+
+    host.smoothed_points_override = std::vector<PointPx>{{0, 0}, {1, 1}, {2, 2}};
+
+    EXPECT_TRUE(tool.On_primary_press(host, {10, 20}));
+    EXPECT_TRUE(tool.On_pointer_move(host, {50, 60}));
+    tool.Straighten();
+
+    EXPECT_TRUE(tool.On_primary_release(host, undo_stack));
+    ASSERT_EQ(host.committed_annotations.size(), 1u);
+    auto const &fh =
+        std::get<FreehandStrokeAnnotation>(host.committed_annotations[0].data);
+    EXPECT_EQ(fh.points.size(), 2u);
+    EXPECT_EQ(fh.points[0], (PointPx{10, 20}));
+    EXPECT_EQ(fh.points[1], (PointPx{50, 60}));
+}
+
+TEST(annotation_tool, FreehandTool_Straighten_ResetClearsStraightenedState) {
+    RecordingAnnotationToolHost host;
+    UndoStack undo_stack;
+    FreehandAnnotationTool tool(AnnotationToolDescriptor{}, FreehandTipShape::Square);
+
+    EXPECT_TRUE(tool.On_primary_press(host, {10, 20}));
+    EXPECT_TRUE(tool.On_pointer_move(host, {30, 40}));
+    tool.Straighten();
+    tool.Reset();
+
+    EXPECT_FALSE(tool.Has_active_gesture());
+    EXPECT_TRUE(tool.On_primary_press(host, {10, 20}));
+    EXPECT_TRUE(tool.On_pointer_move(host, {30, 40}));
+    EXPECT_TRUE(tool.On_pointer_move(host, {50, 60}));
+    EXPECT_EQ(tool.Draft_freehand_points().size(), 3u);
+}

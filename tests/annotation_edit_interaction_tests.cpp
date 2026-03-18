@@ -14,6 +14,17 @@ Annotation Make_stroke(uint64_t id, std::initializer_list<PointPx> points) {
     return annotation;
 }
 
+Annotation Make_straight_highlighter(uint64_t id, PointPx start, PointPx end) {
+    Annotation annotation{};
+    annotation.id = id;
+    annotation.data = FreehandStrokeAnnotation{
+        .points = {start, end},
+        .style = {},
+        .freehand_tip_shape = FreehandTipShape::Square,
+    };
+    return annotation;
+}
+
 Annotation Make_line(uint64_t id, PointPx start, PointPx end,
                      int32_t width_px = StrokeStyle::kDefaultWidthPx,
                      bool arrow_head = false) {
@@ -207,4 +218,142 @@ TEST(annotation_edit_interaction,
     EXPECT_TRUE(interaction->Cancel(host));
     EXPECT_EQ(host.annotations[0], original);
     EXPECT_EQ(host.selected_annotation_id, std::optional<uint64_t>{8});
+}
+
+TEST(annotation_edit_interaction,
+     HitTest_PrefersSelectedFreehandStrokeHandlesOverBody) {
+    // Horizontal stroke from {40,40} to {200,40}; midpoint {120,40} is on body.
+    Annotation const hl = Make_straight_highlighter(5, {40, 40}, {200, 40});
+    std::vector<Annotation> const annotations = {hl};
+
+    EXPECT_EQ(Hit_test_annotation_edit_target(&annotations[0], annotations, {40, 40}),
+              (std::optional<AnnotationEditTarget>{AnnotationEditTarget{
+                  5, AnnotationEditTargetKind::FreehandStrokeStartHandle}}));
+    EXPECT_EQ(Hit_test_annotation_edit_target(&annotations[0], annotations, {200, 40}),
+              (std::optional<AnnotationEditTarget>{AnnotationEditTarget{
+                  5, AnnotationEditTargetKind::FreehandStrokeEndHandle}}));
+    EXPECT_EQ(Hit_test_annotation_edit_target(&annotations[0], annotations, {120, 40}),
+              (std::optional<AnnotationEditTarget>{
+                  AnnotationEditTarget{5, AnnotationEditTargetKind::Body}}));
+}
+
+TEST(annotation_edit_interaction, HitTest_FreehandStroke_NoHandlesForRoundTip) {
+    // Round-tip 2-point freehand should NOT offer endpoint handles.
+    Annotation const stroke = Make_stroke(6, {{40, 40}, {200, 40}});
+    std::vector<Annotation> const annotations = {stroke};
+
+    // Cursor at start endpoint should fall through to body hit test.
+    EXPECT_EQ(Hit_test_annotation_edit_target(&annotations[0], annotations, {40, 40}),
+              (std::optional<AnnotationEditTarget>{
+                  AnnotationEditTarget{6, AnnotationEditTargetKind::Body}}));
+}
+
+TEST(annotation_edit_interaction,
+     HitTest_FreehandStroke_NoHandlesForMoreThanTwoPoints) {
+    // Square-tip freehand with 3 points should NOT offer endpoint handles.
+    Annotation annotation{};
+    annotation.id = 7;
+    annotation.data = FreehandStrokeAnnotation{
+        .points = {{40, 40}, {120, 40}, {200, 40}},
+        .style = {},
+        .freehand_tip_shape = FreehandTipShape::Square,
+    };
+    std::vector<Annotation> const annotations = {annotation};
+
+    EXPECT_EQ(Hit_test_annotation_edit_target(&annotations[0], annotations, {40, 40}),
+              (std::optional<AnnotationEditTarget>{
+                  AnnotationEditTarget{7, AnnotationEditTargetKind::Body}}));
+}
+
+TEST(annotation_edit_interaction,
+     FreehandStrokeEndpointInteraction_StartHandleMovesStartPoint) {
+    RecordingEditInteractionHost host;
+    Annotation const original = Make_straight_highlighter(10, {40, 40}, {200, 40});
+    host.annotations.push_back(original);
+
+    std::unique_ptr<IAnnotationEditInteraction> interaction =
+        Create_annotation_edit_interaction(
+            AnnotationEditTarget{10,
+                                 AnnotationEditTargetKind::FreehandStrokeStartHandle},
+            0, original, {40, 40});
+    ASSERT_NE(interaction, nullptr);
+    EXPECT_FALSE(interaction->Is_move_drag());
+    EXPECT_EQ(interaction->Active_handle(),
+              std::optional<AnnotationEditHandleKind>{
+                  AnnotationEditHandleKind::FreehandStrokeStart});
+
+    EXPECT_TRUE(interaction->Update(host, {20, 60}));
+    auto const &fh = std::get<FreehandStrokeAnnotation>(host.annotations[0].data);
+    EXPECT_EQ(fh.points[0], (PointPx{20, 60}));  // start moved
+    EXPECT_EQ(fh.points[1], (PointPx{200, 40})); // end unchanged
+}
+
+TEST(annotation_edit_interaction,
+     FreehandStrokeEndpointInteraction_EndHandleMovesEndPoint) {
+    RecordingEditInteractionHost host;
+    Annotation const original = Make_straight_highlighter(11, {40, 40}, {200, 40});
+    host.annotations.push_back(original);
+
+    std::unique_ptr<IAnnotationEditInteraction> interaction =
+        Create_annotation_edit_interaction(
+            AnnotationEditTarget{11, AnnotationEditTargetKind::FreehandStrokeEndHandle},
+            0, original, {200, 40});
+    ASSERT_NE(interaction, nullptr);
+    EXPECT_EQ(interaction->Active_handle(),
+              std::optional<AnnotationEditHandleKind>{
+                  AnnotationEditHandleKind::FreehandStrokeEnd});
+
+    EXPECT_TRUE(interaction->Update(host, {220, 80}));
+    auto const &fh = std::get<FreehandStrokeAnnotation>(host.annotations[0].data);
+    EXPECT_EQ(fh.points[0], (PointPx{40, 40}));  // start unchanged
+    EXPECT_EQ(fh.points[1], (PointPx{220, 80})); // end moved
+}
+
+TEST(annotation_edit_interaction,
+     FreehandStrokeEndpointInteraction_CancelRestoresOriginalAndExposesHandle) {
+    RecordingEditInteractionHost host;
+    Annotation const original = Make_straight_highlighter(12, {40, 40}, {200, 40});
+    host.annotations.push_back(original);
+
+    std::unique_ptr<IAnnotationEditInteraction> interaction =
+        Create_annotation_edit_interaction(
+            AnnotationEditTarget{12, AnnotationEditTargetKind::FreehandStrokeEndHandle},
+            0, original, {200, 40});
+    ASSERT_NE(interaction, nullptr);
+
+    EXPECT_TRUE(interaction->Update(host, {220, 80}));
+    EXPECT_EQ(std::get<FreehandStrokeAnnotation>(host.annotations[0].data).points[1],
+              (PointPx{220, 80}));
+
+    EXPECT_TRUE(interaction->Cancel(host));
+    EXPECT_EQ(host.annotations[0], original);
+    EXPECT_EQ(host.selected_annotation_id, std::optional<uint64_t>{12});
+}
+
+TEST(annotation_edit_interaction,
+     FreehandStrokeEndpointInteraction_CommitProducesUndoCommandData) {
+    RecordingEditInteractionHost host;
+    Annotation const original = Make_straight_highlighter(13, {40, 40}, {200, 40});
+    host.annotations.push_back(original);
+
+    std::unique_ptr<IAnnotationEditInteraction> interaction =
+        Create_annotation_edit_interaction(
+            AnnotationEditTarget{13,
+                                 AnnotationEditTargetKind::FreehandStrokeStartHandle},
+            0, original, {40, 40});
+    ASSERT_NE(interaction, nullptr);
+
+    EXPECT_TRUE(interaction->Update(host, {20, 20}));
+
+    std::optional<AnnotationEditCommandData> const command = interaction->Commit();
+    ASSERT_TRUE(command.has_value());
+    EXPECT_EQ(command->description, "Edit highlighter annotation");
+    EXPECT_EQ(command->selection_before, std::optional<uint64_t>{13});
+    EXPECT_EQ(command->selection_after, std::optional<uint64_t>{13});
+    EXPECT_EQ(
+        std::get<FreehandStrokeAnnotation>(command->annotation_before.data).points[0],
+        (PointPx{40, 40}));
+    EXPECT_EQ(
+        std::get<FreehandStrokeAnnotation>(command->annotation_after.data).points[0],
+        (PointPx{20, 20}));
 }

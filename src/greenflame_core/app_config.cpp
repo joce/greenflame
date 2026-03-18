@@ -103,6 +103,9 @@ void AppConfig::Normalize() {
     highlighter_opacity_percent =
         std::clamp(highlighter_opacity_percent, StrokeStyle::kMinOpacityPercent,
                    StrokeStyle::kMaxOpacityPercent);
+    highlighter_pause_straighten_ms = std::max(highlighter_pause_straighten_ms, 0);
+    highlighter_pause_straighten_deadzone_px =
+        std::max(highlighter_pause_straighten_deadzone_px, 0);
     text_size_points = Normalize_text_point_size(text_size_points);
     text_current_font = Normalize_text_font_choice(text_current_font);
     bubble_current_font = Normalize_text_font_choice(bubble_current_font);

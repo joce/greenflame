@@ -397,6 +397,19 @@ core::AppConfig Load_app_config() {
                         config.highlighter_opacity_percent = parsed;
                     }
                 }
+                if (hl.has_key("pause_straighten_ms")) {
+                    int32_t parsed = 0;
+                    if (Read_int_from_json(hl["pause_straighten_ms"], parsed)) {
+                        config.highlighter_pause_straighten_ms = parsed;
+                    }
+                }
+                if (hl.has_key("pause_straighten_deadzone_px")) {
+                    int32_t parsed = 0;
+                    if (Read_int_from_json(hl["pause_straighten_deadzone_px"],
+                                           parsed)) {
+                        config.highlighter_pause_straighten_deadzone_px = parsed;
+                    }
+                }
                 if (hl.has_key("colors")) {
                     Load_colors_from_json(hl["colors"], config.highlighter_colors,
                                           core::kHighlighterColorSlotCount);
@@ -489,6 +502,10 @@ bool Save_app_config(core::AppConfig const &config) {
                                defaults.current_highlighter_color_index ||
                            config.highlighter_opacity_percent !=
                                defaults.highlighter_opacity_percent ||
+                           config.highlighter_pause_straighten_ms !=
+                               defaults.highlighter_pause_straighten_ms ||
+                           config.highlighter_pause_straighten_deadzone_px !=
+                               defaults.highlighter_pause_straighten_deadzone_px ||
                            config.highlighter_colors != defaults.highlighter_colors ||
                            config.text_size_points != defaults.text_size_points ||
                            config.text_current_font != defaults.text_current_font ||
@@ -531,7 +548,11 @@ bool Save_app_config(core::AppConfig const &config) {
                 config.current_highlighter_color_index !=
                     defaults.current_highlighter_color_index ||
                 config.highlighter_opacity_percent !=
-                    defaults.highlighter_opacity_percent) {
+                    defaults.highlighter_opacity_percent ||
+                config.highlighter_pause_straighten_ms !=
+                    defaults.highlighter_pause_straighten_ms ||
+                config.highlighter_pause_straighten_deadzone_px !=
+                    defaults.highlighter_pause_straighten_deadzone_px) {
                 root["tools"]["highlighter"] = easyjson::object();
                 if (config.highlighter_colors != defaults.highlighter_colors) {
                     easyjson::JSON hl_colors = easyjson::object();
@@ -553,6 +574,16 @@ bool Save_app_config(core::AppConfig const &config) {
                     defaults.highlighter_opacity_percent) {
                     root["tools"]["highlighter"]["opacity_percent"] =
                         config.highlighter_opacity_percent;
+                }
+                if (config.highlighter_pause_straighten_ms !=
+                    defaults.highlighter_pause_straighten_ms) {
+                    root["tools"]["highlighter"]["pause_straighten_ms"] =
+                        config.highlighter_pause_straighten_ms;
+                }
+                if (config.highlighter_pause_straighten_deadzone_px !=
+                    defaults.highlighter_pause_straighten_deadzone_px) {
+                    root["tools"]["highlighter"]["pause_straighten_deadzone_px"] =
+                        config.highlighter_pause_straighten_deadzone_px;
                 }
             }
             if (config.text_size_points != defaults.text_size_points ||

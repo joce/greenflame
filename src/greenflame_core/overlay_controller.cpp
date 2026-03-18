@@ -290,6 +290,10 @@ bool OverlayController::Has_active_annotation_gesture() const noexcept {
     return annotation_controller_.Has_active_gesture();
 }
 
+bool OverlayController::Straighten_highlighter_stroke() noexcept {
+    return annotation_controller_.Straighten_highlighter_stroke();
+}
+
 bool OverlayController::Is_annotation_dragging() const noexcept {
     return annotation_controller_.Is_annotation_dragging();
 }

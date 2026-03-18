@@ -2,6 +2,7 @@
 
 #include "greenflame_core/annotation_commands.h"
 #include "greenflame_core/color_wheel.h"
+#include "greenflame_core/freehand_annotation_tool.h"
 #include "greenflame_core/undo_stack.h"
 
 namespace greenflame::core {
@@ -349,6 +350,18 @@ void AnnotationController::Set_bubble_current_font(TextFontChoice choice) noexce
     }
     bubble_current_font_ = normalized;
     registry_.On_stroke_style_changed();
+}
+
+bool AnnotationController::Straighten_highlighter_stroke() noexcept {
+    if (active_tool_ != AnnotationToolId::Highlighter) {
+        return false;
+    }
+    IAnnotationTool *const tool = Active_tool_impl();
+    if (tool == nullptr || !tool->Has_active_gesture()) {
+        return false;
+    }
+    static_cast<FreehandAnnotationTool *>(tool)->Straighten();
+    return true;
 }
 
 bool AnnotationController::On_primary_press(PointPx cursor) {

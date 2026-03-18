@@ -72,6 +72,8 @@ Rectangle_handle_from_target_kind(AnnotationEditTargetKind kind) noexcept {
     case AnnotationEditTargetKind::Body:
     case AnnotationEditTargetKind::LineStartHandle:
     case AnnotationEditTargetKind::LineEndHandle:
+    case AnnotationEditTargetKind::FreehandStrokeStartHandle:
+    case AnnotationEditTargetKind::FreehandStrokeEndHandle:
         return std::nullopt;
     }
     return std::nullopt;
@@ -133,36 +135,33 @@ class MoveAnnotationEditInteraction final : public IAnnotationEditInteraction {
     PointPx drag_start_ = {};
 };
 
-class LineEndpointEditInteraction final : public IAnnotationEditInteraction {
+// Base class for endpoint-drag interactions (line endpoints, straight highlighter
+// endpoints). Handles the shared Update/Commit/Cancel/Active_handle logic.
+// Subclasses override Move_endpoint to perform the type-specific point mutation.
+class EndpointEditInteractionBase : public IAnnotationEditInteraction {
   public:
-    LineEndpointEditInteraction(uint64_t annotation_id, size_t index,
+    EndpointEditInteractionBase(uint64_t annotation_id, size_t index,
                                 Annotation annotation_before,
-                                AnnotationEditHandleKind active_handle)
+                                AnnotationEditHandleKind active_handle,
+                                std::string_view description)
         : annotation_id_(annotation_id), index_(index),
           annotation_before_(std::move(annotation_before)),
-          annotation_after_(annotation_before_), active_handle_(active_handle) {}
+          annotation_after_(annotation_before_), active_handle_(active_handle),
+          description_(description) {}
 
     [[nodiscard]] bool Update(IAnnotationEditInteractionHost &host,
                               PointPx cursor) override {
         Annotation const *const current = host.Annotation_at(index_);
-        LineAnnotation const *const line_before =
-            std::get_if<LineAnnotation>(&annotation_before_.data);
-        if (current == nullptr || current->id != annotation_id_ ||
-            line_before == nullptr) {
+        if (current == nullptr || current->id != annotation_id_) {
             return false;
         }
-
         Annotation edited = annotation_before_;
-        LineAnnotation &line_edited = std::get<LineAnnotation>(edited.data);
-        if (active_handle_ == AnnotationEditHandleKind::LineStart) {
-            line_edited.start = cursor;
-        } else {
-            line_edited.end = cursor;
+        if (!Move_endpoint(edited, active_handle_, cursor)) {
+            return false;
         }
         if (*current == edited) {
             return false;
         }
-
         annotation_after_ = edited;
         host.Update_annotation_at(index_, edited, annotation_id_);
         return true;
@@ -174,7 +173,7 @@ class LineEndpointEditInteraction final : public IAnnotationEditInteraction {
         }
         return AnnotationEditCommandData{
             index_,         annotation_before_, annotation_after_,
-            annotation_id_, annotation_id_,     "Edit line annotation"};
+            annotation_id_, annotation_id_,     description_};
     }
 
     [[nodiscard]] bool Cancel(IAnnotationEditInteractionHost &host) override {
@@ -182,7 +181,6 @@ class LineEndpointEditInteraction final : public IAnnotationEditInteraction {
         if (current == nullptr || current->id != annotation_id_) {
             return false;
         }
-
         annotation_after_ = annotation_before_;
         host.Update_annotation_at(index_, annotation_before_, annotation_id_);
         return true;
@@ -193,12 +191,73 @@ class LineEndpointEditInteraction final : public IAnnotationEditInteraction {
         return active_handle_;
     }
 
+  protected:
+    // Apply cursor to the appropriate endpoint of edited. Return false if the
+    // annotation type is wrong or the data is otherwise invalid.
+    [[nodiscard]] virtual bool Move_endpoint(Annotation &edited,
+                                             AnnotationEditHandleKind handle,
+                                             PointPx cursor) = 0;
+
   private:
     uint64_t annotation_id_ = 0;
     size_t index_ = 0;
     Annotation annotation_before_ = {};
     Annotation annotation_after_ = {};
     AnnotationEditHandleKind active_handle_ = AnnotationEditHandleKind::LineStart;
+    std::string_view description_;
+};
+
+class LineEndpointEditInteraction final : public EndpointEditInteractionBase {
+  public:
+    LineEndpointEditInteraction(uint64_t annotation_id, size_t index,
+                                Annotation annotation_before,
+                                AnnotationEditHandleKind active_handle)
+        : EndpointEditInteractionBase(annotation_id, index,
+                                      std::move(annotation_before), active_handle,
+                                      "Edit line annotation") {}
+
+  protected:
+    [[nodiscard]] bool Move_endpoint(Annotation &edited,
+                                     AnnotationEditHandleKind handle,
+                                     PointPx cursor) override {
+        LineAnnotation *const line = std::get_if<LineAnnotation>(&edited.data);
+        if (line == nullptr) {
+            return false;
+        }
+        if (handle == AnnotationEditHandleKind::LineStart) {
+            line->start = cursor;
+        } else {
+            line->end = cursor;
+        }
+        return true;
+    }
+};
+
+class FreehandStrokeEndpointEditInteraction final : public EndpointEditInteractionBase {
+  public:
+    FreehandStrokeEndpointEditInteraction(uint64_t annotation_id, size_t index,
+                                          Annotation annotation_before,
+                                          AnnotationEditHandleKind active_handle)
+        : EndpointEditInteractionBase(annotation_id, index,
+                                      std::move(annotation_before), active_handle,
+                                      "Edit highlighter annotation") {}
+
+  protected:
+    [[nodiscard]] bool Move_endpoint(Annotation &edited,
+                                     AnnotationEditHandleKind handle,
+                                     PointPx cursor) override {
+        FreehandStrokeAnnotation *const fh =
+            std::get_if<FreehandStrokeAnnotation>(&edited.data);
+        if (fh == nullptr || fh->points.size() < 2) {
+            return false;
+        }
+        if (handle == AnnotationEditHandleKind::FreehandStrokeStart) {
+            fh->points[0] = cursor;
+        } else {
+            fh->points[1] = cursor;
+        }
+        return true;
+    }
 };
 
 class RectangleResizeEditInteraction final : public IAnnotationEditInteraction {
@@ -282,6 +341,23 @@ Hit_test_annotation_edit_target(Annotation const *selected_annotation,
                                             ? AnnotationEditTargetKind::LineStartHandle
                                             : AnnotationEditTargetKind::LineEndHandle};
         }
+    } else if (FreehandStrokeAnnotation const *const sel_fh =
+                   selected_annotation ? std::get_if<FreehandStrokeAnnotation>(
+                                             &selected_annotation->data)
+                                       : nullptr;
+               sel_fh != nullptr &&
+               sel_fh->freehand_tip_shape == FreehandTipShape::Square &&
+               sel_fh->points.size() == 2) {
+        if (std::optional<AnnotationLineEndpoint> const endpoint =
+                Hit_test_line_endpoint_handles(sel_fh->points[0], sel_fh->points[1],
+                                               cursor);
+            endpoint.has_value()) {
+            return AnnotationEditTarget{
+                selected_annotation->id,
+                *endpoint == AnnotationLineEndpoint::Start
+                    ? AnnotationEditTargetKind::FreehandStrokeStartHandle
+                    : AnnotationEditTargetKind::FreehandStrokeEndHandle};
+        }
     } else if (RectangleAnnotation const *const sel_rect =
                    selected_annotation
                        ? std::get_if<RectangleAnnotation>(&selected_annotation->data)
@@ -323,6 +399,20 @@ Create_annotation_edit_interaction(AnnotationEditTarget target, size_t index,
         return std::make_unique<LineEndpointEditInteraction>(
             target.annotation_id, index, std::move(annotation_before),
             AnnotationEditHandleKind::LineEnd);
+    case AnnotationEditTargetKind::FreehandStrokeStartHandle:
+        if (!std::holds_alternative<FreehandStrokeAnnotation>(annotation_before.data)) {
+            return {};
+        }
+        return std::make_unique<FreehandStrokeEndpointEditInteraction>(
+            target.annotation_id, index, std::move(annotation_before),
+            AnnotationEditHandleKind::FreehandStrokeStart);
+    case AnnotationEditTargetKind::FreehandStrokeEndHandle:
+        if (!std::holds_alternative<FreehandStrokeAnnotation>(annotation_before.data)) {
+            return {};
+        }
+        return std::make_unique<FreehandStrokeEndpointEditInteraction>(
+            target.annotation_id, index, std::move(annotation_before),
+            AnnotationEditHandleKind::FreehandStrokeEnd);
     case AnnotationEditTargetKind::RectangleTopLeftHandle:
     case AnnotationEditTargetKind::RectangleTopRightHandle:
     case AnnotationEditTargetKind::RectangleBottomRightHandle:

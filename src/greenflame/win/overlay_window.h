@@ -116,6 +116,7 @@ class OverlayWindow final {
     [[nodiscard]] bool Read_clipboard_text(std::wstring &out) const;
     void Write_clipboard_text(std::wstring_view text) const;
     void Reset_caret_blink();
+    void Cancel_highlighter_straighten_pending() noexcept;
     void Handle_device_loss();
     [[nodiscard]] bool Can_show_color_wheel() const noexcept;
     [[nodiscard]] std::span<const COLORREF> Current_tool_color_palette() const noexcept;
@@ -163,6 +164,9 @@ class OverlayWindow final {
         core::TextWheelMode text_mode = core::TextWheelMode::Color;
         std::optional<core::TextWheelHubSide> hovered_hub = std::nullopt;
     };
+
+    bool highlighter_straighten_pending_ = false;
+    core::PointPx highlighter_straighten_ref_pos_ = {};
 
     IOverlayEvents *events_ = nullptr;
     core::AppConfig *config_ = nullptr;

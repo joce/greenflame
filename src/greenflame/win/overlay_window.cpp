@@ -37,6 +37,7 @@ constexpr int kTextToolGlyphResourceId = 110;
 constexpr int kBubbleToolGlyphResourceId = 111;
 constexpr UINT_PTR kBrushSizeOverlayTimerId = 1;
 constexpr UINT_PTR kCaretBlinkTimerId = 2;
+constexpr UINT_PTR kHighlighterStraightenTimerId = 3;
 
 constexpr int kThumbnailMaxWidth = 320;
 constexpr int kThumbnailMaxHeight = 120;
@@ -214,6 +215,8 @@ Selection_handle_for_annotation_edit_target(
     case Kind::Body:
     case Kind::LineStartHandle:
     case Kind::LineEndHandle:
+    case Kind::FreehandStrokeStartHandle:
+    case Kind::FreehandStrokeEndHandle:
         return std::nullopt;
     }
     return std::nullopt;
@@ -244,6 +247,8 @@ Selection_handle_for_active_annotation_edit(
         return Handle::Left;
     case Kind::LineStart:
     case Kind::LineEnd:
+    case Kind::FreehandStrokeStart:
+    case Kind::FreehandStrokeEnd:
         return std::nullopt;
     }
     return std::nullopt;
@@ -1000,6 +1005,13 @@ void OverlayWindow::Write_clipboard_text(std::wstring_view text) const {
     }
 }
 
+void OverlayWindow::Cancel_highlighter_straighten_pending() noexcept {
+    if (highlighter_straighten_pending_) {
+        (void)KillTimer(hwnd_, kHighlighterStraightenTimerId);
+        highlighter_straighten_pending_ = false;
+    }
+}
+
 void OverlayWindow::Reset_caret_blink() {
     caret_blink_visible_ = true;
     if (hwnd_ == nullptr || !controller_.Has_active_text_edit()) {
@@ -1386,6 +1398,7 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
         }
         core::OverlayAction const action = controller_.On_cancel();
         Apply_action(action);
+        Cancel_highlighter_straighten_pending();
         if (!Is_open()) {
             return 0;
         }
@@ -1778,6 +1791,23 @@ LRESULT OverlayWindow::On_l_button_down() {
         controller_.On_primary_press(mods, cursor_client, cursor_screen, win_handle,
                                      monitor_idx, std::optional<core::RectPx>{}, vdesk,
                                      Collect_visible_snap_edges(), wr.left, wr.top));
+    if (controller_.Active_annotation_tool() == core::AnnotationToolId::Highlighter &&
+        controller_.Has_active_annotation_gesture()) {
+        int32_t const pause_ms =
+            config_ != nullptr ? config_->highlighter_pause_straighten_ms
+                               : core::AppConfig::kDefaultHighlighterPauseStraightenMs;
+        if (pause_ms == 0) {
+            if (controller_.Straighten_highlighter_stroke()) {
+                Apply_action(core::OverlayAction::Repaint);
+            }
+            highlighter_straighten_pending_ = false;
+        } else {
+            highlighter_straighten_pending_ = true;
+            highlighter_straighten_ref_pos_ = cursor_client;
+            (void)SetTimer(hwnd_, kHighlighterStraightenTimerId,
+                           static_cast<UINT>(pause_ms), nullptr);
+        }
+    }
     if (controller_.Has_active_text_edit()) {
         Reset_caret_blink();
     } else if (had_text_edit && hwnd_ != nullptr) {
@@ -1858,6 +1888,23 @@ LRESULT OverlayWindow::On_mouse_move() {
     core::OverlayAction const action = controller_.On_pointer_move(
         mods, cursor_client, cursor_screen, win_rect, vdesk, monitor_idx, ox, oy);
     Apply_action(action);
+    if (highlighter_straighten_pending_) {
+        int32_t const deadzone =
+            config_ != nullptr ? config_->highlighter_pause_straighten_deadzone_px : 0;
+        int32_t const dx = cursor_client.x - highlighter_straighten_ref_pos_.x;
+        int32_t const dy = cursor_client.y - highlighter_straighten_ref_pos_.y;
+        if (static_cast<int64_t>(dx) * dx + static_cast<int64_t>(dy) * dy >
+            static_cast<int64_t>(deadzone) * deadzone) {
+            int32_t const pause_ms =
+                config_ != nullptr
+                    ? config_->highlighter_pause_straighten_ms
+                    : core::AppConfig::kDefaultHighlighterPauseStraightenMs;
+            (void)KillTimer(hwnd_, kHighlighterStraightenTimerId);
+            (void)SetTimer(hwnd_, kHighlighterStraightenTimerId,
+                           static_cast<UINT>(pause_ms), nullptr);
+            highlighter_straighten_ref_pos_ = cursor_client;
+        }
+    }
     if (controller_.Has_active_text_edit() && (GetKeyState(VK_LBUTTON) & 0x8000) != 0) {
         Reset_caret_blink();
     }
@@ -1994,6 +2041,7 @@ LRESULT OverlayWindow::On_l_button_up() {
         was_move ? s.move_anchor_rect
                  : (was_resize ? s.resize_anchor_rect : core::RectPx{});
 
+    Cancel_highlighter_straighten_pending();
     core::OverlayModifierState mods{};
     mods.alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
     Apply_action(controller_.On_primary_release(mods, Get_client_cursor_pos_px(hwnd_)));
@@ -2046,6 +2094,13 @@ LRESULT OverlayWindow::On_r_button_down() {
 }
 
 LRESULT OverlayWindow::On_timer(WPARAM wparam) {
+    if (wparam == kHighlighterStraightenTimerId) {
+        Cancel_highlighter_straighten_pending();
+        if (controller_.Straighten_highlighter_stroke()) {
+            Apply_action(core::OverlayAction::Repaint);
+        }
+        return 0;
+    }
     if (wparam == kBrushSizeOverlayTimerId) {
         Clear_transient_center_label(true);
         return 0;
@@ -2707,6 +2762,7 @@ LRESULT OverlayWindow::On_destroy() {
     Clear_transient_center_label(false);
     caret_blink_visible_ = true;
     (void)KillTimer(hwnd_, kCaretBlinkTimerId);
+    Cancel_highlighter_straighten_pending();
     mouse_wheel_delta_remainder_ = 0;
     text_wheel_delta_remainder_ = 0;
     suppress_next_lbutton_up_ = false;

@@ -9,6 +9,7 @@ struct AppConfig final {
     static constexpr int32_t kDefaultBrushWidthPx = 2;
     static constexpr int32_t kDefaultToolSizeOverlayDurationMs = 800;
     static constexpr int32_t kDefaultTextPointSize = kDefaultTextAnnotationPointSize;
+    static constexpr int32_t kDefaultHighlighterPauseStraightenMs = 800;
 
     std::wstring default_save_dir = {};
     std::wstring last_save_as_dir = {};
@@ -23,6 +24,8 @@ struct AppConfig final {
     HighlighterColorPalette highlighter_colors = kDefaultHighlighterColorPalette;
     int32_t current_highlighter_color_index = kDefaultHighlighterColorIndex;
     int32_t highlighter_opacity_percent = kDefaultHighlighterOpacityPercent;
+    int32_t highlighter_pause_straighten_ms = kDefaultHighlighterPauseStraightenMs;
+    int32_t highlighter_pause_straighten_deadzone_px = 0;
     int32_t text_size_points = kDefaultTextPointSize;
     TextFontChoice text_current_font = TextFontChoice::Sans;
     TextFontChoice bubble_current_font = TextFontChoice::Sans;

@@ -112,6 +112,8 @@ class AnnotationController final : public IAnnotationToolHost,
     [[nodiscard]] std::optional<AnnotationEditHandleKind>
     Active_annotation_edit_handle() const noexcept;
 
+    [[nodiscard]] bool Straighten_highlighter_stroke() noexcept;
+
     [[nodiscard]] bool On_primary_press(PointPx cursor);
     [[nodiscard]] bool On_pointer_move(PointPx cursor, bool primary_down = false);
     [[nodiscard]] bool On_primary_release(UndoStack &undo_stack);

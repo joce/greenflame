@@ -29,6 +29,7 @@ class FreehandAnnotationTool final : public IAnnotationTool {
     [[nodiscard]] std::optional<StrokeStyle>
     Draft_freehand_style(IAnnotationToolHost const &host) const noexcept override;
     void On_stroke_style_changed() noexcept override;
+    void Straighten() noexcept;
 
   private:
     [[nodiscard]] Annotation
@@ -39,6 +40,7 @@ class FreehandAnnotationTool final : public IAnnotationTool {
     AnnotationToolDescriptor descriptor_ = {};
     FreehandTipShape tip_shape_ = FreehandTipShape::Round;
     bool drawing_ = false;
+    bool straightened_ = false;
     std::vector<PointPx> points_ = {};
     mutable std::optional<Annotation> draft_annotation_cache_ = std::nullopt;
 };

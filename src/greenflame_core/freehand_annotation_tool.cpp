@@ -27,6 +27,7 @@ AnnotationToolDescriptor const &FreehandAnnotationTool::Descriptor() const noexc
 
 void FreehandAnnotationTool::Reset() noexcept {
     drawing_ = false;
+    straightened_ = false;
     points_.clear();
     Invalidate_draft();
 }
@@ -37,6 +38,7 @@ bool FreehandAnnotationTool::On_primary_press(IAnnotationToolHost &host,
                                               PointPx cursor) {
     (void)host;
     drawing_ = true;
+    straightened_ = false;
     points_.clear();
     points_.push_back(cursor);
     Invalidate_draft();
@@ -48,6 +50,14 @@ bool FreehandAnnotationTool::On_pointer_move(IAnnotationToolHost &host,
     (void)host;
     if (!drawing_) {
         return false;
+    }
+    if (straightened_) {
+        if (points_[1] == cursor) {
+            return false;
+        }
+        points_[1] = cursor;
+        Invalidate_draft();
+        return true;
     }
     if (!points_.empty() && points_.back() == cursor) {
         return false;
@@ -82,6 +92,7 @@ bool FreehandAnnotationTool::On_cancel(IAnnotationToolHost &host) {
         return false;
     }
     drawing_ = false;
+    straightened_ = false;
     points_.clear();
     Invalidate_draft();
     return true;
@@ -119,11 +130,28 @@ FreehandAnnotationTool::Build_annotation(IAnnotationToolHost const &host,
     Annotation annotation{};
     annotation.id = host.Next_annotation_id();
     annotation.data = FreehandStrokeAnnotation{
-        .points = host.Smooth_points(raw_points),
+        .points = straightened_
+                      ? std::vector<PointPx>{raw_points.begin(), raw_points.end()}
+                      : host.Smooth_points(raw_points),
         .style = host.Current_stroke_style(),
         .freehand_tip_shape = tip_shape_,
     };
     return annotation;
+}
+
+void FreehandAnnotationTool::Straighten() noexcept {
+    if (!drawing_) {
+        return;
+    }
+    straightened_ = true;
+    if (points_.size() > 2) {
+        PointPx const end = points_.back();
+        points_.resize(2);
+        points_[1] = end;
+    } else if (points_.size() == 1) {
+        points_.push_back(points_[0]);
+    }
+    Invalidate_draft();
 }
 
 void FreehandAnnotationTool::Invalidate_draft() noexcept {

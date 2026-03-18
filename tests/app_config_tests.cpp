@@ -106,3 +106,14 @@ TEST(app_config, Normalize_ResetsInvalidBubbleFontChoiceToSans) {
 
     EXPECT_EQ(config.bubble_current_font, TextFontChoice::Sans);
 }
+
+TEST(app_config, Normalize_ClampsHighlighterStraightenFieldsToNonNegative) {
+    AppConfig config{};
+    config.highlighter_pause_straighten_ms = -100;
+    config.highlighter_pause_straighten_deadzone_px = -5;
+
+    config.Normalize();
+
+    EXPECT_EQ(config.highlighter_pause_straighten_ms, 0);
+    EXPECT_EQ(config.highlighter_pause_straighten_deadzone_px, 0);
+}

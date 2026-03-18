@@ -32,6 +32,8 @@ struct D2DOverlayResources final {
     Microsoft::WRL::ComPtr<ID2D1Bitmap> frozen_bitmap;
     Microsoft::WRL::ComPtr<ID2D1Bitmap> draft_stroke_bitmap;
     size_t draft_stroke_point_count = 0; // points rendered into draft_stroke_rt
+    core::PointPx draft_stroke_last_point =
+        {}; // last point rendered into draft_stroke_rt
 
     // Reusable shared resources (recreated on device loss)
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> solid_brush;

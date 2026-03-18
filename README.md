@@ -49,6 +49,7 @@ Once a region is selected:
 - With the **Bubble tool** active, **left-click inside the selection** to place a numbered circle. The number auto-increments with each placement and decrements on undo. **Right-click** opens a **12-segment style wheel**: 8 annotation-color slots on the left half and 4 font choices on the right half. The number color is chosen automatically for contrast (black on light fills, white on dark fills).
 - With the **Brush** or **Bubble tool** active, the overlay shows an anti-aliased circular size preview around the cursor hotspot.
 - With the **Highlighter tool** active, the overlay shows an anti-aliased axis-aligned square size preview around the cursor hotspot.
+- While drawing a **Highlighter** stroke, holding the mouse still for `tools.highlighter.pause_straighten_ms` milliseconds (default 800 ms) snaps the stroke to a straight bar from the start point to the cursor. After snapping, the end of the bar tracks the mouse live until release. The snap is one-way — it cannot be reverted to freehand. Setting `pause_straighten_ms` to `0` makes every stroke start as a straight bar immediately.
 - With the **Line** or **Arrow** tool active, the overlay shows an anti-aliased square size preview around the cursor hotspot aligned to the current line direction.
 - The **Rectangle** and **Filled Rectangle** tools do not draw a cursor size preview overlay.
 - While editing text, **Ctrl+A / Ctrl+C / Ctrl+X / Ctrl+V** work on the active draft, and **Ctrl-Z / Ctrl-Shift-Z** affect only that draft.
@@ -179,6 +180,8 @@ Greenflame reads `~/.config/greenflame/greenflame.json` (i.e. `%USERPROFILE%\.co
 | `tools.highlighter.colors` | Object with slot index keys (e.g. `{"2": "#ffb44d"}`) | Highlighter color wheel slots (indices 0–5). Only non-default slots are written. Values use `#rrggbb`. |
 | `tools.highlighter.current_color` | `0` | Current Highlighter color slot index, clamped to `0..5`. |
 | `tools.highlighter.opacity_percent` | `50` | Default Highlighter opacity for live preview, save output, and clipboard output. Values are clamped to `0..100`. |
+| `tools.highlighter.pause_straighten_ms` | `800` | After the mouse is still for this many milliseconds during a highlighter stroke, the stroke snaps to a straight bar (start to cursor). `0` means always straight. |
+| `tools.highlighter.pause_straighten_deadzone_px` | `0` | Mouse must move more than this many physical pixels from the last timer-reset position before the pause timer resets. `0` means any movement resets the timer. |
 | `tools.text.size_points` | `12` | Default Text tool point size. Values are normalized to the nearest supported preset (`5, 8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72, 84, 96, 108, 144, 192, 216, 288`). Runtime adjustments are persisted here. |
 | `tools.text.current_font` | `sans` | Active font slot for the Text tool. Accepted values: `sans`, `serif`, `mono`, `art`. |
 | `tools.bubble.current_font` | `sans` | Active font slot for the Bubble tool. Accepted values: `sans`, `serif`, `mono`, `art`. |
@@ -213,7 +216,9 @@ Example:
     "highlighter": {
       "colors": { "2": "#ffb44d" },
       "current_color": 0,
-      "opacity_percent": 50
+      "opacity_percent": 50,
+      "pause_straighten_ms": 800,
+      "pause_straighten_deadzone_px": 0
     },
     "text": {
       "size_points": 12,

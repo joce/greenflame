@@ -1206,6 +1206,13 @@ void Draw_annotation_handles(ID2D1RenderTarget *rt, D2DOverlayResources &res,
             std::get_if<core::LineAnnotation>(&ann->data)) {
         Draw_endpoint_handle(rt, res, line->start);
         Draw_endpoint_handle(rt, res, line->end);
+    } else if (core::FreehandStrokeAnnotation const *const fh =
+                   std::get_if<core::FreehandStrokeAnnotation>(&ann->data);
+               fh != nullptr &&
+               fh->freehand_tip_shape == core::FreehandTipShape::Square &&
+               fh->points.size() == 2) {
+        Draw_endpoint_handle(rt, res, fh->points[0]);
+        Draw_endpoint_handle(rt, res, fh->points[1]);
     } else if (core::RectangleAnnotation const *const rect =
                    std::get_if<core::RectangleAnnotation>(&ann->data)) {
         std::array<bool, 8> const visible =
@@ -1968,6 +1975,7 @@ void Clear_draft_stroke_surface(D2DOverlayResources &res) {
     }
 
     res.draft_stroke_point_count = 0;
+    res.draft_stroke_last_point = {};
     res.draft_stroke_bitmap.Reset();
     if (!res.draft_stroke_rt) {
         return;
@@ -1995,9 +2003,19 @@ void Update_draft_stroke_bitmap(D2DOverlayResources &res,
     if (!res.draft_stroke_rt) {
         return;
     }
-    // Nothing new to draw.
-    if (points.size() <= res.draft_stroke_point_count) {
-        return;
+    // Points shrank (e.g. after Straighten): reset so the surface is cleared and
+    // redrawn from scratch on this call.
+    if (points.size() < res.draft_stroke_point_count) {
+        res.draft_stroke_point_count = 0;
+    }
+    // Same count: only skip if the endpoint hasn't moved (e.g. endpoint tracking
+    // after Straighten changes points[1] without changing points.size()).
+    if (points.size() == res.draft_stroke_point_count) {
+        if (res.draft_stroke_point_count == 0 ||
+            points.back() == res.draft_stroke_last_point) {
+            return;
+        }
+        res.draft_stroke_point_count = 0; // force full clear + redraw
     }
     // Need at least 2 points to form a segment.
     if (points.size() < 2) {
@@ -2072,6 +2090,7 @@ void Update_draft_stroke_bitmap(D2DOverlayResources &res,
     HRESULT const hr = res.draft_stroke_rt->EndDraw();
     if (SUCCEEDED(hr)) {
         res.draft_stroke_point_count = points.size();
+        res.draft_stroke_last_point = points.back();
         (void)res.draft_stroke_rt->GetBitmap(
             res.draft_stroke_bitmap.ReleaseAndGetAddressOf());
     }
@@ -2093,11 +2112,13 @@ void Draw_live_layer(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         if (res.draft_stroke_bitmap) {
             if (input.draft_freehand_tip_shape == core::FreehandTipShape::Square &&
                 res.screenshot && res.multiply_effect) {
-                // Multiply blend: result = screenshot * stroke (opacity baked in stroke).
-                // Non-stroke pixels are transparent and leave the destination unchanged.
+                // Multiply blend: result = screenshot * stroke (opacity baked in
+                // stroke). Non-stroke pixels are transparent and leave the destination
+                // unchanged.
                 Microsoft::WRL::ComPtr<ID2D1DeviceContext> dc;
                 if (SUCCEEDED(rt->QueryInterface(IID_PPV_ARGS(&dc)))) {
-                    // k1 = opacity (stroke is full-alpha; k1 scales the multiply result).
+                    // k1 = opacity (stroke is full-alpha; k1 scales the multiply
+                    // result).
                     D2D1_VECTOR_4F const coeffs = {input.draft_freehand_blit_opacity,
                                                    0.0f, 0.0f, 0.0f};
                     (void)res.multiply_effect->SetValue(
@@ -2210,38 +2231,28 @@ void Draw_live_layer(ID2D1RenderTarget *rt, D2DOverlayResources &res,
     Draw_color_wheel(rt, res, input);
 }
 
-} // namespace
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
-void Rebuild_annotations_bitmap(D2DOverlayResources &res,
-                                std::span<const core::Annotation> annotations) {
-    if (!res.annotations_rt) {
-        return;
-    }
-
-    // Returns true if this annotation is a square-tip freehand (highlighter).
+// Draws all annotations to rt using multiply blend for square-tip freehand.
+// rt must be in BeginDraw state on entry and will remain so on return.
+// Temporarily EndDraw/BeginDraw's rt around each highlighter so draft_stroke_rt
+// can be used as a scratch surface.
+void Draw_annotations_to_rt(ID2D1RenderTarget *rt, D2DOverlayResources &res,
+                            std::span<const core::Annotation> annotations) {
     auto const is_highlighter = [](core::Annotation const &ann) -> bool {
         auto const *fh = std::get_if<core::FreehandStrokeAnnotation>(&ann.data);
         return fh && fh->freehand_tip_shape == core::FreehandTipShape::Square;
     };
 
-    // Only use the multiply path when all required resources are present.
-    bool const can_multiply = res.screenshot && res.multiply_effect && res.draft_stroke_rt &&
-                              std::any_of(annotations.begin(), annotations.end(), is_highlighter);
-
-    res.annotations_rt->BeginDraw();
-    res.annotations_rt->Clear(D2D1::ColorF(0.f, 0.f, 0.f, 0.f));
+    bool const can_multiply =
+        res.screenshot && res.multiply_effect && res.draft_stroke_rt &&
+        std::any_of(annotations.begin(), annotations.end(), is_highlighter);
 
     for (auto const &ann : annotations) {
         if (can_multiply && is_highlighter(ann)) {
             auto const &fh = *std::get_if<core::FreehandStrokeAnnotation>(&ann.data);
 
-            // End the annotations draw temporarily so draft_stroke_rt can be used.
-            if (FAILED(res.annotations_rt->EndDraw())) {
-                res.annotations_rt->BeginDraw();
+            // Suspend rt so draft_stroke_rt can be used as scratch.
+            if (FAILED(rt->EndDraw())) {
+                rt->BeginDraw();
                 continue;
             }
 
@@ -2255,52 +2266,64 @@ void Rebuild_annotations_bitmap(D2DOverlayResources &res,
                 Microsoft::WRL::ComPtr<ID2D1Bitmap> stroke_bmp;
                 if (SUCCEEDED(res.draft_stroke_rt->GetBitmap(
                         stroke_bmp.ReleaseAndGetAddressOf()))) {
-                    // k1 = 1: stroke already drawn at desired opacity (single-pass
-                    // FillGeometry, no accumulation), so no additional scaling needed.
+                    // k1 = 1: opacity is already baked into the stroke by
+                    // Draw_freehand_points (single-pass FillGeometry, no accumulation).
                     D2D1_VECTOR_4F const coeffs = {1.0f, 0.0f, 0.0f, 0.0f};
                     (void)res.multiply_effect->SetValue(
                         D2D1_ARITHMETICCOMPOSITE_PROP_COEFFICIENTS, coeffs);
                     res.multiply_effect->SetInput(0, res.screenshot.Get());
                     res.multiply_effect->SetInput(1, stroke_bmp.Get());
-                    // Re-enter annotations draw and composite the multiply result.
-                    res.annotations_rt->BeginDraw();
+                    rt->BeginDraw();
                     Microsoft::WRL::ComPtr<ID2D1DeviceContext> dc;
-                    if (SUCCEEDED(
-                            res.annotations_rt->QueryInterface(IID_PPV_ARGS(&dc)))) {
+                    if (SUCCEEDED(rt->QueryInterface(IID_PPV_ARGS(&dc)))) {
                         dc->DrawImage(res.multiply_effect.Get());
+                        drew_multiply = true;
                     }
-                    drew_multiply = true;
                 }
             }
             if (!drew_multiply) {
                 // Fallback: re-enter and draw with normal SOURCE_OVER.
-                res.annotations_rt->BeginDraw();
-                Draw_freehand_points(res.annotations_rt.Get(), res, fh.points, fh.style,
+                rt->BeginDraw();
+                Draw_freehand_points(rt, res, fh.points, fh.style,
                                      fh.freehand_tip_shape);
             }
         } else {
-            Draw_annotation(res.annotations_rt.Get(), res, ann);
+            Draw_annotation(rt, res, ann);
         }
-    }
-
-    HRESULT const hr = res.annotations_rt->EndDraw();
-    if (SUCCEEDED(hr)) {
-        (void)res.annotations_rt->GetBitmap(
-            res.annotations_bitmap.ReleaseAndGetAddressOf());
-        res.annotations_valid = true;
     }
 
     // If draft_stroke_rt was used as scratch, reset the incremental draw state and
     // clear the surface so the next gesture does not inherit stale pixels.
-    // Without the explicit clear, Update_draft_stroke_bitmap skips the surface clear
-    // when draft_stroke_point_count transitions 0→1→2, leaving committed stroke pixels
-    // in the surface that then get double-blended against the frozen bitmap.
     if (can_multiply) {
         res.draft_stroke_point_count = 0;
         res.draft_stroke_bitmap.Reset();
         res.draft_stroke_rt->BeginDraw();
         res.draft_stroke_rt->Clear(D2D1::ColorF(0.f, 0.f, 0.f, 0.f));
         (void)res.draft_stroke_rt->EndDraw();
+    }
+}
+
+} // namespace
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+void Rebuild_annotations_bitmap(D2DOverlayResources &res,
+                                std::span<const core::Annotation> annotations) {
+    if (!res.annotations_rt) {
+        return;
+    }
+
+    res.annotations_rt->BeginDraw();
+    res.annotations_rt->Clear(D2D1::ColorF(0.f, 0.f, 0.f, 0.f));
+    Draw_annotations_to_rt(res.annotations_rt.Get(), res, annotations);
+
+    HRESULT const hr = res.annotations_rt->EndDraw();
+    if (SUCCEEDED(hr)) {
+        (void)res.annotations_rt->GetBitmap(
+            res.annotations_bitmap.ReleaseAndGetAddressOf());
+        res.annotations_valid = true;
     }
 }
 
@@ -2348,6 +2371,14 @@ bool Paint_d2d_frame(D2DOverlayResources &res, D2DPaintInput const &input, int v
                                input.draft_freehand_style,
                                input.draft_freehand_tip_shape);
 
+    // When an annotation edit interaction is active, the annotation under the cursor
+    // changes every frame. Rebuild annotations_bitmap with the live state now, before
+    // hwnd_rt->BeginDraw(), so the normal blit path gets the correct multiply-blend
+    // rendering for highlighters without any mid-frame EndDraw on hwnd_rt.
+    if (input.annotation_editing) {
+        Rebuild_annotations_bitmap(res, input.annotations);
+    }
+
     bool const is_steady_state = res.frozen_valid && !input.dragging &&
                                  !input.handle_dragging && !input.move_dragging &&
                                  !input.annotation_editing && !input.modifier_preview;
@@ -2381,13 +2412,7 @@ bool Paint_d2d_frame(D2DOverlayResources &res, D2DPaintInput const &input, int v
                                     sel_f);
         }
 
-        if (input.annotation_editing) {
-            // Draw all annotations from the live controller state so the annotation
-            // being edited is shown at its current (in-progress) position/shape.
-            for (auto const &ann : input.annotations) {
-                Draw_annotation(res.hwnd_rt.Get(), res, ann);
-            }
-        } else if (res.annotations_bitmap) {
+        if (res.annotations_bitmap) {
             res.hwnd_rt->DrawBitmap(res.annotations_bitmap.Get());
         }
     }

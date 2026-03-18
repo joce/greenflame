@@ -8,6 +8,8 @@ enum class AnnotationEditTargetKind : uint8_t {
     Body,
     LineStartHandle,
     LineEndHandle,
+    FreehandStrokeStartHandle,
+    FreehandStrokeEndHandle,
     RectangleTopLeftHandle,
     RectangleTopRightHandle,
     RectangleBottomRightHandle,
@@ -28,6 +30,8 @@ struct AnnotationEditTarget final {
 enum class AnnotationEditHandleKind : uint8_t {
     LineStart,
     LineEnd,
+    FreehandStrokeStart,
+    FreehandStrokeEnd,
     RectangleTopLeft,
     RectangleTopRight,
     RectangleBottomRight,

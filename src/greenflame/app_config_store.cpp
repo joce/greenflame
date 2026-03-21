@@ -1,13 +1,11 @@
 #include "app_config_store.h"
+#include "greenflame_core/app_config_json.h"
 
 namespace greenflame {
 
 namespace {
 
-constexpr int64_t kInt32MaxValue = std::numeric_limits<int32_t>::max();
-constexpr int64_t kInt32MinMagnitude = kInt32MaxValue + 1;
 constexpr size_t kHexColorTextLength = 7;
-constexpr size_t kHexColorComponentLength = 2;
 constexpr size_t kHexColorRedOffset = 1;
 constexpr size_t kHexColorGreenOffset = 3;
 constexpr size_t kHexColorBlueOffset = 5;
@@ -26,20 +24,6 @@ constexpr uint8_t kHexLowNibbleMask = 0x0F;
     return path;
 }
 
-[[nodiscard]] std::wstring To_wide(std::string const &value) {
-    if (value.empty()) {
-        return {};
-    }
-    int const required_chars =
-        MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, nullptr, 0);
-    if (required_chars <= 1) {
-        return {};
-    }
-    std::wstring out(static_cast<size_t>(required_chars - 1), L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, out.data(), required_chars);
-    return out;
-}
-
 [[nodiscard]] std::string To_utf8(std::wstring const &value) {
     if (value.empty()) {
         return {};
@@ -55,127 +39,8 @@ constexpr uint8_t kHexLowNibbleMask = 0x0F;
     return out;
 }
 
-[[nodiscard]] std::string_view Trim(std::string_view value) {
-    size_t begin = 0;
-    while (begin < value.size() &&
-           (value[begin] == ' ' || value[begin] == '\t' || value[begin] == '\r')) {
-        ++begin;
-    }
-    size_t end = value.size();
-    while (end > begin && (value[end - 1] == ' ' || value[end - 1] == '\t' ||
-                           value[end - 1] == '\r')) {
-        --end;
-    }
-    return value.substr(begin, end - begin);
-}
-
-[[nodiscard]] bool Try_parse_int32(std::string_view value, int32_t &out) {
-    std::string_view const trimmed = Trim(value);
-    if (trimmed.empty()) {
-        return false;
-    }
-
-    bool negative = false;
-    size_t pos = 0;
-    if (trimmed[0] == '+' || trimmed[0] == '-') {
-        negative = trimmed[0] == '-';
-        pos = 1;
-    }
-    if (pos >= trimmed.size()) {
-        return false;
-    }
-
-    int64_t parsed = 0;
-    for (; pos < trimmed.size(); ++pos) {
-        char const ch = trimmed[pos];
-        if (ch < '0' || ch > '9') {
-            return false;
-        }
-        parsed = parsed * 10 + static_cast<int64_t>(ch - '0');
-        if (!negative && parsed > kInt32MaxValue) {
-            out = std::numeric_limits<int32_t>::max();
-            return true;
-        }
-        if (negative && parsed > kInt32MinMagnitude) {
-            out = std::numeric_limits<int32_t>::min();
-            return true;
-        }
-    }
-
-    if (negative) {
-        parsed = -parsed;
-    }
-    out = static_cast<int32_t>(parsed);
-    return true;
-}
-
-[[nodiscard]] bool Try_parse_hex_digit(char ch, uint8_t &value) {
-    if (ch >= '0' && ch <= '9') {
-        value = static_cast<uint8_t>(ch - '0');
-        return true;
-    }
-    if (ch >= 'a' && ch <= 'f') {
-        value = static_cast<uint8_t>(10 + (ch - 'a'));
-        return true;
-    }
-    if (ch >= 'A' && ch <= 'F') {
-        value = static_cast<uint8_t>(10 + (ch - 'A'));
-        return true;
-    }
-    return false;
-}
-
-[[nodiscard]] bool Try_parse_hex_byte(std::string_view value, uint8_t &out) {
-    if (value.size() != 2) {
-        return false;
-    }
-    uint8_t high = 0;
-    uint8_t low = 0;
-    if (!Try_parse_hex_digit(value[0], high) || !Try_parse_hex_digit(value[1], low)) {
-        return false;
-    }
-    out = static_cast<uint8_t>((high << 4u) | low);
-    return true;
-}
-
-[[nodiscard]] bool Try_parse_color(std::string_view value, COLORREF &out) {
-    std::string_view const trimmed = Trim(value);
-    if (trimmed.size() != kHexColorTextLength || trimmed[0] != '#') {
-        return false;
-    }
-
-    uint8_t red = 0;
-    uint8_t green = 0;
-    uint8_t blue = 0;
-    if (!Try_parse_hex_byte(
-            trimmed.substr(kHexColorRedOffset, kHexColorComponentLength), red) ||
-        !Try_parse_hex_byte(
-            trimmed.substr(kHexColorGreenOffset, kHexColorComponentLength), green) ||
-        !Try_parse_hex_byte(
-            trimmed.substr(kHexColorBlueOffset, kHexColorComponentLength), blue)) {
-        return false;
-    }
-
-    out = core::Make_colorref(red, green, blue);
-    return true;
-}
-
 [[nodiscard]] char Hex_digit(uint8_t value) {
     return static_cast<char>((value < 10) ? ('0' + value) : ('a' + (value - 10)));
-}
-
-[[nodiscard]] core::TextFontChoice Parse_text_font_choice(std::string_view value) {
-    std::string_view const trimmed = Trim(value);
-    if (trimmed == "serif") {
-        return core::TextFontChoice::Serif;
-    }
-    if (trimmed == "mono") {
-        return core::TextFontChoice::Mono;
-    }
-    if (trimmed == "art") {
-        return core::TextFontChoice::Art;
-    }
-    return core::TextFontChoice::Sans;
 }
 
 [[nodiscard]] std::string_view Text_font_choice_token(core::TextFontChoice choice) {
@@ -190,32 +55,6 @@ constexpr uint8_t kHexLowNibbleMask = 0x0F;
         return "art";
     }
     return "sans";
-}
-
-[[nodiscard]] bool Read_int_from_json(easyjson::JSON const &j, int32_t &out) {
-    using Class = easyjson::JSON::Class;
-    if (j.JSON_type() == Class::Integral) {
-        int64_t const v = static_cast<int64_t>(j.to_int());
-        if (v >= std::numeric_limits<int32_t>::min() &&
-            v <= std::numeric_limits<int32_t>::max()) {
-            out = static_cast<int32_t>(v);
-            return true;
-        }
-        return false;
-    }
-    if (j.JSON_type() == Class::Floating) {
-        double const v = j.to_float();
-        if (v >= std::numeric_limits<int32_t>::min() &&
-            v <= std::numeric_limits<int32_t>::max()) {
-            out = static_cast<int32_t>(v);
-            return true;
-        }
-        return false;
-    }
-    if (j.JSON_type() == Class::String) {
-        return Try_parse_int32(j.to_string(), out);
-    }
-    return false;
 }
 
 [[nodiscard]] std::string To_hex_color(COLORREF color) {
@@ -240,64 +79,6 @@ constexpr uint8_t kHexLowNibbleMask = 0x0F;
     return value;
 }
 
-void Load_colors_from_json(easyjson::JSON const &j, core::AnnotationColorPalette &out,
-                           size_t max_count) {
-    if (j.JSON_type() == easyjson::JSON::Class::Object) {
-        for (auto const &[key, val] : j.object_range()) {
-            int32_t index = 0;
-            if (!Try_parse_int32(key, index) || index < 0 ||
-                index >= static_cast<int32_t>(max_count)) {
-                continue;
-            }
-            std::string const s = val.to_string();
-            COLORREF parsed = 0;
-            if (Try_parse_color(s, parsed)) {
-                out[static_cast<size_t>(index)] = parsed;
-            }
-        }
-        return;
-    }
-    if (j.JSON_type() == easyjson::JSON::Class::Array) {
-        auto const items = j.to_deque();
-        for (size_t i = 0; i < max_count && i < items.size(); ++i) {
-            std::string const s = items[i].to_string();
-            COLORREF parsed = 0;
-            if (Try_parse_color(s, parsed)) {
-                out[i] = parsed;
-            }
-        }
-    }
-}
-
-void Load_colors_from_json(easyjson::JSON const &j, core::HighlighterColorPalette &out,
-                           size_t max_count) {
-    if (j.JSON_type() == easyjson::JSON::Class::Object) {
-        for (auto const &[key, val] : j.object_range()) {
-            int32_t index = 0;
-            if (!Try_parse_int32(key, index) || index < 0 ||
-                index >= static_cast<int32_t>(max_count)) {
-                continue;
-            }
-            std::string const s = val.to_string();
-            COLORREF parsed = 0;
-            if (Try_parse_color(s, parsed)) {
-                out[static_cast<size_t>(index)] = parsed;
-            }
-        }
-        return;
-    }
-    if (j.JSON_type() == easyjson::JSON::Class::Array) {
-        auto const items = j.to_deque();
-        for (size_t i = 0; i < max_count && i < items.size(); ++i) {
-            std::string const s = items[i].to_string();
-            COLORREF parsed = 0;
-            if (Try_parse_color(s, parsed)) {
-                out[i] = parsed;
-            }
-        }
-    }
-}
-
 } // namespace
 
 std::filesystem::path Get_app_config_dir() {
@@ -318,206 +99,20 @@ core::AppConfig Load_app_config() {
         return config;
     }
     try {
-        easyjson::JSON root = easyjson::JSON::load_file(path.string());
-        if (root.JSON_type() != easyjson::JSON::Class::Object) {
-            config.Normalize();
+        std::ifstream file(path, std::ios::binary);
+        if (!file) {
             return config;
         }
 
-        if (root.has_key("ui")) {
-            easyjson::JSON const &ui = root["ui"];
-            if (ui.has_key("show_balloons") &&
-                ui["show_balloons"].JSON_type() == easyjson::JSON::Class::Boolean) {
-                config.show_balloons = ui["show_balloons"].to_bool();
-            }
-            if (ui.has_key("show_selection_size_side_labels") &&
-                ui["show_selection_size_side_labels"].JSON_type() ==
-                    easyjson::JSON::Class::Boolean) {
-                config.show_selection_size_side_labels =
-                    ui["show_selection_size_side_labels"].to_bool();
-            }
-            if (ui.has_key("show_selection_size_center_label") &&
-                ui["show_selection_size_center_label"].JSON_type() ==
-                    easyjson::JSON::Class::Boolean) {
-                config.show_selection_size_center_label =
-                    ui["show_selection_size_center_label"].to_bool();
-            }
-            if (ui.has_key("tool_size_overlay_duration_ms")) {
-                int32_t parsed = 0;
-                if (Read_int_from_json(ui["tool_size_overlay_duration_ms"], parsed)) {
-                    config.tool_size_overlay_duration_ms = parsed;
-                }
-            }
-        }
-
-        if (root.has_key("tools")) {
-            easyjson::JSON const &tools = root["tools"];
-            if (tools.has_key("brush")) {
-                easyjson::JSON const &freehand = tools["brush"];
-                if (freehand.has_key("size")) {
-                    int32_t parsed = 0;
-                    if (Read_int_from_json(freehand["size"], parsed)) {
-                        config.brush_size = parsed;
-                    }
-                }
-            }
-            if (tools.has_key("line")) {
-                easyjson::JSON const &line = tools["line"];
-                if (line.has_key("size")) {
-                    int32_t parsed = 0;
-                    if (Read_int_from_json(line["size"], parsed)) {
-                        config.line_size = parsed;
-                    }
-                }
-            }
-            if (tools.has_key("arrow")) {
-                easyjson::JSON const &arrow = tools["arrow"];
-                if (arrow.has_key("size")) {
-                    int32_t parsed = 0;
-                    if (Read_int_from_json(arrow["size"], parsed)) {
-                        config.arrow_size = parsed;
-                    }
-                }
-            }
-            if (tools.has_key("rect")) {
-                easyjson::JSON const &rect = tools["rect"];
-                if (rect.has_key("size")) {
-                    int32_t parsed = 0;
-                    if (Read_int_from_json(rect["size"], parsed)) {
-                        config.rect_size = parsed;
-                    }
-                }
-            }
-            if (tools.has_key("ellipse")) {
-                easyjson::JSON const &ellipse = tools["ellipse"];
-                if (ellipse.has_key("size")) {
-                    int32_t parsed = 0;
-                    if (Read_int_from_json(ellipse["size"], parsed)) {
-                        config.ellipse_size = parsed;
-                    }
-                }
-            }
-            if (tools.has_key("current_color")) {
-                int32_t parsed = 0;
-                if (Read_int_from_json(tools["current_color"], parsed)) {
-                    config.current_annotation_color_index = parsed;
-                }
-            }
-            if (tools.has_key("colors")) {
-                Load_colors_from_json(tools["colors"], config.annotation_colors,
-                                      core::kAnnotationColorSlotCount);
-            }
-            if (tools.has_key("font")) {
-                easyjson::JSON const &font = tools["font"];
-                if (font.has_key("sans")) {
-                    config.text_font_sans = To_wide(font["sans"].to_string());
-                }
-                if (font.has_key("serif")) {
-                    config.text_font_serif = To_wide(font["serif"].to_string());
-                }
-                if (font.has_key("mono")) {
-                    config.text_font_mono = To_wide(font["mono"].to_string());
-                }
-                if (font.has_key("art")) {
-                    config.text_font_art = To_wide(font["art"].to_string());
-                }
-            }
-            if (tools.has_key("highlighter")) {
-                easyjson::JSON const &hl = tools["highlighter"];
-                if (hl.has_key("size")) {
-                    int32_t parsed = 0;
-                    if (Read_int_from_json(hl["size"], parsed)) {
-                        config.highlighter_size = parsed;
-                    }
-                }
-                if (hl.has_key("current_color")) {
-                    int32_t parsed = 0;
-                    if (Read_int_from_json(hl["current_color"], parsed)) {
-                        config.current_highlighter_color_index = parsed;
-                    }
-                }
-                if (hl.has_key("opacity_percent")) {
-                    int32_t parsed = 0;
-                    if (Read_int_from_json(hl["opacity_percent"], parsed)) {
-                        config.highlighter_opacity_percent = parsed;
-                    }
-                }
-                if (hl.has_key("pause_straighten_ms")) {
-                    int32_t parsed = 0;
-                    if (Read_int_from_json(hl["pause_straighten_ms"], parsed)) {
-                        config.highlighter_pause_straighten_ms = parsed;
-                    }
-                }
-                if (hl.has_key("pause_straighten_deadzone_px")) {
-                    int32_t parsed = 0;
-                    if (Read_int_from_json(hl["pause_straighten_deadzone_px"],
-                                           parsed)) {
-                        config.highlighter_pause_straighten_deadzone_px = parsed;
-                    }
-                }
-                if (hl.has_key("colors")) {
-                    Load_colors_from_json(hl["colors"], config.highlighter_colors,
-                                          core::kHighlighterColorSlotCount);
-                }
-            }
-            if (tools.has_key("text")) {
-                easyjson::JSON const &text = tools["text"];
-                if (text.has_key("size")) {
-                    int32_t parsed = 0;
-                    if (Read_int_from_json(text["size"], parsed)) {
-                        config.text_size = parsed;
-                    }
-                }
-                if (text.has_key("current_font")) {
-                    config.text_current_font =
-                        Parse_text_font_choice(text["current_font"].to_string());
-                }
-            }
-            if (tools.has_key("bubble")) {
-                easyjson::JSON const &bubble = tools["bubble"];
-                if (bubble.has_key("size")) {
-                    int32_t parsed = 0;
-                    if (Read_int_from_json(bubble["size"], parsed)) {
-                        config.bubble_size = parsed;
-                    }
-                }
-                if (bubble.has_key("current_font")) {
-                    config.bubble_current_font =
-                        Parse_text_font_choice(bubble["current_font"].to_string());
-                }
-            }
-        }
-
-        if (root.has_key("save")) {
-            easyjson::JSON const &save = root["save"];
-            auto read_string = [&](char const *key, std::wstring &target) {
-                if (save.has_key(key) &&
-                    save[key].JSON_type() == easyjson::JSON::Class::String) {
-                    std::string const s = save[key].to_string();
-                    if (!s.empty()) {
-                        target = To_wide(s);
-                    }
-                }
-            };
-            read_string("default_save_dir", config.default_save_dir);
-            read_string("last_save_as_dir", config.last_save_as_dir);
-            read_string("filename_pattern_region", config.filename_pattern_region);
-            read_string("filename_pattern_desktop", config.filename_pattern_desktop);
-            read_string("filename_pattern_monitor", config.filename_pattern_monitor);
-            read_string("filename_pattern_window", config.filename_pattern_window);
-            read_string("default_save_format", config.default_save_format);
-            if (save.has_key("padding_color") &&
-                save["padding_color"].JSON_type() == easyjson::JSON::Class::String) {
-                COLORREF parsed = 0;
-                if (Try_parse_color(save["padding_color"].to_string(), parsed)) {
-                    config.padding_color = parsed;
-                }
-            }
+        std::string const json_text((std::istreambuf_iterator<char>(file)),
+                                    std::istreambuf_iterator<char>());
+        if (std::optional<core::AppConfig> const parsed =
+                core::Parse_app_config_json(json_text)) {
+            return *parsed;
         }
     } catch (...) {
         // Parse error or file read error: return default config.
     }
-    config.Normalize();
     return config;
 }
 

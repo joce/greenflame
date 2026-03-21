@@ -35,4 +35,7 @@
 #if defined(_M_ARM) && !defined(_ARM_)
 #define _ARM_
 #endif
+#include <stringapiset.h>
 #include <windef.h>
+
+#include <easyjson.h>

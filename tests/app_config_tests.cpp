@@ -1,4 +1,5 @@
 #include "greenflame_core/app_config.h"
+#include "greenflame_core/app_config_json.h"
 
 using namespace greenflame::core;
 
@@ -151,4 +152,75 @@ TEST(app_config, Normalize_PreservesDefaultPaddingColor) {
     config.Normalize();
 
     EXPECT_EQ(config.padding_color, Make_colorref(0x00, 0x00, 0x00));
+}
+
+TEST(app_config_json, Parse_AcceptsSparseEmptyRoot) {
+    std::optional<AppConfig> const config = Parse_app_config_json("{}");
+
+    ASSERT_TRUE(config.has_value());
+    EXPECT_EQ(config->brush_size, AppConfig::kDefaultBrushSize);
+    EXPECT_EQ(config->default_save_format, L"");
+    EXPECT_EQ(config->highlighter_opacity_percent, kDefaultHighlighterOpacityPercent);
+}
+
+TEST(app_config_json, Parse_AcceptsSchemaPropertyAndValidValues) {
+    std::optional<AppConfig> const config = Parse_app_config_json(R"json(
+{
+  "$schema": "https://example.com/greenflame.config.schema.json",
+  "tools": {
+    "brush": { "size": 5 },
+    "colors": { "4": "#ff00ff" },
+    "font": { "sans": "Arial" },
+    "highlighter": {
+      "current_color": 5,
+      "opacity_percent": 90
+    },
+    "text": { "current_font": "mono" }
+  },
+  "save": {
+    "default_save_format": "jpg",
+    "padding_color": "#112233"
+  }
+}
+)json");
+
+    ASSERT_TRUE(config.has_value());
+    EXPECT_EQ(config->brush_size, 5);
+    EXPECT_EQ(config->annotation_colors[4], Make_colorref(0xFF, 0x00, 0xFF));
+    EXPECT_EQ(config->text_font_sans, L"Arial");
+    EXPECT_EQ(config->current_highlighter_color_index, 5);
+    EXPECT_EQ(config->highlighter_opacity_percent, 90);
+    EXPECT_EQ(config->text_current_font, TextFontChoice::Mono);
+    EXPECT_EQ(config->default_save_format, L"jpg");
+    EXPECT_EQ(config->padding_color, Make_colorref(0x11, 0x22, 0x33));
+}
+
+TEST(app_config_json, Parse_RejectsUnknownTopLevelKey) {
+    EXPECT_FALSE(Parse_app_config_json(R"json({"extra":true})json").has_value());
+}
+
+TEST(app_config_json, Parse_RejectsStringToolSize) {
+    EXPECT_FALSE(Parse_app_config_json(R"json({"tools":{"brush":{"size":"5"}}})json")
+                     .has_value());
+}
+
+TEST(app_config_json, Parse_RejectsFloatingToolSize) {
+    EXPECT_FALSE(Parse_app_config_json(R"json({"tools":{"brush":{"size":5.0}}})json")
+                     .has_value());
+}
+
+TEST(app_config_json, Parse_RejectsColorArrays) {
+    EXPECT_FALSE(Parse_app_config_json(R"json({"tools":{"colors":["#ff00ff"]}})json")
+                     .has_value());
+}
+
+TEST(app_config_json, Parse_RejectsWhitespaceOnlyFontFamily) {
+    EXPECT_FALSE(Parse_app_config_json(R"json({"tools":{"font":{"sans":"   "}}})json")
+                     .has_value());
+}
+
+TEST(app_config_json, Parse_RejectsJpegAliasInSaveFormat) {
+    EXPECT_FALSE(
+        Parse_app_config_json(R"json({"save":{"default_save_format":"jpeg"}})json")
+            .has_value());
 }

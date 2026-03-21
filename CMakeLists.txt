@@ -124,6 +124,8 @@ add_library(greenflame_core STATIC
     src/greenflame_core/app_controller.h
     src/greenflame_core/app_config.cpp
     src/greenflame_core/app_config.h
+    src/greenflame_core/app_config_json.cpp
+    src/greenflame_core/app_config_json.h
     src/greenflame_core/app_services.h
     src/greenflame_core/process_exit_code.h
     src/greenflame_core/monitor_rules.cpp
@@ -205,6 +207,10 @@ target_compile_definitions(greenflame_core PRIVATE
 
 target_precompile_headers(greenflame_core PRIVATE
     "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/src/greenflame_core/pch.h>"
+)
+
+target_link_libraries(greenflame_core PRIVATE
+    easyjson
 )
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")

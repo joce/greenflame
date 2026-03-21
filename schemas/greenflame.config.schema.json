@@ -1,0 +1,275 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Greenflame Config",
+  "description": "Strict schema for Greenflame's sparse JSON config file.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional schema reference for editors."
+    },
+    "ui": {
+      "type": "object",
+      "description": "UI behavior settings.",
+      "additionalProperties": false,
+      "properties": {
+        "show_balloons": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show tray toast notifications after copy/save actions."
+        },
+        "show_selection_size_side_labels": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show width and height labels outside the selection."
+        },
+        "show_selection_size_center_label": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a centered W x H label inside the selection."
+        },
+        "tool_size_overlay_duration_ms": {
+          "$ref": "#/$defs/nonNegativeInteger",
+          "default": 800,
+          "description": "Centered tool-size overlay visibility duration in milliseconds. Zero disables it."
+        }
+      }
+    },
+    "tools": {
+      "type": "object",
+      "description": "Annotation tool settings.",
+      "additionalProperties": false,
+      "properties": {
+        "brush": {
+          "$ref": "#/$defs/sizedTool",
+          "description": "Brush tool settings."
+        },
+        "line": {
+          "$ref": "#/$defs/sizedTool",
+          "description": "Line tool settings."
+        },
+        "arrow": {
+          "$ref": "#/$defs/sizedTool",
+          "description": "Arrow tool settings."
+        },
+        "rect": {
+          "$ref": "#/$defs/sizedTool",
+          "description": "Rectangle tool settings."
+        },
+        "ellipse": {
+          "$ref": "#/$defs/sizedTool",
+          "description": "Ellipse tool settings."
+        },
+        "colors": {
+          "$ref": "#/$defs/annotationColors",
+          "description": "Sparse annotation color overrides keyed by slot index 0-7."
+        },
+        "current_color": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7,
+          "default": 0,
+          "description": "Current annotation color slot."
+        },
+        "font": {
+          "type": "object",
+          "description": "Shared font-family names for Text and Bubble tools.",
+          "additionalProperties": false,
+          "properties": {
+            "sans": {
+              "$ref": "#/$defs/fontFamily"
+            },
+            "serif": {
+              "$ref": "#/$defs/fontFamily"
+            },
+            "mono": {
+              "$ref": "#/$defs/fontFamily"
+            },
+            "art": {
+              "$ref": "#/$defs/fontFamily"
+            }
+          }
+        },
+        "highlighter": {
+          "type": "object",
+          "description": "Highlighter tool settings.",
+          "additionalProperties": false,
+          "properties": {
+            "size": {
+              "$ref": "#/$defs/toolSize",
+              "default": 10
+            },
+            "colors": {
+              "$ref": "#/$defs/highlighterColors",
+              "description": "Sparse highlighter color overrides keyed by slot index 0-5."
+            },
+            "current_color": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5,
+              "default": 0
+            },
+            "opacity_percent": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100,
+              "default": 35
+            },
+            "pause_straighten_ms": {
+              "$ref": "#/$defs/nonNegativeInteger",
+              "default": 800
+            },
+            "pause_straighten_deadzone_px": {
+              "$ref": "#/$defs/nonNegativeInteger",
+              "default": 0
+            }
+          }
+        },
+        "text": {
+          "type": "object",
+          "description": "Text tool settings.",
+          "additionalProperties": false,
+          "properties": {
+            "size": {
+              "$ref": "#/$defs/toolSize",
+              "default": 10
+            },
+            "current_font": {
+              "$ref": "#/$defs/fontChoice",
+              "default": "sans"
+            }
+          }
+        },
+        "bubble": {
+          "type": "object",
+          "description": "Bubble tool settings.",
+          "additionalProperties": false,
+          "properties": {
+            "size": {
+              "$ref": "#/$defs/toolSize",
+              "default": 10
+            },
+            "current_font": {
+              "$ref": "#/$defs/fontChoice",
+              "default": "sans"
+            }
+          }
+        }
+      }
+    },
+    "save": {
+      "type": "object",
+      "description": "Save and output naming settings.",
+      "additionalProperties": false,
+      "properties": {
+        "default_save_dir": {
+          "$ref": "#/$defs/configPath",
+          "description": "Default output folder."
+        },
+        "last_save_as_dir": {
+          "$ref": "#/$defs/configPath",
+          "description": "Initial folder for Save As."
+        },
+        "default_save_format": {
+          "type": "string",
+          "enum": [
+            "png",
+            "jpg",
+            "bmp"
+          ],
+          "default": "png",
+          "description": "Default image format."
+        },
+        "padding_color": {
+          "$ref": "#/$defs/colorString",
+          "default": "#000000",
+          "description": "Padding color used for CLI captures when padding is enabled."
+        },
+        "filename_pattern_region": {
+          "$ref": "#/$defs/filenamePattern"
+        },
+        "filename_pattern_desktop": {
+          "$ref": "#/$defs/filenamePattern"
+        },
+        "filename_pattern_monitor": {
+          "$ref": "#/$defs/filenamePattern"
+        },
+        "filename_pattern_window": {
+          "$ref": "#/$defs/filenamePattern"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "nonNegativeInteger": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "toolSize": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50
+    },
+    "sizedTool": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "size": {
+          "$ref": "#/$defs/toolSize"
+        }
+      }
+    },
+    "fontChoice": {
+      "type": "string",
+      "enum": [
+        "sans",
+        "serif",
+        "mono",
+        "art"
+      ]
+    },
+    "fontFamily": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": ".*\\S.*",
+      "description": "Font family name."
+    },
+    "colorString": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$",
+      "description": "Color in #rrggbb format."
+    },
+    "annotationColors": {
+      "type": "object",
+      "patternProperties": {
+        "^[0-7]$": {
+          "$ref": "#/$defs/colorString"
+        }
+      },
+      "additionalProperties": false
+    },
+    "highlighterColors": {
+      "type": "object",
+      "patternProperties": {
+        "^[0-5]$": {
+          "$ref": "#/$defs/colorString"
+        }
+      },
+      "additionalProperties": false
+    },
+    "configPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 259,
+      "description": "Windows path stored directly in config."
+    },
+    "filenamePattern": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "Output filename pattern."
+    }
+  }
+}

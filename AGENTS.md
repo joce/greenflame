@@ -127,6 +127,7 @@ Breaking these rules is a correctness bug.
 - Do not introduce third-party libraries without explicit justification.
 - Do not bypass or simplify DPI logic.
 - Do not move testable orchestration/policy logic into the GUI executable.
+- Treat the repository `.clang-tidy` naming rules as mandatory when adding or renaming identifiers; do not wait for nightly `clang-tidy` to catch violations. In particular, constants MUST follow `readability-identifier-naming`: local `const`/`constexpr` variables use `lower_case`, namespace-scope/file-static/static-member/`inline constexpr` constants use `kCamelCase`, and enum constants use unprefixed `CamelCase`. `tests/.clang-tidy` inherits the same naming policy, so test code has no naming exception.
 - Any new functionality or feature MUST either add automated test coverage or add explicit coverage to the documented testing plan under `docs/`, following `docs/testing.md`, if the behavior cannot reasonably be covered automatically.
 - Any bug fix MUST either add automated regression coverage for the faulty behavior or add explicit regression coverage to the documented testing plan under `docs/`, following `docs/testing.md`, if the behavior cannot reasonably be covered automatically.
 - Prefer failing loudly over silently doing the wrong thing.
@@ -134,4 +135,3 @@ Breaking these rules is a correctness bug.
 - Keep process/CLI exit codes in a single enum with globally unique numeric values. If codes change, update the README exit-code table.
 - Debug root causes first; avoid adding new abstractions or code paths without clear need.
 - Clang warning hygiene guidance lives in `docs/build.md`.
-

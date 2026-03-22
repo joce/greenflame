@@ -128,6 +128,7 @@ Breaking these rules is a correctness bug.
 - Do not bypass or simplify DPI logic.
 - Do not move testable orchestration/policy logic into the GUI executable.
 - Treat the repository `.clang-tidy` naming rules as mandatory when adding or renaming identifiers; do not wait for nightly `clang-tidy` to catch violations. In particular, constants MUST follow `readability-identifier-naming`: local `const`/`constexpr` variables use `lower_case`, namespace-scope/file-static/static-member/`inline constexpr` constants use `kCamelCase`, and enum constants use unprefixed `CamelCase`. `tests/.clang-tidy` inherits the same naming policy, so test code has no naming exception.
+- With the exception of 0, 1, 2, 3, 10, 100, 255, and the powers of 2, AVOID MAGIC NUMBER LIKE THE PLAGUE.
 - Any new functionality or feature MUST either add automated test coverage or add explicit coverage to the documented testing plan under `docs/`, following `docs/testing.md`, if the behavior cannot reasonably be covered automatically.
 - Any bug fix MUST either add automated regression coverage for the faulty behavior or add explicit regression coverage to the documented testing plan under `docs/`, following `docs/testing.md`, if the behavior cannot reasonably be covered automatically.
 - Prefer failing loudly over silently doing the wrong thing.

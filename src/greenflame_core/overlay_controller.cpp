@@ -8,6 +8,64 @@ namespace greenflame::core {
 namespace {
 constexpr int32_t kSnapThresholdPx = 10;
 
+[[nodiscard]] RectPx
+Virtual_desktop_bounds_from_monitors(std::span<const MonitorWithBounds> monitors) noexcept {
+    RectPx bounds = {};
+    bool have_bounds = false;
+    for (MonitorWithBounds const &monitor : monitors) {
+        RectPx const normalized = monitor.bounds.Normalized();
+        if (normalized.Is_empty()) {
+            continue;
+        }
+        bounds = have_bounds ? RectPx::Union(bounds, normalized) : normalized;
+        have_bounds = true;
+    }
+    return bounds;
+}
+
+[[nodiscard]] RectPx
+Resolve_virtual_desktop_client_bounds(RectPx virtual_desktop_bounds,
+                                      std::span<const MonitorWithBounds> monitors,
+                                      int32_t origin_x, int32_t origin_y) noexcept {
+    RectPx const screen_bounds =
+        virtual_desktop_bounds.Is_empty()
+            ? Virtual_desktop_bounds_from_monitors(monitors)
+            : virtual_desktop_bounds.Normalized();
+    if (screen_bounds.Is_empty()) {
+        return {};
+    }
+    return Screen_rect_to_client_rect(screen_bounds, origin_x, origin_y);
+}
+
+[[nodiscard]] RectPx Clip_selection_rect_to_bounds(RectPx rect, RectPx bounds) noexcept {
+    if (rect.Is_empty() || bounds.Is_empty()) {
+        return rect;
+    }
+
+    std::optional<RectPx> const clipped = RectPx::Clip(rect.Normalized(), bounds);
+    return clipped.value_or(RectPx::From_ltrb(0, 0, 0, 0));
+}
+
+[[nodiscard]] RectPx Clamp_moved_selection_to_bounds(RectPx rect, RectPx bounds) noexcept {
+    if (rect.Is_empty() || bounds.Is_empty()) {
+        return rect;
+    }
+
+    int32_t const width = rect.Width();
+    int32_t const height = rect.Height();
+    if (width <= 0 || height <= 0) {
+        return rect;
+    }
+
+    int32_t const max_left =
+        width >= bounds.Width() ? bounds.left : bounds.right - width;
+    int32_t const max_top =
+        height >= bounds.Height() ? bounds.top : bounds.bottom - height;
+    int32_t const left = std::clamp(rect.left, bounds.left, max_left);
+    int32_t const top = std::clamp(rect.top, bounds.top, max_top);
+    return RectPx::From_ltrb(left, top, left + width, top + height);
+}
+
 [[nodiscard]] bool Text_annotation_has_text(TextAnnotation const &annotation) noexcept {
     for (TextRun const &run : annotation.runs) {
         if (!run.text.empty()) {
@@ -32,6 +90,7 @@ void OverlaySessionData::Reset_for_session() {
     move_grab_offset = {};
     move_anchor_rect = {};
     start_px = {};
+    virtual_desktop_client_bounds = {};
     live_rect = {};
     final_selection = {};
     selection_source = SaveSelectionSource::Region;
@@ -58,6 +117,12 @@ void OverlayController::Reset_for_session(std::vector<MonitorWithBounds> monitor
 void OverlayController::Refresh_snap_edges(SnapEdges const &visible_snap_edges,
                                            int32_t origin_x, int32_t origin_y) {
     Rebuild_snap_edges(visible_snap_edges, origin_x, origin_y);
+}
+
+void OverlayController::Update_virtual_desktop_client_bounds(
+    RectPx virtual_desktop_bounds, int32_t origin_x, int32_t origin_y) {
+    state_.virtual_desktop_client_bounds = Resolve_virtual_desktop_client_bounds(
+        virtual_desktop_bounds, state_.cached_monitors, origin_x, origin_y);
 }
 
 void OverlayController::Set_final_selection(RectPx r) {
@@ -317,7 +382,7 @@ void OverlayController::Rebuild_snap_edges(SnapEdges const &screen_edges,
 void OverlayController::Apply_modifier_preview(OverlayModifierState mods,
                                                PointPx /*cursor_screen*/,
                                                std::optional<RectPx> window_rect_screen,
-                                               RectPx virtual_desktop_bounds,
+                                               RectPx /*virtual_desktop_bounds*/,
                                                std::optional<size_t> monitor_index,
                                                int32_t origin_x, int32_t origin_y) {
     if (state_.dragging || state_.handle_dragging) {
@@ -328,8 +393,7 @@ void OverlayController::Apply_modifier_preview(OverlayModifierState mods,
     }
 
     if (mods.shift && mods.ctrl) {
-        state_.live_rect =
-            Screen_rect_to_client_rect(virtual_desktop_bounds, origin_x, origin_y);
+        state_.live_rect = state_.virtual_desktop_client_bounds;
         state_.modifier_preview = true;
     } else if (mods.shift) {
         if (monitor_index.has_value() &&
@@ -365,6 +429,7 @@ OverlayAction OverlayController::On_modifier_changed(
     std::optional<RectPx> window_rect_screen, RectPx virtual_desktop_bounds,
     std::optional<size_t> monitor_index_under_cursor, int32_t origin_x,
     int32_t origin_y) {
+    Update_virtual_desktop_client_bounds(virtual_desktop_bounds, origin_x, origin_y);
     Apply_modifier_preview(new_mods, cursor_screen, window_rect_screen,
                            virtual_desktop_bounds, monitor_index_under_cursor, origin_x,
                            origin_y);
@@ -438,8 +503,9 @@ OverlayAction OverlayController::On_primary_press(
     OverlayModifierState mods, PointPx cursor_client, PointPx /*cursor_screen*/,
     std::optional<HWND> window_under_cursor,
     std::optional<size_t> monitor_index_under_cursor,
-    std::optional<RectPx> /*window_rect_screen*/, RectPx /*virtual_desktop_bounds*/,
+    std::optional<RectPx> /*window_rect_screen*/, RectPx virtual_desktop_bounds,
     SnapEdges const &visible_snap_edges, int32_t origin_x, int32_t origin_y) {
+    Update_virtual_desktop_client_bounds(virtual_desktop_bounds, origin_x, origin_y);
 
     // ---- Modifier-preview commit path ----
     if ((mods.shift || mods.ctrl) && state_.modifier_preview) {
@@ -559,6 +625,7 @@ OverlayAction OverlayController::On_pointer_move(
     std::optional<RectPx> window_rect_screen, RectPx virtual_desktop_bounds,
     std::optional<size_t> monitor_index_under_cursor, int32_t origin_x,
     int32_t origin_y) {
+    Update_virtual_desktop_client_bounds(virtual_desktop_bounds, origin_x, origin_y);
 
     bool const snap_enabled = !mods.alt;
 
@@ -573,6 +640,8 @@ OverlayAction OverlayController::On_pointer_move(
                 Snap_moved_rect_to_edges(candidate, state_.vertical_edges,
                                          state_.horizontal_edges, kSnapThresholdPx);
         }
+        candidate = Clamp_moved_selection_to_bounds(
+            candidate, state_.virtual_desktop_client_bounds);
         state_.live_rect = candidate;
     } else if (state_.handle_dragging && state_.resize_handle.has_value()) {
         RectPx candidate = Resize_rect_from_handle(
@@ -583,6 +652,8 @@ OverlayAction OverlayController::On_pointer_move(
         }
         PointPx const anchor = Anchor_point_for_resize_policy(state_.resize_anchor_rect,
                                                               *state_.resize_handle);
+        candidate = Clip_selection_rect_to_bounds(candidate,
+                                                  state_.virtual_desktop_client_bounds);
         state_.live_rect =
             Allowed_selection_rect(candidate, anchor, state_.cached_monitors);
     } else if (state_.dragging) {
@@ -592,6 +663,8 @@ OverlayAction OverlayController::On_pointer_move(
             candidate = Snap_rect_to_edges(candidate, state_.vertical_edges,
                                            state_.horizontal_edges, kSnapThresholdPx);
         }
+        candidate = Clip_selection_rect_to_bounds(candidate,
+                                                  state_.virtual_desktop_client_bounds);
         state_.live_rect = candidate;
     } else if (annotation_controller_.Has_active_text_edit()) {
         if (TextEditController *const text_edit =
@@ -617,12 +690,15 @@ OverlayAction OverlayController::On_primary_release(OverlayModifierState mods,
     bool const snap_enabled = !mods.alt;
 
     if (state_.move_dragging) {
-        RectPx to_commit = state_.live_rect;
+        RectPx to_commit = Clamp_moved_selection_to_bounds(
+            state_.live_rect, state_.virtual_desktop_client_bounds);
         if (snap_enabled) {
             to_commit =
                 Snap_moved_rect_to_edges(to_commit, state_.vertical_edges,
                                          state_.horizontal_edges, kSnapThresholdPx);
         }
+        to_commit = Clamp_moved_selection_to_bounds(to_commit,
+                                                    state_.virtual_desktop_client_bounds);
         PointPx const center = {to_commit.left + to_commit.Width() / 2,
                                 to_commit.top + to_commit.Height() / 2};
         state_.final_selection =
@@ -633,11 +709,14 @@ OverlayAction OverlayController::On_primary_release(OverlayModifierState mods,
     }
 
     if (state_.handle_dragging && state_.resize_handle.has_value()) {
-        RectPx to_commit = state_.live_rect;
+        RectPx to_commit = Clip_selection_rect_to_bounds(
+            state_.live_rect, state_.virtual_desktop_client_bounds);
         if (snap_enabled) {
             to_commit = Snap_rect_to_edges(to_commit, state_.vertical_edges,
                                            state_.horizontal_edges, kSnapThresholdPx);
         }
+        to_commit = Clip_selection_rect_to_bounds(to_commit,
+                                                  state_.virtual_desktop_client_bounds);
         PointPx const anchor = Anchor_point_for_resize_policy(state_.resize_anchor_rect,
                                                               *state_.resize_handle);
         state_.final_selection =
@@ -654,6 +733,7 @@ OverlayAction OverlayController::On_primary_release(OverlayModifierState mods,
             raw = Snap_rect_to_edges(raw, state_.vertical_edges,
                                      state_.horizontal_edges, kSnapThresholdPx);
         }
+        raw = Clip_selection_rect_to_bounds(raw, state_.virtual_desktop_client_bounds);
         state_.final_selection =
             Allowed_selection_rect(raw, state_.start_px, state_.cached_monitors);
         state_.selection_source = SaveSelectionSource::Region;

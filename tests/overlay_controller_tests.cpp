@@ -149,6 +149,18 @@ TEST(overlay_controller, B_Release_CommitsFinalSelection) {
     EXPECT_EQ(c.State().selection_source, SaveSelectionSource::Region);
 }
 
+TEST(overlay_controller, B_DragPastDesktop_ClipsSelectionToDesktopBounds) {
+    auto c = Make_controller();
+    Press(c, {100, 200});
+    Move(c, {2500, 1400});
+
+    EXPECT_EQ(c.State().live_rect, (RectPx::From_ltrb(100, 200, 1920, 1080)));
+
+    OverlayAction action = Release(c, {2500, 1400});
+    EXPECT_EQ(action, OverlayAction::InvalidateFrozenCache);
+    EXPECT_EQ(c.State().final_selection, (RectPx::From_ltrb(100, 200, 1920, 1080)));
+}
+
 TEST(overlay_controller, B_Release_SelectionWindowIsNullopt) {
     auto c = Make_controller();
     Press(c, {100, 200});
@@ -383,6 +395,23 @@ TEST(overlay_controller, E_HandleRelease_CommitsFinalSelection) {
     EXPECT_FALSE(c.State().final_selection.Is_empty());
 }
 
+TEST(overlay_controller, E_HandleDragPastDesktop_ClipsSelectionToDesktopBounds) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+    std::ignore =
+        c.On_primary_press(No_mods(), {100, 100}, {100, 100}, std::nullopt,
+                           std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0, 0);
+    ASSERT_TRUE(c.State().handle_dragging);
+
+    Move(c, {-50, -50});
+    EXPECT_EQ(c.State().live_rect, (RectPx::From_ltrb(0, 0, 300, 300)));
+
+    OverlayAction action = Release(c, {-50, -50});
+    EXPECT_EQ(action, OverlayAction::InvalidateFrozenCache);
+    EXPECT_EQ(c.State().final_selection, (RectPx::From_ltrb(0, 0, 300, 300)));
+}
+
 TEST(overlay_controller, E_CancelHandleDrag_FinalSelectionUnchanged) {
     auto c = Make_controller();
     Press(c, {100, 100});
@@ -446,6 +475,23 @@ TEST(overlay_controller, F_MoveRelease_CommitsFinalSelection) {
     EXPECT_EQ(action, OverlayAction::InvalidateFrozenCache);
     EXPECT_FALSE(c.State().move_dragging);
     EXPECT_FALSE(c.State().final_selection.Is_empty());
+}
+
+TEST(overlay_controller, F_MoveDragPastDesktop_ClampsInsideDesktopBounds) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+    std::ignore =
+        c.On_primary_press(No_mods(), {150, 150}, {150, 150}, std::nullopt,
+                           std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0, 0);
+    ASSERT_TRUE(c.State().move_dragging);
+
+    Move(c, {0, 0});
+    EXPECT_EQ(c.State().live_rect, (RectPx::From_ltrb(0, 0, 200, 200)));
+
+    OverlayAction action = Release(c, {0, 0});
+    EXPECT_EQ(action, OverlayAction::InvalidateFrozenCache);
+    EXPECT_EQ(c.State().final_selection, (RectPx::From_ltrb(0, 0, 200, 200)));
 }
 
 TEST(overlay_controller, F_CancelMoveDrag_RestoresMoveAnchor) {

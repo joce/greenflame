@@ -41,6 +41,24 @@ inline D2D1_RECT_F Rect(core::RectPx r) {
                        static_cast<float>(r.right), static_cast<float>(r.bottom));
 }
 
+void Draw_clipped_screenshot_rect(ID2D1RenderTarget *rt, ID2D1Bitmap *screenshot,
+                                  core::RectPx restore_rect, int vd_width,
+                                  int vd_height) {
+    if (rt == nullptr || screenshot == nullptr || restore_rect.Is_empty()) {
+        return;
+    }
+
+    std::optional<core::RectPx> const clipped = core::RectPx::Clip(
+        restore_rect, core::RectPx::From_ltrb(0, 0, vd_width, vd_height));
+    if (!clipped.has_value()) {
+        return;
+    }
+
+    D2D1_RECT_F const visible_f = Rect(*clipped);
+    rt->DrawBitmap(screenshot, visible_f, 1.f,
+                   D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR, visible_f);
+}
+
 inline D2D1_COLOR_F Colorref_to_d2d(COLORREF c, float alpha = 1.f) {
     return D2D1::ColorF(static_cast<float>(GetRValue(c)) / kColorChannelMaxF,
                         static_cast<float>(GetGValue(c)) / kColorChannelMaxF,
@@ -2401,10 +2419,8 @@ void Rebuild_frozen_bitmap(D2DOverlayResources &res, core::RectPx selection,
 
     // Restore selection area to undimmed screenshot.
     if (!selection.Is_empty()) {
-        D2D1_RECT_F const sel_f = Rect(selection);
-        res.frozen_rt->DrawBitmap(res.screenshot.Get(), sel_f, 1.f,
-                                  D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR,
-                                  sel_f);
+        Draw_clipped_screenshot_rect(res.frozen_rt.Get(), res.screenshot.Get(),
+                                     selection, vd_width, vd_height);
     }
 
     // Composite committed annotations.
@@ -2462,10 +2478,8 @@ bool Paint_d2d_frame(D2DOverlayResources &res, D2DPaintInput const &input, int v
         core::RectPx const restore_rect =
             input.annotation_editing ? input.final_selection : input.live_rect;
         if (!restore_rect.Is_empty() && res.screenshot) {
-            D2D1_RECT_F const sel_f = Rect(restore_rect);
-            res.hwnd_rt->DrawBitmap(res.screenshot.Get(), sel_f, 1.f,
-                                    D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR,
-                                    sel_f);
+            Draw_clipped_screenshot_rect(res.hwnd_rt.Get(), res.screenshot.Get(),
+                                         restore_rect, vd_width, vd_height);
         }
 
         if (res.annotations_bitmap) {

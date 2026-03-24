@@ -265,9 +265,12 @@ unless a real end-to-end bug escapes into the Win32 shell:
   2. Drag a corner handle.
   3. Drag a side handle.
   4. With no annotation tool active, drag inside the selection.
+  5. Drag or resize the selection against each virtual-desktop edge.
 - Expected:
   - Corner and side drags resize in the expected directions.
   - Dragging inside the selection moves the selection.
+  - The selection stops at the virtual-desktop boundary and never extends beyond it.
+  - When pressed against a desktop edge, the visible screenshot pixels remain a 1:1 crop with no stretching or smearing.
   - Resize drags show the centered in-selection size label when that label is enabled.
   - Move drags do not show the centered in-selection size label.
   - Cursor shapes match the hovered handle direction.

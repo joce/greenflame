@@ -35,6 +35,7 @@ struct OverlaySessionData {
     PointPx move_grab_offset = {};
     RectPx move_anchor_rect = {};
     PointPx start_px = {};
+    RectPx virtual_desktop_client_bounds = {};
     RectPx live_rect = {};
     RectPx final_selection = {};
     std::vector<SnapEdgeSegmentPx> vertical_edges = {};
@@ -164,6 +165,8 @@ class OverlayController final {
   private:
     void Rebuild_snap_edges(SnapEdges const &screen_edges, int32_t origin_x,
                             int32_t origin_y);
+    void Update_virtual_desktop_client_bounds(RectPx virtual_desktop_bounds,
+                                              int32_t origin_x, int32_t origin_y);
     void Apply_modifier_preview(OverlayModifierState mods, PointPx cursor_screen,
                                 std::optional<RectPx> window_rect_screen,
                                 RectPx virtual_desktop_bounds,

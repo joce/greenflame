@@ -124,6 +124,7 @@ Breaking these rules is a correctness bug.
 - Indent with 4 spaces (no tabs).
 - Prefer forward declarations in headers when possible; include full definitions in `.cpp`.
 - Do not include standard library or Windows headers directly in non-PCH files. Add needed headers to the relevant PCH (`src/greenflame/pch.h`, `src/greenflame_core/pch.h`, or `tests/pch.h`).
+- When invoking Python, do not call `python` directly. Use `uv` instead: `uv run python ...` for interpreter usage, `uv run <script>.py` for scripts, and `uvx <tool>` for Python CLI tools. Follow the `uv` skill for details.
 - Do not introduce third-party libraries without explicit justification.
 - Do not bypass or simplify DPI logic.
 - Do not move testable orchestration/policy logic into the GUI executable.

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.26)
-project(greenflame VERSION 0.7.3 LANGUAGES CXX)
+project(greenflame VERSION 0.8.0 LANGUAGES CXX)
 
 # So the IDE (and clangd) can find includes for all targets, including tests.
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -23,7 +23,7 @@ set(CMAKE_WIN32_EXECUTABLE ON)
 # -----------------------------
 # Version and metadata (single source of truth)
 # -----------------------------
-set(GREENFLAME_VERSION_TWEAK 0 CACHE STRING "Fourth version component for Windows resources")
+set(GREENFLAME_VERSION_TWEAK 1 CACHE STRING "Fourth version component for Windows resources")
 set(GREENFLAME_FILE_VERSION_COMMA
     "${PROJECT_VERSION_MAJOR},${PROJECT_VERSION_MINOR},${PROJECT_VERSION_PATCH},${GREENFLAME_VERSION_TWEAK}"
 )

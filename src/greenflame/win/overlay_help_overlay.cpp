@@ -48,8 +48,9 @@ constexpr D2D1_COLOR_F kHelpBodyColor = {
     240.f / greenflame::kOverlayPanelColorChannelMaxF,
     240.f / greenflame::kOverlayPanelColorChannelMaxF, 1.f};
 
-[[nodiscard]] float Calculate_section_height(
-    greenflame::core::OverlayHelpSection const &section, bool include_gap_before) {
+[[nodiscard]] float
+Calculate_section_height(greenflame::core::OverlayHelpSection const &section,
+                         bool include_gap_before) {
     if (section.entries.empty()) {
         return 0.f;
     }
@@ -104,8 +105,8 @@ constexpr D2D1_COLOR_F kHelpBodyColor = {
     return std::max(first_column_height, second_column_height);
 }
 
-[[nodiscard]] bool Has_explicit_second_column(
-    greenflame::core::OverlayHelpContent const &content) {
+[[nodiscard]] bool
+Has_explicit_second_column(greenflame::core::OverlayHelpContent const &content) {
     for (greenflame::core::OverlayHelpSection const &section : content.sections) {
         if (section.new_column && !section.entries.empty()) {
             return true;
@@ -114,12 +115,11 @@ constexpr D2D1_COLOR_F kHelpBodyColor = {
     return false;
 }
 
-[[nodiscard]] float Calculate_target_panel_height(
-    greenflame::core::OverlayHelpContent const &content, float default_panel_height,
-    float overlay_height) {
+[[nodiscard]] float
+Calculate_target_panel_height(greenflame::core::OverlayHelpContent const &content,
+                              float default_panel_height, float overlay_height) {
     float const max_panel_height =
-        std::max(1.f, overlay_height -
-                          (2.f * greenflame::kOverlayPanelMarginPxF));
+        std::max(1.f, overlay_height - (2.f * greenflame::kOverlayPanelMarginPxF));
     bool const prefer_two_columns = Has_explicit_second_column(content);
     float const single_column_panel_height =
         kHelpPanelFixedChromeHeightPxF +
@@ -269,11 +269,9 @@ bool OverlayHelpOverlay::Paint_d2d(ID2D1RenderTarget *rt, IDWriteFactory *dwrite
         Calculate_target_panel_height(*content_, std::max(1.f, ov_h / 2.f), ov_h);
     float const panel_l = overlay_bounds.left + (ov_w - panel_w) / 2.f;
     float panel_t = overlay_bounds.top + static_cast<float>(kPanelTopOffsetPx);
-    float const min_panel_t =
-        overlay_bounds.top + greenflame::kOverlayPanelMarginPxF;
+    float const min_panel_t = overlay_bounds.top + greenflame::kOverlayPanelMarginPxF;
     float const max_panel_t =
-        overlay_bounds.bottom - panel_h -
-        greenflame::kOverlayPanelMarginPxF;
+        overlay_bounds.bottom - panel_h - greenflame::kOverlayPanelMarginPxF;
     if (max_panel_t >= min_panel_t) {
         panel_t = std::clamp(panel_t, min_panel_t, max_panel_t);
     } else {
@@ -287,8 +285,8 @@ bool OverlayHelpOverlay::Paint_d2d(ID2D1RenderTarget *rt, IDWriteFactory *dwrite
         return true;
     }
 
-    Paint_overlay_panel_chrome(
-        rt, brush, overlay_bounds, D2D1::RectF(panel_l, panel_t, panel_r, panel_b));
+    Paint_overlay_panel_chrome(rt, brush, overlay_bounds,
+                               D2D1::RectF(panel_l, panel_t, panel_r, panel_b));
 
     float const content_l = panel_l + kHelpPanelSidePaddingPxF;
     float const content_r = panel_r - kHelpPanelSidePaddingPxF;

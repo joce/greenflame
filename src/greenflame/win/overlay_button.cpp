@@ -165,23 +165,21 @@ void OverlayRectButton::Draw_d2d(ID2D1RenderTarget *rt, ID2D1SolidColorBrush *br
     rt->FillRectangle(rect, brush);
 
     brush->SetColor(colors.outline_color);
-    rt->DrawRectangle(
-        D2D1::RectF(rect.left + kOverlayPanelBorderInsetPxF,
-                    rect.top + kOverlayPanelBorderInsetPxF,
-                    rect.right - kOverlayPanelBorderInsetPxF,
-                    rect.bottom - kOverlayPanelBorderInsetPxF),
-        brush, kButtonPenWidthD2D);
+    rt->DrawRectangle(D2D1::RectF(rect.left + kOverlayPanelBorderInsetPxF,
+                                  rect.top + kOverlayPanelBorderInsetPxF,
+                                  rect.right - kOverlayPanelBorderInsetPxF,
+                                  rect.bottom - kOverlayPanelBorderInsetPxF),
+                      brush, kButtonPenWidthD2D);
 
     if (hovered_) {
         D2D1_COLOR_F const hover_color =
             Blend_button_colors(colors.outline_color, colors.fill_color, 3.f, 1.f);
         brush->SetColor(hover_color);
-        rt->DrawRectangle(
-            D2D1::RectF(rect.left + kRectButtonHoverRingWidthD2D / 2.f,
-                        rect.top + kRectButtonHoverRingWidthD2D / 2.f,
-                        rect.right - kRectButtonHoverRingWidthD2D / 2.f,
-                        rect.bottom - kRectButtonHoverRingWidthD2D / 2.f),
-            brush, kRectButtonHoverRingWidthD2D);
+        rt->DrawRectangle(D2D1::RectF(rect.left + kRectButtonHoverRingWidthD2D / 2.f,
+                                      rect.top + kRectButtonHoverRingWidthD2D / 2.f,
+                                      rect.right - kRectButtonHoverRingWidthD2D / 2.f,
+                                      rect.bottom - kRectButtonHoverRingWidthD2D / 2.f),
+                          brush, kRectButtonHoverRingWidthD2D);
     }
 }
 

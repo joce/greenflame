@@ -390,9 +390,9 @@ TEST(app_controller, cli_capture_uses_config_cursor_setting_by_default) {
                 Resolve_absolute_path(Eq(std::wstring_view{L"C:\\shots\\desktop.png"})))
         .WillOnce(Return(L"C:\\shots\\desktop.png"));
     EXPECT_CALL(fixture.capture,
-                Save_capture_to_file(
-                    _, Eq(std::wstring_view{L"C:\\shots\\desktop.png"}),
-                    ImageSaveFormat::Png))
+                Save_capture_to_file(_,
+                                     Eq(std::wstring_view{L"C:\\shots\\desktop.png"}),
+                                     ImageSaveFormat::Png))
         .WillOnce([](core::CaptureSaveRequest const &request, std::wstring_view,
                      ImageSaveFormat) {
             EXPECT_TRUE(request.include_cursor);
@@ -421,9 +421,9 @@ TEST(app_controller, cli_capture_cursor_override_can_force_include) {
                 Resolve_absolute_path(Eq(std::wstring_view{L"C:\\shots\\desktop.png"})))
         .WillOnce(Return(L"C:\\shots\\desktop.png"));
     EXPECT_CALL(fixture.capture,
-                Save_capture_to_file(
-                    _, Eq(std::wstring_view{L"C:\\shots\\desktop.png"}),
-                    ImageSaveFormat::Png))
+                Save_capture_to_file(_,
+                                     Eq(std::wstring_view{L"C:\\shots\\desktop.png"}),
+                                     ImageSaveFormat::Png))
         .WillOnce([](core::CaptureSaveRequest const &request, std::wstring_view,
                      ImageSaveFormat) {
             EXPECT_TRUE(request.include_cursor);
@@ -452,9 +452,9 @@ TEST(app_controller, cli_capture_cursor_override_can_force_exclude) {
                 Resolve_absolute_path(Eq(std::wstring_view{L"C:\\shots\\desktop.png"})))
         .WillOnce(Return(L"C:\\shots\\desktop.png"));
     EXPECT_CALL(fixture.capture,
-                Save_capture_to_file(
-                    _, Eq(std::wstring_view{L"C:\\shots\\desktop.png"}),
-                    ImageSaveFormat::Png))
+                Save_capture_to_file(_,
+                                     Eq(std::wstring_view{L"C:\\shots\\desktop.png"}),
+                                     ImageSaveFormat::Png))
         .WillOnce([](core::CaptureSaveRequest const &request, std::wstring_view,
                      ImageSaveFormat) {
             EXPECT_FALSE(request.include_cursor);
@@ -1649,10 +1649,8 @@ TEST(app_controller,
         .WillOnce(Return(L"C:\\Users\\you\\.config\\greenflame\\greenflame.json"));
 
     CliResult const result = fixture.controller.Run_cli_capture_mode(options);
-    EXPECT_EQ(result.exit_code,
-              ProcessExitCode::CliObfuscateRiskUnacknowledged);
-    EXPECT_THAT(result.stderr_message,
-                HasSubstr(L"tools.obfuscate.risk_acknowledged"));
+    EXPECT_EQ(result.exit_code, ProcessExitCode::CliObfuscateRiskUnacknowledged);
+    EXPECT_THAT(result.stderr_message, HasSubstr(L"tools.obfuscate.risk_acknowledged"));
     EXPECT_THAT(result.stderr_message,
                 HasSubstr(L"C:\\Users\\you\\.config\\greenflame\\greenflame.json"));
 }
@@ -1676,20 +1674,16 @@ TEST(app_controller,
         .WillOnce([](core::AnnotationPreparationRequest const &request) {
             return Make_annotation_prepare_success(request.annotations);
         });
-    EXPECT_CALL(fixture.file_system, Get_app_config_file_path())
-        .WillOnce(Return(L""));
+    EXPECT_CALL(fixture.file_system, Get_app_config_file_path()).WillOnce(Return(L""));
 
     CliResult const result = fixture.controller.Run_cli_capture_mode(options);
-    EXPECT_EQ(result.exit_code,
-              ProcessExitCode::CliObfuscateRiskUnacknowledged);
-    EXPECT_THAT(result.stderr_message,
-                HasSubstr(L"tools.obfuscate.risk_acknowledged"));
+    EXPECT_EQ(result.exit_code, ProcessExitCode::CliObfuscateRiskUnacknowledged);
+    EXPECT_THAT(result.stderr_message, HasSubstr(L"tools.obfuscate.risk_acknowledged"));
     EXPECT_THAT(result.stderr_message,
                 HasSubstr(L"config file path could not be determined"));
 }
 
-TEST(app_controller,
-     cli_annotate_obfuscate_succeeds_once_risk_is_acknowledged) {
+TEST(app_controller, cli_annotate_obfuscate_succeeds_once_risk_is_acknowledged) {
     ControllerFixture fixture;
     fixture.config.obfuscate_risk_acknowledged = true;
     CliOptions options{};
@@ -1708,15 +1702,13 @@ TEST(app_controller,
         .WillOnce([](core::AnnotationPreparationRequest const &request) {
             return Make_annotation_prepare_success(request.annotations);
         });
-    EXPECT_CALL(fixture.file_system,
-                Resolve_absolute_path(
-                    Eq(std::wstring_view{L"C:\\shots\\desktop-obfuscate.png"})))
+    EXPECT_CALL(fixture.file_system, Resolve_absolute_path(Eq(std::wstring_view{
+                                         L"C:\\shots\\desktop-obfuscate.png"})))
         .WillOnce(Return(L"C:\\shots\\desktop-obfuscate.png"));
-    EXPECT_CALL(
-        fixture.capture,
-        Save_capture_to_file(
-            _, Eq(std::wstring_view{L"C:\\shots\\desktop-obfuscate.png"}),
-            ImageSaveFormat::Png))
+    EXPECT_CALL(fixture.capture,
+                Save_capture_to_file(
+                    _, Eq(std::wstring_view{L"C:\\shots\\desktop-obfuscate.png"}),
+                    ImageSaveFormat::Png))
         .WillOnce(Return(Make_capture_save_success()));
 
     CliResult const result = fixture.controller.Run_cli_capture_mode(options);
@@ -2140,8 +2132,7 @@ TEST(app_controller,
         .WillOnce(Return(L"C:\\Users\\you\\.config\\greenflame\\greenflame.json"));
 
     CliResult const result = fixture.controller.Run_cli_capture_mode(options);
-    EXPECT_EQ(result.exit_code,
-              ProcessExitCode::CliObfuscateRiskUnacknowledged);
+    EXPECT_EQ(result.exit_code, ProcessExitCode::CliObfuscateRiskUnacknowledged);
     EXPECT_THAT(result.stderr_message,
                 HasSubstr(L"C:\\Users\\you\\.config\\greenflame\\greenflame.json"));
 }

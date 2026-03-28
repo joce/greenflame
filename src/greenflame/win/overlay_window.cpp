@@ -876,7 +876,6 @@ bool OverlayWindow::Maybe_show_obfuscate_warning() {
     return true;
 }
 
-
 IOverlayTopLayer *OverlayWindow::Active_top_layer() noexcept {
     if (obfuscate_warning_dialog_.Is_visible()) {
         return &obfuscate_warning_dialog_;
@@ -2879,10 +2878,9 @@ bool OverlayWindow::Build_selection_capture(GdiCaptureResult &out) const {
 
     core::RectPx const selection_screen_rect = Selection_screen_rect();
     if (Is_captured_cursor_visible() && Current_capture_has_captured_cursor() &&
-        !Composite_cursor_snapshot(*resources_->captured_cursor,
-                                   {selection_screen_rect.left,
-                                    selection_screen_rect.top},
-                                   out)) {
+        !Composite_cursor_snapshot(
+            *resources_->captured_cursor,
+            {selection_screen_rect.left, selection_screen_rect.top}, out)) {
         out.Free();
         return false;
     }
@@ -3185,10 +3183,9 @@ LRESULT OverlayWindow::On_paint() {
         input.toolbar_buttons = std::span<IOverlayButton *const>(btn_ptrs);
         input.toolbar_button_glyphs = std::span<ID2D1Bitmap *const>(btn_glyphs);
 
-        bool const ok = Paint_d2d_frame(*d2d_resources_, input,
-                                        resources_->display_capture.width,
-                                        resources_->display_capture.height,
-                                        Active_top_layer());
+        bool const ok =
+            Paint_d2d_frame(*d2d_resources_, input, resources_->display_capture.width,
+                            resources_->display_capture.height, Active_top_layer());
         if (!ok) {
             Handle_device_loss();
         }
@@ -3203,7 +3200,8 @@ LRESULT OverlayWindow::On_paint() {
 }
 
 void OverlayWindow::Handle_device_loss() {
-    if (!d2d_resources_ || resources_ == nullptr || !resources_->display_capture.Is_valid()) {
+    if (!d2d_resources_ || resources_ == nullptr ||
+        !resources_->display_capture.Is_valid()) {
         return;
     }
     int const w = resources_->display_capture.width;

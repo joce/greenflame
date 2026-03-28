@@ -34,8 +34,7 @@ D2D1_RECT_F Overlay_panel_bounds(
 }
 
 void Paint_overlay_panel_chrome(ID2D1RenderTarget *rt, ID2D1SolidColorBrush *brush,
-                                D2D1_RECT_F overlay_bounds,
-                                D2D1_RECT_F panel_bounds,
+                                D2D1_RECT_F overlay_bounds, D2D1_RECT_F panel_bounds,
                                 OverlayPanelChrome const &chrome) noexcept {
     if (rt == nullptr || brush == nullptr) {
         return;

@@ -366,23 +366,24 @@ TEST(cli_options, CLI_parser_RejectsMutuallyExclusiveCursorOverrideFlags) {
     CliParseResult const result = Parse_cli_arguments(args, false);
 
     EXPECT_FALSE(result.ok);
-    EXPECT_NE(result.error_message.find(L"--cursor and --no-cursor are mutually exclusive"),
-              std::wstring::npos);
+    EXPECT_NE(
+        result.error_message.find(L"--cursor and --no-cursor are mutually exclusive"),
+        std::wstring::npos);
 }
 
 TEST(cli_options, CLI_parser_RejectsCursorOverrideWithInput) {
     for (std::vector<std::wstring> const &args :
-         {std::vector<std::wstring>{L"--input",     L"shot.png",
-                                    L"--annotate",  L"{\"annotations\":[]}",
-                                    L"--overwrite", L"--cursor"},
-          std::vector<std::wstring>{L"--input",     L"shot.png",
-                                    L"--annotate",  L"{\"annotations\":[]}",
-                                    L"--overwrite", L"--no-cursor"}}) {
+         {std::vector<std::wstring>{L"--input", L"shot.png", L"--annotate",
+                                    L"{\"annotations\":[]}", L"--overwrite",
+                                    L"--cursor"},
+          std::vector<std::wstring>{L"--input", L"shot.png", L"--annotate",
+                                    L"{\"annotations\":[]}", L"--overwrite",
+                                    L"--no-cursor"}}) {
         CliParseResult const result = Parse_cli_arguments(args, false);
         EXPECT_FALSE(result.ok);
-        EXPECT_NE(
-            result.error_message.find(L"--cursor and --no-cursor cannot be used with --input"),
-            std::wstring::npos);
+        EXPECT_NE(result.error_message.find(
+                      L"--cursor and --no-cursor cannot be used with --input"),
+                  std::wstring::npos);
     }
 }
 

@@ -14,7 +14,6 @@ inline constexpr std::wstring_view kObfuscateRiskWarningGuidance =
     L"If you need to permanently hide sensitive content, use a filled opaque "
     L"shape instead.";
 inline constexpr std::wstring_view kObfuscateRiskAcceptLabel = L"I Understand";
-inline constexpr std::wstring_view kObfuscateRiskRejectLabel =
-    L"Use Another Tool";
+inline constexpr std::wstring_view kObfuscateRiskRejectLabel = L"Use Another Tool";
 
 } // namespace greenflame::core

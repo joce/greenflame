@@ -1098,8 +1098,7 @@ std::string Serialize_app_config_json(AppConfig const &config) {
         config.highlighter_size != defaults.highlighter_size ||
         config.bubble_size != defaults.bubble_size ||
         config.obfuscate_block_size != defaults.obfuscate_block_size ||
-        config.obfuscate_risk_acknowledged !=
-            defaults.obfuscate_risk_acknowledged ||
+        config.obfuscate_risk_acknowledged != defaults.obfuscate_risk_acknowledged ||
         config.text_size != defaults.text_size ||
         config.current_annotation_color_index !=
             defaults.current_annotation_color_index ||
@@ -1233,8 +1232,7 @@ std::string Serialize_app_config_json(AppConfig const &config) {
                 defaults.obfuscate_risk_acknowledged) {
             root["tools"]["obfuscate"] = easyjson::object();
             if (config.obfuscate_block_size != defaults.obfuscate_block_size) {
-                root["tools"]["obfuscate"]["block_size"] =
-                    config.obfuscate_block_size;
+                root["tools"]["obfuscate"]["block_size"] = config.obfuscate_block_size;
             }
             if (config.obfuscate_risk_acknowledged !=
                 defaults.obfuscate_risk_acknowledged) {

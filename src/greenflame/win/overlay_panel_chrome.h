@@ -11,8 +11,7 @@ inline constexpr float kOverlayPanelMarginPxF = 24.f;
 inline constexpr float kOverlayPanelBorderInsetPxF = 0.5f;
 inline constexpr float kOverlayPanelColorChannelMaxF = 255.f;
 inline constexpr float kOverlayPanelBackdropAlphaF =
-    static_cast<float>(kOverlayPanelBackdropAlpha) /
-    kOverlayPanelColorChannelMaxF;
+    static_cast<float>(kOverlayPanelBackdropAlpha) / kOverlayPanelColorChannelMaxF;
 inline constexpr float kOverlayPanelFillAlphaF =
     static_cast<float>(kOverlayPanelFillAlpha) / kOverlayPanelColorChannelMaxF;
 inline constexpr D2D1_COLOR_F kOverlayPanelBackdropColor = {
@@ -35,14 +34,12 @@ Monitor_rect_in_client(greenflame::core::PointPx cursor_screen,
                        std::span<const greenflame::core::MonitorWithBounds> monitors,
                        greenflame::core::RectPx overlay_rect_screen);
 
-[[nodiscard]] D2D1_RECT_F
-Overlay_panel_bounds(D2D1_SIZE_F rt_size,
-                     std::optional<greenflame::core::RectPx> monitor_rect_client)
-    noexcept;
+[[nodiscard]] D2D1_RECT_F Overlay_panel_bounds(
+    D2D1_SIZE_F rt_size,
+    std::optional<greenflame::core::RectPx> monitor_rect_client) noexcept;
 
 void Paint_overlay_panel_chrome(ID2D1RenderTarget *rt, ID2D1SolidColorBrush *brush,
-                                D2D1_RECT_F overlay_bounds,
-                                D2D1_RECT_F panel_bounds,
+                                D2D1_RECT_F overlay_bounds, D2D1_RECT_F panel_bounds,
                                 OverlayPanelChrome const &chrome = {}) noexcept;
 
 } // namespace greenflame

@@ -255,8 +255,8 @@ Uses_wgc_title_match_handling(greenflame::core::WindowCaptureBackend backend) no
     return backend != greenflame::core::WindowCaptureBackend::Gdi;
 }
 
-[[nodiscard]] bool Annotation_is_obfuscate(
-    greenflame::core::Annotation const &annotation) noexcept {
+[[nodiscard]] bool
+Annotation_is_obfuscate(greenflame::core::Annotation const &annotation) noexcept {
     return std::holds_alternative<greenflame::core::ObfuscateAnnotation>(
         annotation.data);
 }
@@ -353,9 +353,8 @@ AppController::On_copy_window_to_clipboard_requested(HWND target_window) {
     if (target_window != nullptr) {
         std::optional<core::RectPx> const target_rect =
             window_inspector_.Get_window_rect(target_window);
-        if (target_rect.has_value() &&
-            capture_service_.Copy_rect_to_clipboard(*target_rect,
-                                                    config_.include_cursor)) {
+        if (target_rect.has_value() && capture_service_.Copy_rect_to_clipboard(
+                                           *target_rect, config_.include_cursor)) {
             Store_last_capture(*target_rect, target_window);
             return ClipboardCopyResult{kClipboardCopiedBalloonMessage, true};
         }
@@ -363,8 +362,8 @@ AppController::On_copy_window_to_clipboard_requested(HWND target_window) {
 
     std::optional<core::RectPx> const foreground_rect =
         window_inspector_.Get_foreground_window_rect(target_window);
-    if (foreground_rect.has_value() &&
-        capture_service_.Copy_rect_to_clipboard(*foreground_rect, config_.include_cursor)) {
+    if (foreground_rect.has_value() && capture_service_.Copy_rect_to_clipboard(
+                                           *foreground_rect, config_.include_cursor)) {
         Store_last_capture(*foreground_rect, std::nullopt);
         return ClipboardCopyResult{kClipboardCopiedBalloonMessage, true};
     }
@@ -373,8 +372,8 @@ AppController::On_copy_window_to_clipboard_requested(HWND target_window) {
     POINT const cursor_point{cursor.x, cursor.y};
     std::optional<core::RectPx> const fallback_rect =
         window_inspector_.Get_window_rect_under_cursor(cursor_point, nullptr);
-    if (fallback_rect.has_value() &&
-        capture_service_.Copy_rect_to_clipboard(*fallback_rect, config_.include_cursor)) {
+    if (fallback_rect.has_value() && capture_service_.Copy_rect_to_clipboard(
+                                         *fallback_rect, config_.include_cursor)) {
         Store_last_capture(*fallback_rect, std::nullopt);
         return ClipboardCopyResult{kClipboardCopiedBalloonMessage, true};
     }

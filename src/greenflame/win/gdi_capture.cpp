@@ -80,7 +80,8 @@ void GdiCaptureResult::Free() noexcept {
 
 CapturedCursorSnapshot::~CapturedCursorSnapshot() { Free(); }
 
-CapturedCursorSnapshot::CapturedCursorSnapshot(CapturedCursorSnapshot &&other) noexcept {
+CapturedCursorSnapshot::CapturedCursorSnapshot(
+    CapturedCursorSnapshot &&other) noexcept {
     *this = std::move(other);
 }
 
@@ -162,8 +163,8 @@ bool Capture_cursor_snapshot(CapturedCursorSnapshot &out) {
 
     CURSORINFO cursor_info = {};
     cursor_info.cbSize = sizeof(cursor_info);
-    if (GetCursorInfo(&cursor_info) == 0 ||
-        (cursor_info.flags & CURSOR_SHOWING) == 0 || cursor_info.hCursor == nullptr) {
+    if (GetCursorInfo(&cursor_info) == 0 || (cursor_info.flags & CURSOR_SHOWING) == 0 ||
+        cursor_info.hCursor == nullptr) {
         return false;
     }
 
@@ -187,9 +188,9 @@ bool Capture_cursor_snapshot(CapturedCursorSnapshot &out) {
     } else if (icon_info.Value().hbmMask != nullptr) {
         int mask_width = 0;
         int mask_height = 0;
-        have_size =
-            Try_get_bitmap_dimensions(icon_info.Value().hbmMask, mask_width, mask_height) &&
-            mask_height >= 2 && (mask_height % 2) == 0;
+        have_size = Try_get_bitmap_dimensions(icon_info.Value().hbmMask, mask_width,
+                                              mask_height) &&
+                    mask_height >= 2 && (mask_height % 2) == 0;
         if (have_size) {
             width = mask_width;
             height = mask_height / 2;
@@ -453,12 +454,12 @@ bool Composite_cursor_snapshot(CapturedCursorSnapshot const &cursor_snapshot,
         return true;
     }
 
-    int64_t const draw_left64 = static_cast<int64_t>(cursor_snapshot.hotspot_screen_px.x) -
-                                cursor_snapshot.hotspot_offset_px.x -
-                                target_origin_px.x;
-    int64_t const draw_top64 = static_cast<int64_t>(cursor_snapshot.hotspot_screen_px.y) -
-                               cursor_snapshot.hotspot_offset_px.y -
-                               target_origin_px.y;
+    int64_t const draw_left64 =
+        static_cast<int64_t>(cursor_snapshot.hotspot_screen_px.x) -
+        cursor_snapshot.hotspot_offset_px.x - target_origin_px.x;
+    int64_t const draw_top64 =
+        static_cast<int64_t>(cursor_snapshot.hotspot_screen_px.y) -
+        cursor_snapshot.hotspot_offset_px.y - target_origin_px.y;
     if (draw_left64 < static_cast<int64_t>(INT32_MIN) ||
         draw_left64 > static_cast<int64_t>(INT32_MAX) ||
         draw_top64 < static_cast<int64_t>(INT32_MIN) ||
@@ -472,8 +473,8 @@ bool Composite_cursor_snapshot(CapturedCursorSnapshot const &cursor_snapshot,
 
     int const draw_left = static_cast<int>(draw_left64);
     int const draw_top = static_cast<int>(draw_top64);
-    if (draw_left64 >= target.width || draw_top64 >= target.height || draw_right64 <= 0 ||
-        draw_bottom64 <= 0) {
+    if (draw_left64 >= target.width || draw_top64 >= target.height ||
+        draw_right64 <= 0 || draw_bottom64 <= 0) {
         return true;
     }
 
@@ -488,8 +489,8 @@ bool Composite_cursor_snapshot(CapturedCursorSnapshot const &cursor_snapshot,
         HGDIOBJ const old = SelectObject(target_dc, target.bitmap);
         if (old != nullptr && old != HGDI_ERROR) {
             ok = DrawIconEx(target_dc, draw_left, draw_top, cursor_snapshot.cursor,
-                            cursor_snapshot.image_width, cursor_snapshot.image_height, 0,
-                            nullptr, DI_NORMAL) != 0;
+                            cursor_snapshot.image_width, cursor_snapshot.image_height,
+                            0, nullptr, DI_NORMAL) != 0;
             SelectObject(target_dc, old);
         }
         DeleteDC(target_dc);

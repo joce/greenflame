@@ -68,25 +68,20 @@ void OverlayWarningDialog::Show_at_cursor(
         monitor_rect_client_.value_or(core::RectPx::From_ltrb(
             0, 0, overlay_rect_screen.Width(), overlay_rect_screen.Height()));
 
-    int32_t const max_panel_width =
-        std::max(kWarningPanelMinWidthPx,
-                 available_rect.Width() - (static_cast<int32_t>(
-                                                kOverlayPanelMarginPxF) *
-                                            2));
-    int32_t const max_panel_height =
-        std::max(kWarningPanelMinHeightPx,
-                 available_rect.Height() - (static_cast<int32_t>(
-                                                 kOverlayPanelMarginPxF) *
-                                             2));
+    int32_t const max_panel_width = std::max(
+        kWarningPanelMinWidthPx,
+        available_rect.Width() - (static_cast<int32_t>(kOverlayPanelMarginPxF) * 2));
+    int32_t const max_panel_height = std::max(
+        kWarningPanelMinHeightPx,
+        available_rect.Height() - (static_cast<int32_t>(kOverlayPanelMarginPxF) * 2));
     int32_t const panel_width = std::min(kWarningPanelWidthPx, max_panel_width);
     int32_t const panel_height = std::min(kWarningPanelHeightPx, max_panel_height);
-    int32_t const panel_left = available_rect.left +
-                               std::max(0, (available_rect.Width() - panel_width) / 2);
-    int32_t const panel_top = available_rect.top +
-                              std::max(0, (available_rect.Height() - panel_height) / 2);
-    panel_rect_client_ = core::RectPx::From_ltrb(panel_left, panel_top,
-                                                 panel_left + panel_width,
-                                                 panel_top + panel_height);
+    int32_t const panel_left =
+        available_rect.left + std::max(0, (available_rect.Width() - panel_width) / 2);
+    int32_t const panel_top =
+        available_rect.top + std::max(0, (available_rect.Height() - panel_height) / 2);
+    panel_rect_client_ = core::RectPx::From_ltrb(
+        panel_left, panel_top, panel_left + panel_width, panel_top + panel_height);
     Layout_buttons();
 }
 
@@ -142,9 +137,8 @@ bool OverlayWarningDialog::Ensure_dwrite_formats(IDWriteFactory *dwrite) noexcep
 
     if (!dwrite_title_) {
         if (FAILED(dwrite->CreateTextFormat(
-                L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_BOLD,
-                DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                kWarningTitleFontSizePt, L"",
+                L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL,
+                DWRITE_FONT_STRETCH_NORMAL, kWarningTitleFontSizePt, L"",
                 dwrite_title_.ReleaseAndGetAddressOf()))) {
             return false;
         }
@@ -153,16 +147,14 @@ bool OverlayWarningDialog::Ensure_dwrite_formats(IDWriteFactory *dwrite) noexcep
         if (FAILED(dwrite->CreateTextFormat(
                 L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL,
                 DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                kWarningBodyFontSizePt, L"",
-                dwrite_body_.ReleaseAndGetAddressOf()))) {
+                kWarningBodyFontSizePt, L"", dwrite_body_.ReleaseAndGetAddressOf()))) {
             return false;
         }
     }
     if (!dwrite_button_) {
         if (FAILED(dwrite->CreateTextFormat(
-                L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_BOLD,
-                DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                kWarningButtonFontSizePt, L"",
+                L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL,
+                DWRITE_FONT_STRETCH_NORMAL, kWarningButtonFontSizePt, L"",
                 dwrite_button_.ReleaseAndGetAddressOf()))) {
             return false;
         }
@@ -182,11 +174,11 @@ bool OverlayWarningDialog::Paint_d2d(ID2D1RenderTarget *rt, IDWriteFactory *dwri
 
     D2D1_RECT_F const overlay_bounds =
         Overlay_panel_bounds(rt->GetSize(), monitor_rect_client_);
-    D2D1_RECT_F const panel_bounds = D2D1::RectF(
-        static_cast<float>(panel_rect_client_.left),
-        static_cast<float>(panel_rect_client_.top),
-        static_cast<float>(panel_rect_client_.right),
-        static_cast<float>(panel_rect_client_.bottom));
+    D2D1_RECT_F const panel_bounds =
+        D2D1::RectF(static_cast<float>(panel_rect_client_.left),
+                    static_cast<float>(panel_rect_client_.top),
+                    static_cast<float>(panel_rect_client_.right),
+                    static_cast<float>(panel_rect_client_.bottom));
     Paint_overlay_panel_chrome(rt, brush, overlay_bounds, panel_bounds);
 
     auto draw_text = [&](IDWriteTextFormat *format, std::wstring_view text,
@@ -211,9 +203,9 @@ bool OverlayWarningDialog::Paint_d2d(ID2D1RenderTarget *rt, IDWriteFactory *dwri
         rt->DrawTextLayout(D2D1::Point2F(bounds.left, bounds.top), layout.Get(), brush);
     };
 
-    std::wstring const body_text =
-        std::wstring(core::kObfuscateRiskWarningLead) + L"\n\n" +
-        std::wstring(core::kObfuscateRiskWarningGuidance);
+    std::wstring const body_text = std::wstring(core::kObfuscateRiskWarningLead) +
+                                   L"\n\n" +
+                                   std::wstring(core::kObfuscateRiskWarningGuidance);
 
     float const content_left =
         static_cast<float>(panel_rect_client_.left + kWarningSidePaddingPx);
@@ -241,8 +233,8 @@ bool OverlayWarningDialog::Paint_d2d(ID2D1RenderTarget *rt, IDWriteFactory *dwri
     auto draw_button_label = [&](OverlayRectButton const &button,
                                  std::wstring_view text) {
         core::RectPx const bounds = button.Bounds();
-        ButtonVisualColors const colors = Resolve_button_visual_colors(
-            false, button.Is_pressed(), button_context);
+        ButtonVisualColors const colors =
+            Resolve_button_visual_colors(false, button.Is_pressed(), button_context);
         draw_text(dwrite_button_.Get(), text,
                   D2D1::RectF(static_cast<float>(bounds.left + 8),
                               static_cast<float>(bounds.top + 8),

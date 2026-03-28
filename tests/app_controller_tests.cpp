@@ -123,6 +123,7 @@ class MockFileSystemService : public IFileSystemService {
                 (const, override));
     MOCK_METHOD(std::wstring, Resolve_absolute_path, (std::wstring_view),
                 (const, override));
+    MOCK_METHOD(std::wstring, Get_app_config_file_path, (), (const, override));
     MOCK_METHOD(bool, Try_read_text_file_utf8,
                 (std::wstring_view, std::string &, std::wstring &), (const, override));
     MOCK_METHOD(void, Delete_file_if_exists, (std::wstring_view), (const, override));
@@ -1426,6 +1427,7 @@ TEST(app_controller, cli_annotate_parse_failure_does_not_resolve_output_path) {
 TEST(app_controller,
      cli_annotate_inline_obfuscates_pass_through_prepare_and_save_in_order) {
     ControllerFixture fixture;
+    fixture.config.obfuscate_risk_acknowledged = true;
     CliOptions options{};
     options.capture_mode = CliCaptureMode::Desktop;
     options.output_path = L"C:\\shots\\desktop-obfuscate-stack.png";
@@ -1504,6 +1506,106 @@ TEST(app_controller,
                 return Make_capture_save_success();
             });
     }
+
+    CliResult const result = fixture.controller.Run_cli_capture_mode(options);
+    EXPECT_EQ(result.exit_code, ProcessExitCode::Success);
+}
+
+TEST(app_controller,
+     cli_annotate_obfuscate_requires_risk_acknowledgement_before_output_resolution) {
+    ControllerFixture fixture;
+    CliOptions options{};
+    options.capture_mode = CliCaptureMode::Desktop;
+    options.output_path = L"C:\\shots\\desktop-obfuscate.png";
+    options.overwrite_output = true;
+    options.annotate_value =
+        L"{\"annotations\":[{\"type\":\"obfuscate\",\"left\":10,\"top\":12,"
+        L"\"width\":32,\"height\":18,\"size\":8}]}";
+
+    RectPx const desktop = RectPx::From_ltrb(0, 0, 1920, 1080);
+    EXPECT_CALL(fixture.display, Get_virtual_desktop_bounds_px())
+        .Times(2)
+        .WillRepeatedly(Return(desktop));
+    EXPECT_CALL(fixture.annotation_preparation, Prepare_annotations(_))
+        .WillOnce([](core::AnnotationPreparationRequest const &request) {
+            EXPECT_EQ(request.annotations.size(), 1u);
+            EXPECT_TRUE(std::holds_alternative<core::ObfuscateAnnotation>(
+                request.annotations[0].data));
+            return Make_annotation_prepare_success(request.annotations);
+        });
+    EXPECT_CALL(fixture.file_system, Get_app_config_file_path())
+        .WillOnce(Return(L"C:\\Users\\you\\.config\\greenflame\\greenflame.json"));
+
+    CliResult const result = fixture.controller.Run_cli_capture_mode(options);
+    EXPECT_EQ(result.exit_code,
+              ProcessExitCode::CliObfuscateRiskUnacknowledged);
+    EXPECT_THAT(result.stderr_message,
+                HasSubstr(L"tools.obfuscate.risk_acknowledged"));
+    EXPECT_THAT(result.stderr_message,
+                HasSubstr(L"C:\\Users\\you\\.config\\greenflame\\greenflame.json"));
+}
+
+TEST(app_controller,
+     cli_annotate_obfuscate_reports_missing_config_path_when_unavailable) {
+    ControllerFixture fixture;
+    CliOptions options{};
+    options.capture_mode = CliCaptureMode::Desktop;
+    options.output_path = L"C:\\shots\\desktop-obfuscate.png";
+    options.overwrite_output = true;
+    options.annotate_value =
+        L"{\"annotations\":[{\"type\":\"obfuscate\",\"left\":10,\"top\":12,"
+        L"\"width\":32,\"height\":18,\"size\":8}]}";
+
+    RectPx const desktop = RectPx::From_ltrb(0, 0, 1920, 1080);
+    EXPECT_CALL(fixture.display, Get_virtual_desktop_bounds_px())
+        .Times(2)
+        .WillRepeatedly(Return(desktop));
+    EXPECT_CALL(fixture.annotation_preparation, Prepare_annotations(_))
+        .WillOnce([](core::AnnotationPreparationRequest const &request) {
+            return Make_annotation_prepare_success(request.annotations);
+        });
+    EXPECT_CALL(fixture.file_system, Get_app_config_file_path())
+        .WillOnce(Return(L""));
+
+    CliResult const result = fixture.controller.Run_cli_capture_mode(options);
+    EXPECT_EQ(result.exit_code,
+              ProcessExitCode::CliObfuscateRiskUnacknowledged);
+    EXPECT_THAT(result.stderr_message,
+                HasSubstr(L"tools.obfuscate.risk_acknowledged"));
+    EXPECT_THAT(result.stderr_message,
+                HasSubstr(L"config file path could not be determined"));
+}
+
+TEST(app_controller,
+     cli_annotate_obfuscate_succeeds_once_risk_is_acknowledged) {
+    ControllerFixture fixture;
+    fixture.config.obfuscate_risk_acknowledged = true;
+    CliOptions options{};
+    options.capture_mode = CliCaptureMode::Desktop;
+    options.output_path = L"C:\\shots\\desktop-obfuscate.png";
+    options.overwrite_output = true;
+    options.annotate_value =
+        L"{\"annotations\":[{\"type\":\"obfuscate\",\"left\":10,\"top\":12,"
+        L"\"width\":32,\"height\":18,\"size\":8}]}";
+
+    RectPx const desktop = RectPx::From_ltrb(0, 0, 1920, 1080);
+    EXPECT_CALL(fixture.display, Get_virtual_desktop_bounds_px())
+        .Times(2)
+        .WillRepeatedly(Return(desktop));
+    EXPECT_CALL(fixture.annotation_preparation, Prepare_annotations(_))
+        .WillOnce([](core::AnnotationPreparationRequest const &request) {
+            return Make_annotation_prepare_success(request.annotations);
+        });
+    EXPECT_CALL(fixture.file_system,
+                Resolve_absolute_path(
+                    Eq(std::wstring_view{L"C:\\shots\\desktop-obfuscate.png"})))
+        .WillOnce(Return(L"C:\\shots\\desktop-obfuscate.png"));
+    EXPECT_CALL(
+        fixture.capture,
+        Save_capture_to_file(
+            _, Eq(std::wstring_view{L"C:\\shots\\desktop-obfuscate.png"}),
+            ImageSaveFormat::Png))
+        .WillOnce(Return(Make_capture_save_success()));
 
     CliResult const result = fixture.controller.Run_cli_capture_mode(options);
     EXPECT_EQ(result.exit_code, ProcessExitCode::Success);
@@ -1895,6 +1997,41 @@ TEST(app_controller,
     CliResult const result = fixture.controller.Run_cli_capture_mode(options);
     EXPECT_EQ(result.exit_code, ProcessExitCode::CliAnnotationInputInvalid);
     EXPECT_THAT(result.stderr_message, HasSubstr(L"not supported with --input"));
+}
+
+TEST(app_controller,
+     cli_input_mode_obfuscate_requires_risk_acknowledgement_before_save) {
+    ControllerFixture fixture;
+
+    CliOptions options{};
+    options.input_path = L"issue.png";
+    options.output_path = L"C:\\shots\\annotated.png";
+    options.overwrite_output = true;
+    options.annotate_value =
+        L"{\"annotations\":[{\"type\":\"obfuscate\",\"left\":10,\"top\":12,"
+        L"\"width\":32,\"height\":18,\"size\":8}]}";
+
+    EXPECT_CALL(fixture.file_system,
+                Resolve_absolute_path(Eq(std::wstring_view{L"issue.png"})))
+        .WillOnce(Return(L"C:\\shots\\issue.png"));
+    EXPECT_CALL(fixture.input_image,
+                Probe_input_image(Eq(std::wstring_view{L"C:\\shots\\issue.png"})))
+        .WillOnce(Return(Make_input_probe_success(80, 60, ImageSaveFormat::Png)));
+    EXPECT_CALL(fixture.annotation_preparation, Prepare_annotations(_))
+        .WillOnce([](core::AnnotationPreparationRequest const &request) {
+            EXPECT_EQ(request.annotations.size(), 1u);
+            EXPECT_TRUE(std::holds_alternative<core::ObfuscateAnnotation>(
+                request.annotations[0].data));
+            return Make_annotation_prepare_success(request.annotations);
+        });
+    EXPECT_CALL(fixture.file_system, Get_app_config_file_path())
+        .WillOnce(Return(L"C:\\Users\\you\\.config\\greenflame\\greenflame.json"));
+
+    CliResult const result = fixture.controller.Run_cli_capture_mode(options);
+    EXPECT_EQ(result.exit_code,
+              ProcessExitCode::CliObfuscateRiskUnacknowledged);
+    EXPECT_THAT(result.stderr_message,
+                HasSubstr(L"C:\\Users\\you\\.config\\greenflame\\greenflame.json"));
 }
 
 TEST(app_controller, cli_input_extensionless_output_defaults_to_probed_input_format) {

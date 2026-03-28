@@ -361,6 +361,29 @@ unless a real end-to-end bug escapes into the Win32 shell:
   - Hovering any visible toolbar button shows the standard pointer cursor.
   - Button state tracks the active tool correctly.
 
+### GF-MAN-UI-003 - Obfuscate Risk Warning
+
+- Priority: `P1`
+- Run on: `ENV-A`
+- Steps:
+  1. Start from a config where `tools.obfuscate.risk_acknowledged` is unset or `false`.
+  2. Create a stable selection.
+  3. Arm `Obfuscate` from the toolbar.
+  4. Move the pointer over each warning button, then click outside the panel.
+  5. Press `Esc`.
+  6. Re-arm `Obfuscate` with the `O` hotkey.
+  7. Click the accept button.
+  8. Close the overlay, reopen it, and arm `Obfuscate` again.
+- Expected:
+  - The first toolbar activation opens an in-overlay warning dialog.
+  - The dialog blocks drawing, selection edits, toolbar actions, mouse-wheel size changes, right-click color-wheel actions, and help overlay toggling.
+  - Hover and pressed states are shown only on the two warning buttons.
+  - Clicking outside the panel does nothing.
+  - Pressing `Esc` dismisses the dialog and clears the Obfuscate tool without clearing the selection.
+  - The hotkey path opens the same warning dialog.
+  - Accepting the warning keeps Obfuscate armed.
+  - After acceptance is persisted, later Obfuscate activations do not show the warning again.
+
 ## Annotations
 
 ### GF-MAN-ANN-001 - Tool Toggling

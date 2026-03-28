@@ -34,6 +34,7 @@ struct AppConfig final {
     int32_t highlighter_size = kDefaultHighlighterSize;
     int32_t bubble_size = kDefaultBubbleSize;
     int32_t obfuscate_block_size = kDefaultObfuscateBlockSize;
+    bool obfuscate_risk_acknowledged = false;
     int32_t text_size = kDefaultTextSize;
     AnnotationColorPalette annotation_colors = kDefaultAnnotationColorPalette;
     int32_t current_annotation_color_index = kDefaultAnnotationColorIndex;

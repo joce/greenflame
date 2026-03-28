@@ -197,6 +197,7 @@ add_library(greenflame_core STATIC
     src/greenflame_core/overlay_controller.cpp
     src/greenflame_core/overlay_controller.h
     src/greenflame_core/overlay_help_content.h
+    src/greenflame_core/obfuscate_risk_warning.h
     src/greenflame_core/command.h
     src/greenflame_core/undo_stack.cpp
     src/greenflame_core/undo_stack.h
@@ -305,6 +306,11 @@ add_executable(greenflame WIN32
     src/greenflame/win/annotation_capture_renderer.cpp
     src/greenflame/win/overlay_help_overlay.cpp
     src/greenflame/win/overlay_help_overlay.h
+    src/greenflame/win/overlay_panel_chrome.cpp
+    src/greenflame/win/overlay_panel_chrome.h
+    src/greenflame/win/overlay_top_layer.h
+    src/greenflame/win/overlay_warning_dialog.cpp
+    src/greenflame/win/overlay_warning_dialog.h
     src/greenflame/win/overlay_window.cpp
     src/greenflame/win/overlay_window.h
     src/greenflame/win/about_dialog.cpp

@@ -2,6 +2,8 @@
 // active, and pressed states.
 
 #include "win/overlay_button.h"
+#include "win/d2d_draw_helpers.h"
+#include "win/overlay_panel_chrome.h"
 
 namespace greenflame {
 
@@ -12,6 +14,7 @@ constexpr float kButtonHoverRingWidthD2D = 3.0f;
 constexpr float kButtonGlyphInsetD2D = 8.0f;
 constexpr D2D1_COLOR_F kPressedFillColor = {155.f / 255.f, 220.f / 255.f, 65.f / 255.f,
                                             1.f};
+constexpr float kRectButtonHoverRingWidthD2D = 2.0f;
 
 [[nodiscard]] D2D1_COLOR_F Blend_button_colors(D2D1_COLOR_F a, D2D1_COLOR_F b,
                                                float a_weight,
@@ -24,6 +27,17 @@ constexpr D2D1_COLOR_F kPressedFillColor = {155.f / 255.f, 220.f / 255.f, 65.f /
 }
 
 } // namespace
+
+ButtonVisualColors Resolve_button_visual_colors(bool active, bool pressed,
+                                                ButtonDrawContext const &ctx) noexcept {
+    if (pressed) {
+        return {kPressedFillColor, ctx.outline_color, ctx.outline_color};
+    }
+    if (active) {
+        return {ctx.outline_color, ctx.fill_color, ctx.fill_color};
+    }
+    return {ctx.fill_color, ctx.outline_color, ctx.outline_color};
+}
 
 OverlayButton::OverlayButton(core::PointPx position, int diameter, std::wstring label,
                              bool is_toggle, bool active)
@@ -68,22 +82,8 @@ void OverlayButton::Draw_d2d(ID2D1RenderTarget *rt, ID2D1SolidColorBrush *brush,
         return;
     }
 
-    D2D1_COLOR_F fill_col{};
-    D2D1_COLOR_F outline_col{};
-    D2D1_COLOR_F text_col{};
-    if (pressed_) {
-        fill_col = kPressedFillColor;
-        outline_col = ctx.outline_color;
-        text_col = ctx.outline_color;
-    } else if (active_) {
-        fill_col = ctx.outline_color;
-        outline_col = ctx.fill_color;
-        text_col = ctx.fill_color;
-    } else {
-        fill_col = ctx.fill_color;
-        outline_col = ctx.outline_color;
-        text_col = ctx.outline_color;
-    }
+    ButtonVisualColors const colors =
+        Resolve_button_visual_colors(active_, pressed_, ctx);
 
     float const df = static_cast<float>(diameter_);
     float const left = static_cast<float>(position_.x);
@@ -91,18 +91,18 @@ void OverlayButton::Draw_d2d(ID2D1RenderTarget *rt, ID2D1SolidColorBrush *brush,
     D2D1_ELLIPSE const ell = D2D1::Ellipse(
         D2D1::Point2F(left + df / 2.f, top + df / 2.f), df / 2.f, df / 2.f);
 
-    brush->SetColor(fill_col);
+    brush->SetColor(colors.fill_color);
     rt->FillEllipse(ell, brush);
 
     D2D1_ELLIPSE const outline_ell =
         D2D1::Ellipse(ell.point, ell.radiusX - kButtonPenWidthD2D / 2.f,
                       ell.radiusY - kButtonPenWidthD2D / 2.f);
-    brush->SetColor(outline_col);
+    brush->SetColor(colors.outline_color);
     rt->DrawEllipse(outline_ell, brush, kButtonPenWidthD2D);
 
     if (hovered_) {
         D2D1_COLOR_F const hover_col =
-            Blend_button_colors(outline_col, fill_col, 3.f, 1.f);
+            Blend_button_colors(colors.outline_color, colors.fill_color, 3.f, 1.f);
         D2D1_ELLIPSE const hover_ell =
             D2D1::Ellipse(ell.point, ell.radiusX - kButtonHoverRingWidthD2D / 2.f,
                           ell.radiusY - kButtonHoverRingWidthD2D / 2.f);
@@ -124,11 +124,64 @@ void OverlayButton::Draw_d2d(ID2D1RenderTarget *rt, ID2D1SolidColorBrush *brush,
             D2D1::RectF(draw_left, draw_top, draw_left + draw_w, draw_top + draw_h);
         D2D1_RECT_F const src =
             D2D1::RectF(0.f, 0.f, glyph_size.width, glyph_size.height);
-        brush->SetColor(text_col);
+        brush->SetColor(colors.content_color);
         rt->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
         rt->FillOpacityMask(glyph_bitmap, brush, D2D1_OPACITY_MASK_CONTENT_GRAPHICS,
                             &dest, &src);
         rt->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+    }
+}
+
+OverlayRectButton::OverlayRectButton(core::PointPx position, int width, int height)
+    : position_(position), width_(width), height_(height) {}
+
+core::RectPx OverlayRectButton::Bounds() const {
+    return core::RectPx::From_ltrb(position_.x, position_.y, position_.x + width_,
+                                   position_.y + height_);
+}
+
+bool OverlayRectButton::Hit_test(core::PointPx pt) const {
+    return Bounds().Contains(pt);
+}
+
+void OverlayRectButton::On_mouse_down(core::PointPx pt) noexcept {
+    pressed_ = Hit_test(pt);
+}
+
+void OverlayRectButton::On_mouse_up(core::PointPx /*pt*/) noexcept { pressed_ = false; }
+
+void OverlayRectButton::Draw_d2d(ID2D1RenderTarget *rt, ID2D1SolidColorBrush *brush,
+                                 ButtonDrawContext const &ctx) const {
+    if (rt == nullptr || brush == nullptr || width_ <= 0 || height_ <= 0) {
+        return;
+    }
+
+    ButtonVisualColors const colors =
+        Resolve_button_visual_colors(false, pressed_, ctx);
+    core::RectPx const bounds = Bounds();
+    D2D1_RECT_F const rect = Rect(bounds);
+
+    brush->SetColor(colors.fill_color);
+    rt->FillRectangle(rect, brush);
+
+    brush->SetColor(colors.outline_color);
+    rt->DrawRectangle(
+        D2D1::RectF(rect.left + kOverlayPanelBorderInsetPxF,
+                    rect.top + kOverlayPanelBorderInsetPxF,
+                    rect.right - kOverlayPanelBorderInsetPxF,
+                    rect.bottom - kOverlayPanelBorderInsetPxF),
+        brush, kButtonPenWidthD2D);
+
+    if (hovered_) {
+        D2D1_COLOR_F const hover_color =
+            Blend_button_colors(colors.outline_color, colors.fill_color, 3.f, 1.f);
+        brush->SetColor(hover_color);
+        rt->DrawRectangle(
+            D2D1::RectF(rect.left + kRectButtonHoverRingWidthD2D / 2.f,
+                        rect.top + kRectButtonHoverRingWidthD2D / 2.f,
+                        rect.right - kRectButtonHoverRingWidthD2D / 2.f,
+                        rect.bottom - kRectButtonHoverRingWidthD2D / 2.f),
+            brush, kRectButtonHoverRingWidthD2D);
     }
 }
 

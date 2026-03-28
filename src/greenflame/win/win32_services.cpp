@@ -1,5 +1,6 @@
 #include "win/win32_services.h"
 
+#include "app_config_store.h"
 #include "greenflame/win/annotation_capture_renderer.h"
 #include "greenflame/win/d2d_text_layout_engine.h"
 #include "greenflame_core/string_utils.h"
@@ -1230,6 +1231,10 @@ Win32FileSystemService::Resolve_absolute_path(std::wstring_view path) const {
         result.resize(written);
     }
     return result;
+}
+
+std::wstring Win32FileSystemService::Get_app_config_file_path() const {
+    return Get_config_file_path().wstring();
 }
 
 bool Win32FileSystemService::Try_read_text_file_utf8(

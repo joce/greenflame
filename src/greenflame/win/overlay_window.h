@@ -7,6 +7,7 @@
 #include "win/d2d_text_layout_engine.h"
 #include "win/overlay_button.h"
 #include "win/overlay_help_overlay.h"
+#include "win/overlay_warning_dialog.h"
 
 namespace greenflame {
 
@@ -130,6 +131,12 @@ class OverlayWindow final {
     [[nodiscard]] bool Is_selection_stable_for_help() const;
     void Show_help_overlay_at_cursor();
     void Hide_help_overlay(bool suppress_next_lbutton_up);
+    void Show_obfuscate_warning_at_cursor();
+    void Hide_obfuscate_warning();
+    void Accept_obfuscate_warning();
+    void Reject_obfuscate_warning();
+    [[nodiscard]] bool Maybe_show_obfuscate_warning();
+    [[nodiscard]] IOverlayTopLayer *Active_top_layer() noexcept;
     [[nodiscard]] std::wstring_view Hovered_toolbar_tooltip_text() const noexcept;
     [[nodiscard]] std::optional<core::RectPx> Hovered_toolbar_button_bounds() const;
     [[nodiscard]] OverlayButtonGlyph const *
@@ -177,6 +184,7 @@ class OverlayWindow final {
     std::unique_ptr<D2DTextLayoutEngine> text_layout_engine_;
     std::optional<core::SelectionHandle> last_hover_handle_;
     OverlayHelpOverlay hotkey_help_overlay_ = {};
+    OverlayWarningDialog obfuscate_warning_dialog_ = {};
     bool testing_toolbar_ = false;
     int mouse_wheel_delta_remainder_ = 0;
     std::wstring transient_center_label_text_ = {};

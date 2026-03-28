@@ -98,6 +98,12 @@ TEST(app_config, Normalize_ClampsObfuscateBlockSize) {
     EXPECT_EQ(config.obfuscate_block_size, 50);
 }
 
+TEST(app_config, Defaults_DoNotAcknowledgeObfuscateRisk) {
+    AppConfig const config{};
+
+    EXPECT_FALSE(config.obfuscate_risk_acknowledged);
+}
+
 TEST(app_config, Normalize_ResetsInvalidCurrentTextFontChoice) {
     AppConfig config{};
     config.text_current_font = static_cast<TextFontChoice>(99);
@@ -190,7 +196,7 @@ TEST(app_config_json, Parse_AcceptsSchemaPropertyAndValidValues) {
       "current_color": 5,
       "opacity_percent": 90
     },
-    "obfuscate": { "block_size": 13 },
+    "obfuscate": { "block_size": 13, "risk_acknowledged": true },
     "text": { "current_font": "mono" }
   },
   "save": {
@@ -207,6 +213,7 @@ TEST(app_config_json, Parse_AcceptsSchemaPropertyAndValidValues) {
     EXPECT_EQ(config->current_highlighter_color_index, 5);
     EXPECT_EQ(config->highlighter_opacity_percent, 90);
     EXPECT_EQ(config->obfuscate_block_size, 13);
+    EXPECT_TRUE(config->obfuscate_risk_acknowledged);
     EXPECT_EQ(config->text_current_font, TextFontChoice::Mono);
     EXPECT_EQ(config->default_save_format, L"jpg");
     EXPECT_EQ(config->padding_color, Make_colorref(0x11, 0x22, 0x33));
@@ -291,6 +298,19 @@ TEST(app_config_json, Serialize_WritesObfuscateBlockSizeWhenNonDefault) {
     EXPECT_EQ(round_tripped->obfuscate_block_size, 17);
 }
 
+TEST(app_config_json, Serialize_WritesObfuscateRiskAcknowledgedWhenTrue) {
+    AppConfig config{};
+    config.obfuscate_risk_acknowledged = true;
+
+    std::string const serialized = Serialize_app_config_json(config);
+    std::optional<AppConfig> const round_tripped = Parse_app_config_json(serialized);
+
+    EXPECT_NE(serialized.find(R"json("obfuscate")json"), std::string::npos);
+    EXPECT_NE(serialized.find(R"json("risk_acknowledged")json"), std::string::npos);
+    ASSERT_TRUE(round_tripped.has_value());
+    EXPECT_TRUE(round_tripped->obfuscate_risk_acknowledged);
+}
+
 TEST(app_config_json, Parse_RejectsUnknownTopLevelKey) {
     EXPECT_FALSE(Parse_app_config_json(R"json({"extra":true})json").has_value());
 }
@@ -307,6 +327,12 @@ TEST(app_config_json, Parse_RejectsFloatingToolSize) {
 
 TEST(app_config_json, Parse_RejectsObfuscateSizeAlias) {
     EXPECT_FALSE(Parse_app_config_json(R"json({"tools":{"obfuscate":{"size":5}}})json")
+                     .has_value());
+}
+
+TEST(app_config_json, Parse_RejectsNonBooleanObfuscateRiskAcknowledged) {
+    EXPECT_FALSE(Parse_app_config_json(
+                     R"json({"tools":{"obfuscate":{"risk_acknowledged":"yes"}}})json")
                      .has_value());
 }
 

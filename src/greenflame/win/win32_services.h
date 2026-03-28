@@ -69,6 +69,7 @@ class Win32FileSystemService final : public IFileSystemService {
     Resolve_save_directory(std::wstring const &configured_dir) const override;
     [[nodiscard]] std::wstring
     Resolve_absolute_path(std::wstring_view path) const override;
+    [[nodiscard]] std::wstring Get_app_config_file_path() const override;
     [[nodiscard]] bool
     Try_read_text_file_utf8(std::wstring_view path, std::string &utf8_text,
                             std::wstring &error_message) const override;

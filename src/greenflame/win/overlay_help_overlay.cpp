@@ -1,18 +1,16 @@
 #include "win/overlay_help_overlay.h"
+#include "win/overlay_panel_chrome.h"
 #include "win/ui_palette.h"
 
 namespace {
 
-constexpr unsigned char kOverlayBackdropAlpha = 170;
 constexpr int kPanelTopOffsetPx = 200;
 constexpr int kMinPanelWidthPx = 360;
 constexpr int kMinPanelHeightPx = 220;
-constexpr unsigned char kPanelFillAlpha = 224;
 constexpr int kTitleRowHeightPx = 42;
 constexpr int kCloseHintRowHeightPx = 40;
 constexpr int kRowsTopPaddingPx = 14;
 constexpr int kPanelBottomPaddingPx = 24;
-constexpr float kColorChannelMaxF = 255.f;
 constexpr float kHelpTitleFontSizePt = 17.f;
 constexpr float kHelpBodyFontSizePt = 13.f;
 constexpr float kHelpKeyFontSizePt = 13.f;
@@ -25,37 +23,30 @@ constexpr float kHelpRowHeightPxF = 32.f;
 constexpr float kHelpSectionTitleBottomGapPxF = 2.f;
 constexpr float kHelpSectionGapPxF = 8.f;
 constexpr float kHelpTextMeasureExtentPxF = 8192.f;
-constexpr float kHelpPanelBorderInsetPxF = 0.5f;
 constexpr float kHelpTwoColGapPxF = 32.f;
-constexpr float kHelpPanelVerticalMarginPxF = 24.f;
 constexpr float kHelpPanelFixedChromeHeightPxF =
     kHelpTitleTopPaddingPxF + kHelpSeparatorOffsetPxF +
     static_cast<float>(kRowsTopPaddingPx) + static_cast<float>(kPanelBottomPaddingPx);
-constexpr float kBackdropAlphaF =
-    static_cast<float>(kOverlayBackdropAlpha) / kColorChannelMaxF;
-constexpr float kPanelFillAlphaF =
-    static_cast<float>(kPanelFillAlpha) / kColorChannelMaxF;
-constexpr D2D1_COLOR_F kHelpBackdropColor = {0.f, 0.f, 0.f, kBackdropAlphaF};
-constexpr D2D1_COLOR_F kHelpPanelFillColor = {
-    52.f / kColorChannelMaxF, 52.f / kColorChannelMaxF, 52.f / kColorChannelMaxF,
-    kPanelFillAlphaF};
-constexpr D2D1_COLOR_F kHelpPanelBorderColor = {120.f / kColorChannelMaxF,
-                                                120.f / kColorChannelMaxF,
-                                                120.f / kColorChannelMaxF, 1.f};
-constexpr D2D1_COLOR_F kHelpTitleColor = {242.f / kColorChannelMaxF,
-                                          242.f / kColorChannelMaxF,
-                                          242.f / kColorChannelMaxF, 1.f};
-constexpr D2D1_COLOR_F kHelpCloseHintColor = {208.f / kColorChannelMaxF,
-                                              208.f / kColorChannelMaxF,
-                                              208.f / kColorChannelMaxF, 1.f};
+constexpr D2D1_COLOR_F kHelpTitleColor = {
+    242.f / greenflame::kOverlayPanelColorChannelMaxF,
+    242.f / greenflame::kOverlayPanelColorChannelMaxF,
+    242.f / greenflame::kOverlayPanelColorChannelMaxF, 1.f};
+constexpr D2D1_COLOR_F kHelpCloseHintColor = {
+    208.f / greenflame::kOverlayPanelColorChannelMaxF,
+    208.f / greenflame::kOverlayPanelColorChannelMaxF,
+    208.f / greenflame::kOverlayPanelColorChannelMaxF, 1.f};
 constexpr D2D1_COLOR_F kHelpSeparatorColor = {
-    94.f / kColorChannelMaxF, 94.f / kColorChannelMaxF, 94.f / kColorChannelMaxF, 1.f};
-constexpr D2D1_COLOR_F kHelpShortcutColor = {244.f / kColorChannelMaxF,
-                                             220.f / kColorChannelMaxF,
-                                             111.f / kColorChannelMaxF, 1.f};
-constexpr D2D1_COLOR_F kHelpBodyColor = {240.f / kColorChannelMaxF,
-                                         240.f / kColorChannelMaxF,
-                                         240.f / kColorChannelMaxF, 1.f};
+    94.f / greenflame::kOverlayPanelColorChannelMaxF,
+    94.f / greenflame::kOverlayPanelColorChannelMaxF,
+    94.f / greenflame::kOverlayPanelColorChannelMaxF, 1.f};
+constexpr D2D1_COLOR_F kHelpShortcutColor = {
+    244.f / greenflame::kOverlayPanelColorChannelMaxF,
+    220.f / greenflame::kOverlayPanelColorChannelMaxF,
+    111.f / greenflame::kOverlayPanelColorChannelMaxF, 1.f};
+constexpr D2D1_COLOR_F kHelpBodyColor = {
+    240.f / greenflame::kOverlayPanelColorChannelMaxF,
+    240.f / greenflame::kOverlayPanelColorChannelMaxF,
+    240.f / greenflame::kOverlayPanelColorChannelMaxF, 1.f};
 
 [[nodiscard]] float Calculate_section_height(
     greenflame::core::OverlayHelpSection const &section, bool include_gap_before) {
@@ -127,7 +118,8 @@ constexpr D2D1_COLOR_F kHelpBodyColor = {240.f / kColorChannelMaxF,
     greenflame::core::OverlayHelpContent const &content, float default_panel_height,
     float overlay_height) {
     float const max_panel_height =
-        std::max(1.f, overlay_height - (2.f * kHelpPanelVerticalMarginPxF));
+        std::max(1.f, overlay_height -
+                          (2.f * greenflame::kOverlayPanelMarginPxF));
     bool const prefer_two_columns = Has_explicit_second_column(content);
     float const single_column_panel_height =
         kHelpPanelFixedChromeHeightPxF +
@@ -191,17 +183,8 @@ void OverlayHelpOverlay::Show_at_cursor(
         return;
     }
 
-    monitor_rect_client_ = std::nullopt;
-    std::optional<size_t> const monitor_index =
-        core::Index_of_monitor_containing(cursor_screen, monitors);
-    if (monitor_index.has_value() && *monitor_index < monitors.size()) {
-        core::RectPx const &monitor_bounds = monitors[*monitor_index].bounds;
-        monitor_rect_client_ =
-            core::RectPx::From_ltrb(monitor_bounds.left - overlay_rect_screen.left,
-                                    monitor_bounds.top - overlay_rect_screen.top,
-                                    monitor_bounds.right - overlay_rect_screen.left,
-                                    monitor_bounds.bottom - overlay_rect_screen.top);
-    }
+    monitor_rect_client_ =
+        Monitor_rect_in_client(cursor_screen, monitors, overlay_rect_screen);
     visible_ = true;
 }
 
@@ -276,33 +259,25 @@ bool OverlayHelpOverlay::Paint_d2d(ID2D1RenderTarget *rt, IDWriteFactory *dwrite
         return false;
     }
 
-    float ov_l = 0.f;
-    float ov_t = 0.f;
-    float ov_r = w;
-    float ov_b = h;
-    if (monitor_rect_client_.has_value() && !monitor_rect_client_->Is_empty()) {
-        ov_l = static_cast<float>(monitor_rect_client_->left);
-        ov_t = static_cast<float>(monitor_rect_client_->top);
-        ov_r = static_cast<float>(monitor_rect_client_->right);
-        ov_b = static_cast<float>(monitor_rect_client_->bottom);
-    }
+    D2D1_RECT_F const overlay_bounds =
+        Overlay_panel_bounds(rt_size, monitor_rect_client_);
 
-    brush->SetColor(kHelpBackdropColor);
-    rt->FillRectangle(D2D1::RectF(ov_l, ov_t, ov_r, ov_b), brush);
-
-    float const ov_w = ov_r - ov_l;
-    float const ov_h = ov_b - ov_t;
+    float const ov_w = overlay_bounds.right - overlay_bounds.left;
+    float const ov_h = overlay_bounds.bottom - overlay_bounds.top;
     float const panel_w = std::max(1.f, ov_w / 2.f);
     float const panel_h =
         Calculate_target_panel_height(*content_, std::max(1.f, ov_h / 2.f), ov_h);
-    float const panel_l = ov_l + (ov_w - panel_w) / 2.f;
-    float panel_t = ov_t + static_cast<float>(kPanelTopOffsetPx);
-    float const min_panel_t = ov_t + kHelpPanelVerticalMarginPxF;
-    float const max_panel_t = ov_b - panel_h - kHelpPanelVerticalMarginPxF;
+    float const panel_l = overlay_bounds.left + (ov_w - panel_w) / 2.f;
+    float panel_t = overlay_bounds.top + static_cast<float>(kPanelTopOffsetPx);
+    float const min_panel_t =
+        overlay_bounds.top + greenflame::kOverlayPanelMarginPxF;
+    float const max_panel_t =
+        overlay_bounds.bottom - panel_h -
+        greenflame::kOverlayPanelMarginPxF;
     if (max_panel_t >= min_panel_t) {
         panel_t = std::clamp(panel_t, min_panel_t, max_panel_t);
     } else {
-        panel_t = ov_t + std::max(0.f, (ov_h - panel_h) / 2.f);
+        panel_t = overlay_bounds.top + std::max(0.f, (ov_h - panel_h) / 2.f);
     }
     float const panel_r = panel_l + panel_w;
     float const panel_b = panel_t + panel_h;
@@ -312,15 +287,8 @@ bool OverlayHelpOverlay::Paint_d2d(ID2D1RenderTarget *rt, IDWriteFactory *dwrite
         return true;
     }
 
-    brush->SetColor(kHelpPanelFillColor);
-    rt->FillRectangle(D2D1::RectF(panel_l, panel_t, panel_r, panel_b), brush);
-
-    brush->SetColor(kHelpPanelBorderColor);
-    rt->DrawRectangle(D2D1::RectF(panel_l + kHelpPanelBorderInsetPxF,
-                                  panel_t + kHelpPanelBorderInsetPxF,
-                                  panel_r - kHelpPanelBorderInsetPxF,
-                                  panel_b - kHelpPanelBorderInsetPxF),
-                      brush, 1.f);
+    Paint_overlay_panel_chrome(
+        rt, brush, overlay_bounds, D2D1::RectF(panel_l, panel_t, panel_r, panel_b));
 
     float const content_l = panel_l + kHelpPanelSidePaddingPxF;
     float const content_r = panel_r - kHelpPanelSidePaddingPxF;

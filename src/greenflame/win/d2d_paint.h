@@ -12,7 +12,7 @@ namespace greenflame {
 
 struct D2DOverlayResources;
 class IOverlayButton;
-class OverlayHelpOverlay;
+class IOverlayTopLayer;
 
 // Per-index override used by the obfuscate preview path to avoid a full annotation
 // deep-copy — only the changed indices are patched at render time.
@@ -86,10 +86,10 @@ void Rebuild_frozen_bitmap(D2DOverlayResources &res, core::RectPx selection,
                            int vd_width, int vd_height);
 
 // Draw one complete frame. Returns false on D2DERR_RECREATE_TARGET (device lost).
-// If help_overlay is non-null and visible, it is drawn on top of everything else within
+// If top_layer is non-null and visible, it is drawn on top of everything else within
 // the same BeginDraw/EndDraw pair.
 [[nodiscard]] bool Paint_d2d_frame(D2DOverlayResources &res, D2DPaintInput const &input,
                                    int vd_width, int vd_height,
-                                   OverlayHelpOverlay *help_overlay = nullptr);
+                                   IOverlayTopLayer *top_layer = nullptr);
 
 } // namespace greenflame

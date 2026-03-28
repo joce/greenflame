@@ -680,6 +680,9 @@ void OverlayWindow::Set_testing_toolbar(bool enable) noexcept {
 }
 
 void OverlayWindow::Show_help_overlay_at_cursor() {
+    if (obfuscate_warning_dialog_.Is_visible()) {
+        return;
+    }
     if (!Is_selection_stable_for_help()) {
         return;
     }
@@ -713,6 +716,82 @@ void OverlayWindow::Hide_help_overlay(bool suppress_next_lbutton_up) {
     (void)Update_toolbar_hover_states(Get_client_cursor_pos_px(hwnd_));
     Refresh_cursor();
     InvalidateRect(hwnd_, nullptr, TRUE);
+}
+
+void OverlayWindow::Show_obfuscate_warning_at_cursor() {
+    RECT overlay_rect{};
+    if (GetWindowRect(hwnd_, &overlay_rect) == 0) {
+        return;
+    }
+
+    core::RectPx const overlay_screen_rect = core::RectPx::From_ltrb(
+        static_cast<int32_t>(overlay_rect.left), static_cast<int32_t>(overlay_rect.top),
+        static_cast<int32_t>(overlay_rect.right),
+        static_cast<int32_t>(overlay_rect.bottom));
+    obfuscate_warning_dialog_.Show_at_cursor(
+        Get_cursor_pos_px(), controller_.State().cached_monitors, overlay_screen_rect);
+    (void)Clear_toolbar_hover_states();
+    color_wheel_.hovered_segment = std::nullopt;
+    color_wheel_.hovered_hub = std::nullopt;
+    Refresh_cursor();
+    InvalidateRect(hwnd_, nullptr, TRUE);
+}
+
+void OverlayWindow::Hide_obfuscate_warning() {
+    if (!obfuscate_warning_dialog_.Is_visible()) {
+        return;
+    }
+
+    obfuscate_warning_dialog_.Hide();
+    (void)Refresh_hover_handle();
+    (void)Update_toolbar_hover_states(Get_client_cursor_pos_px(hwnd_));
+    Refresh_cursor();
+    InvalidateRect(hwnd_, nullptr, TRUE);
+}
+
+void OverlayWindow::Accept_obfuscate_warning() {
+    Hide_obfuscate_warning();
+    if (config_ != nullptr) {
+        config_->obfuscate_risk_acknowledged = true;
+        config_->Normalize();
+        (void)Save_app_config(*config_);
+    }
+}
+
+void OverlayWindow::Reject_obfuscate_warning() {
+    Hide_obfuscate_warning();
+    Apply_action(controller_.On_cancel());
+    (void)Refresh_hover_handle();
+    Refresh_cursor();
+}
+
+bool OverlayWindow::Maybe_show_obfuscate_warning() {
+    if (obfuscate_warning_dialog_.Is_visible()) {
+        return true;
+    }
+    if (config_ != nullptr && config_->obfuscate_risk_acknowledged) {
+        return false;
+    }
+
+    std::optional<core::AnnotationToolId> const active_tool =
+        controller_.Active_annotation_tool();
+    if (active_tool != core::AnnotationToolId::Obfuscate) {
+        return false;
+    }
+
+    Show_obfuscate_warning_at_cursor();
+    return true;
+}
+
+
+IOverlayTopLayer *OverlayWindow::Active_top_layer() noexcept {
+    if (obfuscate_warning_dialog_.Is_visible()) {
+        return &obfuscate_warning_dialog_;
+    }
+    if (hotkey_help_overlay_.Is_visible()) {
+        return &hotkey_help_overlay_;
+    }
+    return nullptr;
 }
 
 std::vector<core::PointPx>
@@ -1199,6 +1278,7 @@ bool OverlayWindow::Can_show_color_wheel() const noexcept {
            !s.final_selection.Is_empty() && !s.dragging && !s.handle_dragging &&
            !s.move_dragging && !s.modifier_preview &&
            !controller_.Has_active_annotation_gesture() &&
+           !obfuscate_warning_dialog_.Is_visible() &&
            !hotkey_help_overlay_.Is_visible();
 }
 
@@ -1453,6 +1533,9 @@ std::wstring_view OverlayWindow::Hovered_toolbar_tooltip_text() const noexcept {
     if (color_wheel_.visible) {
         return {};
     }
+    if (obfuscate_warning_dialog_.Is_visible()) {
+        return {};
+    }
     if (hotkey_help_overlay_.Is_visible()) {
         return {};
     }
@@ -1469,6 +1552,9 @@ std::wstring_view OverlayWindow::Hovered_toolbar_tooltip_text() const noexcept {
 
 std::optional<core::RectPx> OverlayWindow::Hovered_toolbar_button_bounds() const {
     if (color_wheel_.visible) {
+        return std::nullopt;
+    }
+    if (obfuscate_warning_dialog_.Is_visible()) {
         return std::nullopt;
     }
     if (hotkey_help_overlay_.Is_visible()) {
@@ -1562,6 +1648,10 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
     bool const had_text_edit = controller_.Has_active_text_edit();
 
     if (wparam == VK_ESCAPE) {
+        if (obfuscate_warning_dialog_.Is_visible()) {
+            Reject_obfuscate_warning();
+            return 0;
+        }
         if (color_wheel_.visible) {
             Dismiss_color_wheel(true);
             return 0;
@@ -1585,6 +1675,9 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
         return 0;
     }
     if (color_wheel_.visible) {
+        return 0;
+    }
+    if (obfuscate_warning_dialog_.Is_visible()) {
         return 0;
     }
     if (had_text_edit) {
@@ -1749,6 +1842,7 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
         if (action != core::OverlayAction::None) {
             Clear_transient_center_label(false);
             Apply_action(action);
+            (void)Maybe_show_obfuscate_warning();
             (void)Refresh_hover_handle();
             Refresh_cursor();
             return 0;
@@ -1793,6 +1887,9 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
 
 LRESULT OverlayWindow::On_key_up(WPARAM wparam, LPARAM lparam) {
     if (color_wheel_.visible) {
+        return 0;
+    }
+    if (obfuscate_warning_dialog_.Is_visible()) {
         return 0;
     }
     if (hotkey_help_overlay_.Is_visible()) {
@@ -1852,6 +1949,13 @@ LRESULT OverlayWindow::On_l_button_down() {
     }
     bool const had_text_edit = controller_.Has_active_text_edit();
     core::PointPx const cur = Get_client_cursor_pos_px(hwnd_);
+    if (obfuscate_warning_dialog_.Is_visible()) {
+        (void)obfuscate_warning_dialog_.Update_hover(cur);
+        obfuscate_warning_dialog_.On_mouse_down(cur);
+        Refresh_cursor();
+        InvalidateRect(hwnd_, nullptr, FALSE);
+        return 0;
+    }
     if (color_wheel_.visible) {
         suppress_next_lbutton_up_ = true;
         auto const lbd_tool = controller_.Active_annotation_tool();
@@ -2022,6 +2126,19 @@ LRESULT OverlayWindow::On_l_button_down() {
 }
 
 LRESULT OverlayWindow::On_mouse_move() {
+    if (obfuscate_warning_dialog_.Is_visible()) {
+        bool const hover_changed =
+            obfuscate_warning_dialog_.Update_hover(Get_client_cursor_pos_px(hwnd_));
+        bool const toolbar_changed = Clear_toolbar_hover_states();
+        if (last_hover_handle_.has_value()) {
+            last_hover_handle_ = std::nullopt;
+        }
+        if (hover_changed || toolbar_changed) {
+            InvalidateRect(hwnd_, nullptr, FALSE);
+        }
+        Refresh_cursor();
+        return 0;
+    }
     if (color_wheel_.visible) {
         bool const hover_changed =
             Update_color_wheel_hover(Get_client_cursor_pos_px(hwnd_));
@@ -2114,6 +2231,9 @@ LRESULT OverlayWindow::On_mouse_move() {
 }
 
 LRESULT OverlayWindow::On_mouse_wheel(WPARAM wparam) {
+    if (obfuscate_warning_dialog_.Is_visible()) {
+        return 0;
+    }
     if (color_wheel_.visible) {
         return 0;
     }
@@ -2148,6 +2268,20 @@ LRESULT OverlayWindow::On_l_button_up() {
         suppress_next_lbutton_up_ = false;
         return 0;
     }
+    if (obfuscate_warning_dialog_.Is_visible()) {
+        core::PointPx const cur = Get_client_cursor_pos_px(hwnd_);
+        OverlayWarningDialogAction const action =
+            obfuscate_warning_dialog_.On_mouse_up(cur);
+        if (action == OverlayWarningDialogAction::Accept) {
+            Accept_obfuscate_warning();
+        } else if (action == OverlayWarningDialogAction::Reject) {
+            Reject_obfuscate_warning();
+        } else {
+            Refresh_cursor();
+            InvalidateRect(hwnd_, nullptr, FALSE);
+        }
+        return 0;
+    }
     bool const had_text_edit = controller_.Has_active_text_edit();
     if (hotkey_help_overlay_.Is_visible()) {
         return 0;
@@ -2166,6 +2300,7 @@ LRESULT OverlayWindow::On_l_button_up() {
                     action = controller_.On_select_annotation_tool(*btn.tool_id);
                     Clear_transient_center_label(false);
                     Apply_action(action);
+                    (void)Maybe_show_obfuscate_warning();
                 } else if (btn.action == ToolbarButtonAction::ShowHelp) {
                     Show_help_overlay_at_cursor();
                 }
@@ -2242,6 +2377,9 @@ LRESULT OverlayWindow::On_l_button_up() {
 
 LRESULT OverlayWindow::On_r_button_down() {
     if (!resources_->capture.Is_valid()) {
+        return 0;
+    }
+    if (obfuscate_warning_dialog_.Is_visible()) {
         return 0;
     }
     if (Can_show_color_wheel()) {
@@ -2898,9 +3036,10 @@ LRESULT OverlayWindow::On_paint() {
         input.toolbar_buttons = std::span<IOverlayButton *const>(btn_ptrs);
         input.toolbar_button_glyphs = std::span<ID2D1Bitmap *const>(btn_glyphs);
 
-        bool const ok =
-            Paint_d2d_frame(*d2d_resources_, input, resources_->capture.width,
-                            resources_->capture.height, &hotkey_help_overlay_);
+        bool const ok = Paint_d2d_frame(*d2d_resources_, input,
+                                        resources_->capture.width,
+                                        resources_->capture.height,
+                                        Active_top_layer());
         if (!ok) {
             Handle_device_loss();
         }
@@ -2979,6 +3118,10 @@ LRESULT OverlayWindow::On_close() {
 
 void OverlayWindow::Refresh_cursor() {
     if (color_wheel_.visible) {
+        SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+        return;
+    }
+    if (obfuscate_warning_dialog_.Is_visible()) {
         SetCursor(LoadCursorW(nullptr, IDC_ARROW));
         return;
     }

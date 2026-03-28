@@ -4,7 +4,7 @@
 #include "greenflame/win/d2d_draw_helpers.h"
 #include "greenflame/win/d2d_overlay_resources.h"
 #include "greenflame/win/overlay_button.h"
-#include "greenflame/win/overlay_help_overlay.h"
+#include "greenflame/win/overlay_top_layer.h"
 #include "greenflame_core/annotation_hit_test.h"
 #include "greenflame_core/color_wheel.h"
 #include "greenflame_core/selection_handles.h"
@@ -2088,7 +2088,7 @@ void Rebuild_frozen_bitmap(D2DOverlayResources &res, core::RectPx selection,
 }
 
 bool Paint_d2d_frame(D2DOverlayResources &res, D2DPaintInput const &input, int vd_width,
-                     int vd_height, OverlayHelpOverlay *help_overlay) {
+                     int vd_height, IOverlayTopLayer *top_layer) {
     if (!res.hwnd_rt) {
         return true;
     }
@@ -2172,9 +2172,9 @@ bool Paint_d2d_frame(D2DOverlayResources &res, D2DPaintInput const &input, int v
     live_input.draft_annotation = nullptr;
     Draw_live_layer(res.hwnd_rt.Get(), res, live_input, vd_width, vd_height);
 
-    if (help_overlay) {
-        (void)help_overlay->Paint_d2d(res.hwnd_rt.Get(), res.dwrite_factory.Get(),
-                                      res.solid_brush.Get());
+    if (top_layer != nullptr && top_layer->Is_visible()) {
+        (void)top_layer->Paint_d2d(res.hwnd_rt.Get(), res.dwrite_factory.Get(),
+                                   res.solid_brush.Get());
     }
 
     HRESULT const hr = res.hwnd_rt->EndDraw();

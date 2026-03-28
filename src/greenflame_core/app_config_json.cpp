@@ -47,7 +47,8 @@ constexpr std::array<std::string_view, 8> kSaveKeys = {
      "filename_pattern_region", "filename_pattern_desktop", "filename_pattern_monitor",
      "filename_pattern_window"}};
 constexpr std::array<std::string_view, 1> kSizeOnlyKeys = {{"size"}};
-constexpr std::array<std::string_view, 1> kObfuscateKeys = {{"block_size"}};
+constexpr std::array<std::string_view, 2> kObfuscateKeys = {
+    {"block_size", "risk_acknowledged"}};
 
 [[nodiscard]] bool Contains_key(std::span<const std::string_view> allowed_keys,
                                 std::string_view key) noexcept {
@@ -779,6 +780,8 @@ void Apply_obfuscate_object(Json const &object, ParseContext &ctx) {
     Report_unknown_keys(object, kObfuscateKeys, k_path, ctx);
     Apply_integer_property(object, "block_size", k_path, kMinToolSize, kMaxToolSize,
                            ctx.result.config.obfuscate_block_size, ctx);
+    Apply_bool_property(object, "risk_acknowledged", k_path,
+                        ctx.result.config.obfuscate_risk_acknowledged, ctx);
 }
 
 void Apply_ui_object(Json const &object, ParseContext &ctx) {
@@ -1073,6 +1076,8 @@ std::string Serialize_app_config_json(AppConfig const &config) {
         config.highlighter_size != defaults.highlighter_size ||
         config.bubble_size != defaults.bubble_size ||
         config.obfuscate_block_size != defaults.obfuscate_block_size ||
+        config.obfuscate_risk_acknowledged !=
+            defaults.obfuscate_risk_acknowledged ||
         config.text_size != defaults.text_size ||
         config.current_annotation_color_index !=
             defaults.current_annotation_color_index ||
@@ -1201,8 +1206,19 @@ std::string Serialize_app_config_json(AppConfig const &config) {
                     std::string(Text_font_choice_token(config.bubble_current_font));
             }
         }
-        if (config.obfuscate_block_size != defaults.obfuscate_block_size) {
-            root["tools"]["obfuscate"]["block_size"] = config.obfuscate_block_size;
+        if (config.obfuscate_block_size != defaults.obfuscate_block_size ||
+            config.obfuscate_risk_acknowledged !=
+                defaults.obfuscate_risk_acknowledged) {
+            root["tools"]["obfuscate"] = easyjson::object();
+            if (config.obfuscate_block_size != defaults.obfuscate_block_size) {
+                root["tools"]["obfuscate"]["block_size"] =
+                    config.obfuscate_block_size;
+            }
+            if (config.obfuscate_risk_acknowledged !=
+                defaults.obfuscate_risk_acknowledged) {
+                root["tools"]["obfuscate"]["risk_acknowledged"] =
+                    config.obfuscate_risk_acknowledged;
+            }
         }
     }
 

@@ -275,6 +275,7 @@ codes are unique and not reused.
 | `15` | Forced `--window-capture wgc` failed (unsupported, setup/frame failure, or WGC/window size mismatch) |
 | `16` | `--input` image is unreadable or unsupported (decode failure, unsupported image format, or transparency rejection) |
 | `17` | `--window` or `--window-hwnd` matched a window with `WDA_EXCLUDEFROMCAPTURE` display affinity; it cannot be captured |
+| `18` | CLI obfuscate usage was rejected because `tools.obfuscate.risk_acknowledged` is not yet `true` |
 
 ---
 
@@ -317,6 +318,7 @@ Greenflame reads `~/.config/greenflame/greenflame.json` (i.e. `%USERPROFILE%\.co
 | `tools.bubble.size` | `10` | Bubble size step (1–50). |
 | `tools.bubble.current_font` | `sans` | Active font slot for the Bubble tool. Accepted values: `sans`, `serif`, `mono`, `art`. |
 | `tools.obfuscate.block_size` | `10` | Obfuscate tool block size (1–50). `1` uses blur mode; `2..50` uses block pixelation. |
+| `tools.obfuscate.risk_acknowledged` | `false` | Whether the Obfuscate warning has been explicitly accepted. CLI obfuscate usage requires this to be `true`. |
 
 ### Save settings (`save.*`)
 
@@ -358,7 +360,8 @@ Greenflame reads `~/.config/greenflame/greenflame.json` (i.e. `%USERPROFILE%\.co
       "pause_straighten_deadzone_px": 0
     },
     "obfuscate": {
-      "block_size": 10
+      "block_size": 10,
+      "risk_acknowledged": true
     },
     "text": {
       "size": 14,

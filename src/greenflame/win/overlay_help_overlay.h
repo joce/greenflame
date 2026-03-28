@@ -2,14 +2,15 @@
 
 #include "greenflame_core/monitor_rules.h"
 #include "greenflame_core/overlay_help_content.h"
+#include "win/overlay_top_layer.h"
 
 namespace greenflame {
 
-class OverlayHelpOverlay final {
+class OverlayHelpOverlay final : public IOverlayTopLayer {
   public:
     OverlayHelpOverlay() = default;
     explicit OverlayHelpOverlay(core::OverlayHelpContent const *content);
-    ~OverlayHelpOverlay() = default;
+    ~OverlayHelpOverlay() override = default;
 
     OverlayHelpOverlay(OverlayHelpOverlay const &) = delete;
     OverlayHelpOverlay &operator=(OverlayHelpOverlay const &) = delete;
@@ -18,7 +19,7 @@ class OverlayHelpOverlay final {
 
     void Set_content(core::OverlayHelpContent const *content) noexcept;
     [[nodiscard]] bool Has_content() const noexcept;
-    [[nodiscard]] bool Is_visible() const noexcept;
+    [[nodiscard]] bool Is_visible() const noexcept override;
     void Hide() noexcept;
     void Hide_if_selection_unstable(bool selection_stable) noexcept;
 
@@ -29,7 +30,7 @@ class OverlayHelpOverlay final {
                           std::span<const core::MonitorWithBounds> monitors,
                           core::RectPx overlay_rect_screen);
     [[nodiscard]] bool Paint_d2d(ID2D1RenderTarget *rt, IDWriteFactory *dwrite,
-                                 ID2D1SolidColorBrush *brush) noexcept;
+                                 ID2D1SolidColorBrush *brush) noexcept override;
 
   private:
     [[nodiscard]] bool Ensure_dwrite_formats(IDWriteFactory *dwrite) noexcept;

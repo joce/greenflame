@@ -11,6 +11,12 @@ struct ButtonDrawContext {
     D2D1_COLOR_F outline_color = kOverlayButtonOutlineColor;
 };
 
+struct ButtonVisualColors final {
+    D2D1_COLOR_F fill_color = kOverlayButtonFillColor;
+    D2D1_COLOR_F outline_color = kOverlayButtonOutlineColor;
+    D2D1_COLOR_F content_color = kOverlayButtonOutlineColor;
+};
+
 struct OverlayButtonGlyph final {
     int width = 0;
     int height = 0;
@@ -103,5 +109,41 @@ class OverlayButton final : public IOverlayButton {
     bool active_ = false;
     bool pressed_ = false;
 };
+
+class OverlayRectButton final {
+  public:
+    OverlayRectButton() = default;
+    OverlayRectButton(core::PointPx position, int width, int height);
+
+    void Draw_d2d(ID2D1RenderTarget *rt, ID2D1SolidColorBrush *brush,
+                  ButtonDrawContext const &ctx) const;
+    [[nodiscard]] core::RectPx Bounds() const;
+    [[nodiscard]] bool Hit_test(core::PointPx pt) const;
+    [[nodiscard]] bool Is_hovered() const noexcept { return hovered_; }
+    [[nodiscard]] bool Is_pressed() const noexcept { return pressed_; }
+    void Set_position(core::PointPx top_left) noexcept { position_ = top_left; }
+    void Set_size(int width, int height) noexcept {
+        width_ = width;
+        height_ = height;
+    }
+    void On_mouse_enter() noexcept { hovered_ = true; }
+    void On_mouse_leave() noexcept {
+        hovered_ = false;
+        pressed_ = false;
+    }
+    void On_mouse_down(core::PointPx pt) noexcept;
+    void On_mouse_up(core::PointPx pt) noexcept;
+
+  private:
+    core::PointPx position_ = {};
+    int width_ = 0;
+    int height_ = 0;
+    bool hovered_ = false;
+    bool pressed_ = false;
+};
+
+[[nodiscard]] ButtonVisualColors
+Resolve_button_visual_colors(bool active, bool pressed,
+                             ButtonDrawContext const &ctx) noexcept;
 
 } // namespace greenflame

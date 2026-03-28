@@ -175,6 +175,7 @@ class IFileSystemService {
     Resolve_save_directory(std::wstring const &configured_dir) const = 0;
     [[nodiscard]] virtual std::wstring
     Resolve_absolute_path(std::wstring_view path) const = 0;
+    [[nodiscard]] virtual std::wstring Get_app_config_file_path() const = 0;
     [[nodiscard]] virtual bool
     Try_read_text_file_utf8(std::wstring_view path, std::string &utf8_text,
                             std::wstring &error_message) const = 0;

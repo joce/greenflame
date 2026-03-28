@@ -2,6 +2,7 @@
 
 #include "greenflame_core/app_config.h"
 #include "greenflame_core/cli_annotation_import.h"
+#include "greenflame_core/obfuscate_risk_warning.h"
 #include "greenflame_core/output_path.h"
 #include "greenflame_core/string_utils.h"
 #include "greenflame_core/window_filter.h"
@@ -15,6 +16,8 @@ constexpr wchar_t kLastWindowClosedMessage[] =
     L"Previously captured window is no longer available.";
 constexpr wchar_t kLastWindowMinimizedMessage[] =
     L"Previously captured window is minimized.";
+constexpr wchar_t kCliObfuscateRiskPathUnknown[] =
+    L"(config file path could not be determined)";
 
 [[nodiscard]] std::wstring_view
 Pattern_for_source(greenflame::core::AppConfig const &config,
@@ -236,6 +239,43 @@ Find_unique_exact_title_match(std::vector<greenflame::WindowMatch> const &matche
 [[nodiscard]] bool
 Uses_wgc_title_match_handling(greenflame::core::WindowCaptureBackend backend) noexcept {
     return backend != greenflame::core::WindowCaptureBackend::Gdi;
+}
+
+[[nodiscard]] bool Annotation_is_obfuscate(
+    greenflame::core::Annotation const &annotation) noexcept {
+    return std::holds_alternative<greenflame::core::ObfuscateAnnotation>(
+        annotation.data);
+}
+
+[[nodiscard]] bool Has_obfuscate_annotation(
+    std::span<const greenflame::core::Annotation> annotations) noexcept {
+    for (greenflame::core::Annotation const &annotation : annotations) {
+        if (Annotation_is_obfuscate(annotation)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+[[nodiscard]] std::wstring Build_cli_obfuscate_risk_unacknowledged_message(
+    greenflame::IFileSystemService const &file_system_service) {
+    std::wstring message = {};
+    Append_line(message, greenflame::core::kObfuscateRiskWarningLead);
+    Append_line(message, greenflame::core::kObfuscateRiskWarningGuidance);
+
+    std::wstring cli_instruction = L"To use obfuscate from the CLI, set `";
+    cli_instruction += greenflame::core::kObfuscateRiskConfigKey;
+    cli_instruction += L"` to `true` in:";
+    Append_line(message, cli_instruction);
+
+    std::wstring const config_path = file_system_service.Get_app_config_file_path();
+    if (!config_path.empty()) {
+        Append_line(message, config_path);
+        return message;
+    }
+
+    Append_line(message, kCliObfuscateRiskPathUnknown);
+    return message;
 }
 
 [[nodiscard]] std::wstring
@@ -792,6 +832,12 @@ CliResult AppController::Run_cli_capture_mode(core::CliOptions const &cli_option
     }
     std::vector<core::Annotation> const &prepared_annotations =
         prepared_annotations_result.annotations;
+    if (Has_obfuscate_annotation(prepared_annotations) &&
+        !config_.obfuscate_risk_acknowledged) {
+        return Make_cli_error(
+            ProcessExitCode::CliObfuscateRiskUnacknowledged,
+            Build_cli_obfuscate_risk_unacknowledged_message(file_system_service_));
+    }
 
     std::wstring output_path = {};
     core::ImageSaveFormat output_format = core::ImageSaveFormat::Png;
@@ -988,6 +1034,12 @@ CliResult AppController::Run_cli_input_mode(core::CliOptions const &cli_options)
     if (!prepared_annotations_result.ok) {
         return Make_cli_error(prepared_annotations_result.exit_code,
                               prepared_annotations_result.error_message);
+    }
+    if (Has_obfuscate_annotation(prepared_annotations_result.annotations) &&
+        !config_.obfuscate_risk_acknowledged) {
+        return Make_cli_error(
+            ProcessExitCode::CliObfuscateRiskUnacknowledged,
+            Build_cli_obfuscate_risk_unacknowledged_message(file_system_service_));
     }
 
     std::wstring output_path = {};

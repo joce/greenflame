@@ -339,7 +339,7 @@ Greenflame reads `~/.config/greenflame/greenflame.json` (i.e. `%USERPROFILE%\.co
 | `tools.highlighter.size` | `10` | Highlighter size step (1–50). |
 | `tools.highlighter.colors` | Object with slot index keys (e.g. `{"2": "#ffb44d"}`) | Highlighter color wheel slots (indices 0–5). Only non-default slots are written. Values use `#rrggbb`. |
 | `tools.highlighter.current_color` | `0` | Current Highlighter color slot index, clamped to `0..5`. |
-| `tools.highlighter.opacity_percent` | `50` | Default Highlighter opacity for live preview, save output, and clipboard output. Values are clamped to `0..100`. |
+| `tools.highlighter.opacity_percent` | `35` | Default Highlighter opacity for live preview, save output, and clipboard output. Values are clamped to `0..100`. |
 | `tools.highlighter.pause_straighten_ms` | `800` | After the mouse is still for this many milliseconds during a highlighter stroke, the stroke snaps to a straight bar (start to cursor). `0` means always straight. |
 | `tools.highlighter.pause_straighten_deadzone_px` | `0` | Mouse must move more than this many physical pixels from the last timer-reset position before the pause timer resets. `0` means any movement resets the timer. |
 | `tools.text.size` | `10` | Text tool size step (1–50). |
@@ -355,7 +355,7 @@ Greenflame reads `~/.config/greenflame/greenflame.json` (i.e. `%USERPROFILE%\.co
 |---|---|---|
 | `save.default_save_dir` | `%USERPROFILE%\Pictures\greenflame` (runtime fallback when unset) | Folder used by **Ctrl-S**, **Ctrl-Alt-S**, and CLI captures when `--output` is not provided. |
 | `save.last_save_as_dir` | Falls back to `default_save_dir`, then `%USERPROFILE%\Pictures\greenflame` | Initial folder used by **Ctrl-Shift-S** and **Ctrl-Shift-Alt-S** (Save As). |
-| `save.default_save_format` | `png` | Default image format for **Ctrl-S**, **Ctrl-Alt-S**, and CLI output paths without explicit extension. Accepted values: `png`, `jpg`/`jpeg`, `bmp`. |
+| `save.default_save_format` | `png` | Default image format for **Ctrl-S**, **Ctrl-Alt-S**, and CLI output paths without explicit extension. Accepted values: `png`, `jpg`, `bmp`. |
 | `save.padding_color` | `#000000` | Padding color used by CLI captures when `--padding` is present and `--padding-color` is not supplied. Values use `#rrggbb`. |
 | `save.filename_pattern_region` | `screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}` | Default filename pattern for region captures. |
 | `save.filename_pattern_desktop` | `screenshot-${YYYY}-${MM}-${DD}_${hh}${mm}${ss}` | Default filename pattern for desktop captures. |
@@ -387,7 +387,7 @@ Greenflame reads `~/.config/greenflame/greenflame.json` (i.e. `%USERPROFILE%\.co
     "highlighter": {
       "colors": { "2": "#ffb44d" },
       "current_color": 0,
-      "opacity_percent": 50,
+      "opacity_percent": 35,
       "pause_straighten_ms": 800,
       "pause_straighten_deadzone_px": 0
     },

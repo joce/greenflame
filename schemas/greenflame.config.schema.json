@@ -9,6 +9,18 @@
       "type": "string",
       "description": "Optional schema reference for editors."
     },
+    "capture": {
+      "type": "object",
+      "description": "Capture behavior settings.",
+      "additionalProperties": false,
+      "properties": {
+        "include_cursor": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include the captured cursor by default for live captures."
+        }
+      }
+    },
     "ui": {
       "type": "object",
       "description": "UI behavior settings.",
@@ -153,6 +165,23 @@
             "current_font": {
               "$ref": "#/$defs/fontChoice",
               "default": "sans"
+            }
+          }
+        },
+        "obfuscate": {
+          "type": "object",
+          "description": "Obfuscate tool settings.",
+          "additionalProperties": false,
+          "properties": {
+            "block_size": {
+              "$ref": "#/$defs/toolSize",
+              "default": 10,
+              "description": "Obfuscate tool block size. 1 uses blur mode; 2..50 uses block pixelation."
+            },
+            "risk_acknowledged": {
+              "type": "boolean",
+              "default": false,
+              "description": "Whether the obfuscate warning has been explicitly accepted."
             }
           }
         }

@@ -783,6 +783,19 @@ unless a real end-to-end bug escapes into the Win32 shell:
   - Right-click while actively editing does not open the style wheel.
   - Size stepping is ignored while actively editing.
 
+### GF-MAN-ANN-012A - Shift+Down On Last Line Selects To End
+
+- Priority: `P1`
+- Run on: `ENV-A`
+- Steps:
+  1. Create a selection, activate the Text tool, and type a multi-line draft (e.g. two lines using `Ctrl + Enter`).
+  2. Click to place the caret somewhere in the middle of the last line (not at the end).
+  3. Press `Shift + Down`.
+- Expected:
+  - The selection extends to the very end of the last line (i.e. the entire remaining text on the last line becomes selected).
+  - The caret is positioned at the end of the text.
+- Regression: previously `Shift + Down` on the last line did not move the caret, so nothing was selected.
+
 ### GF-MAN-ANN-013 - Text Draft Commit, Cancel, And Toolbar Interaction
 
 - Priority: `P1`

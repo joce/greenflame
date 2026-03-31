@@ -523,8 +523,15 @@ int32_t D2DTextLayoutEngine::Move_vertical(core::TextDraftBuffer const &buf,
         }
     }
 
-    int32_t const target_line = std::clamp(
-        current_line + delta_lines, 0, static_cast<int32_t>(line_metrics.size()) - 1);
+    int32_t const last_line = static_cast<int32_t>(line_metrics.size()) - 1;
+    int32_t const unclamped_target_line = current_line + delta_lines;
+    if (unclamped_target_line < 0) {
+        return 0;
+    }
+    if (unclamped_target_line > last_line) {
+        return text_length;
+    }
+    int32_t const target_line = unclamped_target_line;
     float const target_y =
         line_tops[static_cast<size_t>(target_line)] +
         (line_metrics[static_cast<size_t>(target_line)].height * 0.5f);

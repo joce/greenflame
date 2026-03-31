@@ -53,6 +53,22 @@ constexpr std::array<greenflame::core::TextFontChoice, 4> kTextWheelFontChoices 
     {greenflame::core::TextFontChoice::Sans, greenflame::core::TextFontChoice::Serif,
      greenflame::core::TextFontChoice::Mono, greenflame::core::TextFontChoice::Art}};
 
+// Adds new_delta to remainder and drains full WHEEL_DELTA ticks, returning
+// the count (negative = downward/clockwise on screen).
+[[nodiscard]] int Drain_wheel_ticks(int &remainder, int new_delta) noexcept {
+    remainder += new_delta;
+    int ticks = 0;
+    while (remainder >= WHEEL_DELTA) {
+        ++ticks;
+        remainder -= WHEEL_DELTA;
+    }
+    while (remainder <= -WHEEL_DELTA) {
+        --ticks;
+        remainder += WHEEL_DELTA;
+    }
+    return ticks;
+}
+
 [[nodiscard]] bool
 Text_annotation_has_text(greenflame::core::TextAnnotation const &annotation) noexcept {
     for (greenflame::core::TextRun const &run : annotation.runs) {
@@ -826,8 +842,8 @@ void OverlayWindow::Show_obfuscate_warning_at_cursor() {
     obfuscate_warning_dialog_.Show_at_cursor(
         Get_cursor_pos_px(), controller_.State().cached_monitors, overlay_screen_rect);
     (void)Clear_toolbar_hover_states();
-    color_wheel_.hovered_segment = std::nullopt;
-    color_wheel_.hovered_hub = std::nullopt;
+    selection_wheel_.mouse_hovered_segment = std::nullopt;
+    selection_wheel_.hovered_hub = std::nullopt;
     Refresh_cursor();
     InvalidateRect(hwnd_, nullptr, TRUE);
 }
@@ -1065,7 +1081,7 @@ bool OverlayWindow::Create_and_show(HINSTANCE hinstance) {
     transient_center_label_text_.clear();
     caret_blink_visible_ = true;
     suppress_next_lbutton_up_ = false;
-    color_wheel_ = {};
+    selection_wheel_ = {};
     text_layout_engine_.reset();
 
     core::RectPx const bounds = Get_virtual_desktop_bounds_px();
@@ -1543,7 +1559,7 @@ void OverlayWindow::Reset_caret_blink() {
     (void)SetTimer(hwnd_, kCaretBlinkTimerId, interval, nullptr);
 }
 
-bool OverlayWindow::Can_show_color_wheel() const noexcept {
+bool OverlayWindow::Can_show_selection_wheel() const noexcept {
     auto const &s = controller_.State();
     std::optional<core::AnnotationToolId> const active_tool =
         controller_.Active_annotation_tool();
@@ -1584,39 +1600,87 @@ size_t OverlayWindow::Current_annotation_color_index() const noexcept {
     return static_cast<size_t>(core::kDefaultAnnotationColorIndex);
 }
 
-size_t OverlayWindow::Current_color_wheel_segment_count() const noexcept {
+size_t OverlayWindow::Current_selection_wheel_segment_count() const noexcept {
     auto const tool = controller_.Active_annotation_tool();
     if (tool == core::AnnotationToolId::Text ||
         tool == core::AnnotationToolId::Bubble) {
-        return (color_wheel_.text_mode == core::TextWheelMode::Color)
+        return (selection_wheel_.text_mode == core::TextWheelMode::Color)
                    ? core::kAnnotationColorSlotCount
                    : kTextWheelFontChoices.size();
     }
     return Current_tool_color_palette().size();
 }
 
-void OverlayWindow::Show_color_wheel(core::PointPx center) {
-    if (!Can_show_color_wheel()) {
+bool OverlayWindow::Selection_wheel_has_multiple_views() const noexcept {
+    auto const tool = controller_.Active_annotation_tool();
+    return tool == core::AnnotationToolId::Text ||
+           tool == core::AnnotationToolId::Bubble;
+}
+
+std::optional<size_t> OverlayWindow::Effective_wheel_segment_hover() const noexcept {
+    if (selection_wheel_.nav_hovered_segment.has_value()) {
+        return selection_wheel_.nav_hovered_segment;
+    }
+    if (selection_wheel_.mouse_hovered_segment.has_value()) {
+        return selection_wheel_.mouse_hovered_segment;
+    }
+    if (Current_selection_wheel_segment_count() == 0) {
+        return std::nullopt;
+    }
+    auto const tool = controller_.Active_annotation_tool();
+    if (tool == core::AnnotationToolId::Text ||
+        tool == core::AnnotationToolId::Bubble) {
+        if (selection_wheel_.text_mode == core::TextWheelMode::Font) {
+            core::TextFontChoice const f = (tool == core::AnnotationToolId::Bubble)
+                                               ? controller_.Bubble_current_font()
+                                               : controller_.Text_current_font();
+            return core::Text_font_choice_index(f);
+        }
+    }
+    return Current_annotation_color_index();
+}
+
+void OverlayWindow::Navigate_wheel(int steps) {
+    if (!selection_wheel_.visible || steps == 0) {
+        return;
+    }
+    size_t const count = Current_selection_wheel_segment_count();
+    if (count == 0) {
+        return;
+    }
+    size_t const current = Effective_wheel_segment_hover().value_or(0);
+    int64_t const n = static_cast<int64_t>(count);
+    int64_t idx = static_cast<int64_t>(current) + steps;
+    idx = ((idx % n) + n) % n;
+    selection_wheel_.nav_hovered_segment = static_cast<size_t>(idx);
+    selection_wheel_.hovered_hub = std::nullopt;
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void OverlayWindow::Show_selection_wheel(core::PointPx center) {
+    if (!Can_show_selection_wheel()) {
         return;
     }
     Clear_transient_center_label(false);
-    color_wheel_.visible = true;
-    color_wheel_.center = center;
-    color_wheel_.hovered_segment = std::nullopt;
-    color_wheel_.hovered_hub = std::nullopt;
+    selection_wheel_.visible = true;
+    selection_wheel_.center = center;
+    selection_wheel_.mouse_hovered_segment = std::nullopt;
+    selection_wheel_.nav_hovered_segment = std::nullopt;
+    selection_wheel_.hovered_hub = std::nullopt;
+    selection_wheel_.scroll_delta_remainder = 0;
     last_hover_handle_ = std::nullopt;
     (void)Clear_toolbar_hover_states();
     Refresh_cursor();
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
-void OverlayWindow::Dismiss_color_wheel(bool repaint) {
-    if (!color_wheel_.visible) {
+void OverlayWindow::Dismiss_selection_wheel(bool repaint) {
+    if (!selection_wheel_.visible) {
         return;
     }
-    core::TextWheelMode const saved_mode = color_wheel_.text_mode;
-    color_wheel_ = {};
-    color_wheel_.text_mode = saved_mode;
+    core::TextWheelMode const saved_mode = selection_wheel_.text_mode;
+    selection_wheel_ = {};
+    selection_wheel_.text_mode = saved_mode;
     if (hwnd_ != nullptr) {
         Refresh_cursor();
     }
@@ -1625,48 +1689,59 @@ void OverlayWindow::Dismiss_color_wheel(bool repaint) {
     }
 }
 
-bool OverlayWindow::Update_color_wheel_hover(core::PointPx cursor) {
-    if (!color_wheel_.visible) {
+bool OverlayWindow::Update_selection_wheel_hover(core::PointPx cursor) {
+    if (!selection_wheel_.visible) {
         return false;
     }
     auto const active_tool = controller_.Active_annotation_tool();
     bool const is_style_hub = active_tool == core::AnnotationToolId::Text ||
                               active_tool == core::AnnotationToolId::Bubble;
     if (is_style_hub) {
-        auto hub_hit = core::Hit_test_text_wheel_hub(color_wheel_.center, cursor);
+        auto hub_hit = core::Hit_test_text_wheel_hub(selection_wheel_.center, cursor);
         if (hub_hit.has_value()) {
-            bool const changed = (hub_hit != color_wheel_.hovered_hub ||
-                                  color_wheel_.hovered_segment.has_value());
-            color_wheel_.hovered_hub = hub_hit;
-            color_wheel_.hovered_segment = std::nullopt;
+            bool const changed = (hub_hit != selection_wheel_.hovered_hub ||
+                                  selection_wheel_.mouse_hovered_segment.has_value());
+            selection_wheel_.hovered_hub = hub_hit;
+            selection_wheel_.mouse_hovered_segment = std::nullopt;
+            // Hub hits do not clear nav_hovered_segment.
             return changed;
         }
-        bool changed = color_wheel_.hovered_hub.has_value();
-        color_wheel_.hovered_hub = std::nullopt;
-        std::optional<size_t> const ring = core::Hit_test_color_wheel_segment(
-            color_wheel_.center, cursor, Current_color_wheel_segment_count());
-        if (ring != color_wheel_.hovered_segment) {
-            color_wheel_.hovered_segment = ring;
+        bool changed = selection_wheel_.hovered_hub.has_value();
+        selection_wheel_.hovered_hub = std::nullopt;
+        std::optional<size_t> const ring = core::Hit_test_selection_wheel_segment(
+            selection_wheel_.center, cursor, Current_selection_wheel_segment_count());
+        if (ring != selection_wheel_.mouse_hovered_segment) {
+            selection_wheel_.mouse_hovered_segment = ring;
+            changed = true;
+        }
+        // Entering any ring segment clears nav hover.
+        if (ring.has_value() && selection_wheel_.nav_hovered_segment.has_value()) {
+            selection_wheel_.nav_hovered_segment = std::nullopt;
             changed = true;
         }
         return changed;
     }
-    // Non-style-hub: original behavior.
-    std::optional<size_t> const hovered = core::Hit_test_color_wheel_segment(
-        color_wheel_.center, cursor, Current_color_wheel_segment_count());
-    if (hovered == color_wheel_.hovered_segment) {
-        return false;
+    // Non-style-hub.
+    std::optional<size_t> const hovered = core::Hit_test_selection_wheel_segment(
+        selection_wheel_.center, cursor, Current_selection_wheel_segment_count());
+    bool changed = (hovered != selection_wheel_.mouse_hovered_segment);
+    if (changed) {
+        selection_wheel_.mouse_hovered_segment = hovered;
     }
-    color_wheel_.hovered_segment = hovered;
-    return true;
+    // Entering any ring segment clears nav hover.
+    if (hovered.has_value() && selection_wheel_.nav_hovered_segment.has_value()) {
+        selection_wheel_.nav_hovered_segment = std::nullopt;
+        changed = true;
+    }
+    return changed;
 }
 
-void OverlayWindow::Select_color_wheel_segment(size_t index) {
+void OverlayWindow::Select_wheel_segment(size_t index) {
     std::span<const COLORREF> const palette = Current_tool_color_palette();
     auto const active_tool = controller_.Active_annotation_tool();
     if (active_tool == core::AnnotationToolId::Text ||
         active_tool == core::AnnotationToolId::Bubble) {
-        if (color_wheel_.text_mode == core::TextWheelMode::Color) {
+        if (selection_wheel_.text_mode == core::TextWheelMode::Color) {
             if (index < palette.size()) {
                 controller_.Set_brush_annotation_color(palette[index]);
                 if (config_ != nullptr) {
@@ -1758,7 +1833,7 @@ bool OverlayWindow::Update_toolbar_hover_states(core::PointPx cursor) {
 }
 
 bool OverlayWindow::Should_show_brush_cursor_preview() const {
-    if (color_wheel_.visible) {
+    if (selection_wheel_.visible) {
         return false;
     }
     auto const &s = controller_.State();
@@ -1771,7 +1846,7 @@ bool OverlayWindow::Should_show_brush_cursor_preview() const {
 }
 
 bool OverlayWindow::Should_show_square_cursor_preview() const {
-    if (color_wheel_.visible) {
+    if (selection_wheel_.visible) {
         return false;
     }
     auto const &s = controller_.State();
@@ -1804,7 +1879,7 @@ bool OverlayWindow::Is_selection_stable_for_help() const {
 }
 
 std::wstring_view OverlayWindow::Hovered_toolbar_tooltip_text() const noexcept {
-    if (color_wheel_.visible) {
+    if (selection_wheel_.visible) {
         return {};
     }
     if (obfuscate_warning_dialog_.Is_visible()) {
@@ -1825,7 +1900,7 @@ std::wstring_view OverlayWindow::Hovered_toolbar_tooltip_text() const noexcept {
 }
 
 std::optional<core::RectPx> OverlayWindow::Hovered_toolbar_button_bounds() const {
-    if (color_wheel_.visible) {
+    if (selection_wheel_.visible) {
         return std::nullopt;
     }
     if (obfuscate_warning_dialog_.Is_visible()) {
@@ -1875,8 +1950,8 @@ void OverlayWindow::Apply_action(core::OverlayAction action) {
     if (action != core::OverlayAction::None) {
         Rebuild_toolbar_buttons();
     }
-    if (color_wheel_.visible && !Can_show_color_wheel()) {
-        Dismiss_color_wheel(false);
+    if (selection_wheel_.visible && !Can_show_selection_wheel()) {
+        Dismiss_selection_wheel(false);
     }
     switch (action) {
     case core::OverlayAction::Repaint:
@@ -1926,8 +2001,8 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
             Reject_obfuscate_warning();
             return 0;
         }
-        if (color_wheel_.visible) {
-            Dismiss_color_wheel(true);
+        if (selection_wheel_.visible) {
+            Dismiss_selection_wheel(true);
             return 0;
         }
         if (hotkey_help_overlay_.Is_visible()) {
@@ -1948,8 +2023,42 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
         Refresh_cursor();
         return 0;
     }
-    if (color_wheel_.visible) {
-        return 0;
+    if (selection_wheel_.visible) {
+        // Tab: cycle views on multi-view wheels (no repeat).
+        if (wparam == VK_TAB && !eff_ctrl && !eff_shift && !eff_alt && !is_repeat) {
+            if (Selection_wheel_has_multiple_views()) {
+                selection_wheel_.text_mode =
+                    (selection_wheel_.text_mode == core::TextWheelMode::Color)
+                        ? core::TextWheelMode::Font
+                        : core::TextWheelMode::Color;
+                selection_wheel_.nav_hovered_segment = std::nullopt;
+                selection_wheel_.mouse_hovered_segment = std::nullopt;
+                selection_wheel_.hovered_hub = std::nullopt;
+                InvalidateRect(hwnd_, nullptr, FALSE);
+            }
+            return 0;
+        }
+        // Enter: confirm effective hover and dismiss (no repeat).
+        if (wparam == VK_RETURN && !is_repeat) {
+            std::optional<size_t> const eff = Effective_wheel_segment_hover();
+            Dismiss_selection_wheel(false);
+            if (eff.has_value()) {
+                Select_wheel_segment(*eff);
+            }
+            Refresh_cursor();
+            InvalidateRect(hwnd_, nullptr, FALSE);
+            return 0;
+        }
+        // Down arrow = clockwise (+1); Up arrow = counter-clockwise (-1).
+        if (wparam == VK_DOWN) {
+            Navigate_wheel(1);
+            return 0;
+        }
+        if (wparam == VK_UP) {
+            Navigate_wheel(-1);
+            return 0;
+        }
+        return 0; // suppress all other keys while wheel is visible
     }
     if (obfuscate_warning_dialog_.Is_visible()) {
         return 0;
@@ -2091,6 +2200,11 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
         }
         return 0;
     }
+    // Tab (bare): show selection wheel at cursor.
+    if (wparam == VK_TAB && !eff_ctrl && !eff_shift && !eff_alt && !is_repeat) {
+        Show_selection_wheel(Get_client_cursor_pos_px(hwnd_));
+        return 0;
+    }
     if (eff_ctrl && wparam == L'H') {
         if (!is_repeat) {
             if (hotkey_help_overlay_.Is_visible()) {
@@ -2194,7 +2308,7 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
 }
 
 LRESULT OverlayWindow::On_key_up(WPARAM wparam, LPARAM lparam) {
-    if (color_wheel_.visible) {
+    if (selection_wheel_.visible) {
         return 0;
     }
     if (obfuscate_warning_dialog_.Is_visible()) {
@@ -2266,37 +2380,38 @@ LRESULT OverlayWindow::On_l_button_down() {
     }
     // If the wheel is up and the click lands on a toolbar button, dismiss the
     // wheel and let the click fall through to normal toolbar handling below.
-    if (color_wheel_.visible && controller_.Can_interact_with_annotation_toolbar()) {
+    if (selection_wheel_.visible &&
+        controller_.Can_interact_with_annotation_toolbar()) {
         for (auto const &btn : toolbar_buttons_) {
             if (btn.button && btn.button->Hit_test(cur)) {
-                Dismiss_color_wheel(false);
+                Dismiss_selection_wheel(false);
                 break;
             }
         }
     }
-    if (color_wheel_.visible) {
+    if (selection_wheel_.visible) {
         suppress_next_lbutton_up_ = true;
         auto const lbd_tool = controller_.Active_annotation_tool();
         bool const is_style_hub = lbd_tool == core::AnnotationToolId::Text ||
                                   lbd_tool == core::AnnotationToolId::Bubble;
         if (is_style_hub) {
-            auto hub_hit = core::Hit_test_text_wheel_hub(color_wheel_.center, cur);
+            auto hub_hit = core::Hit_test_text_wheel_hub(selection_wheel_.center, cur);
             if (hub_hit.has_value()) {
-                color_wheel_.text_mode = (*hub_hit == core::TextWheelHubSide::Color)
-                                             ? core::TextWheelMode::Color
-                                             : core::TextWheelMode::Font;
-                color_wheel_.hovered_hub = std::nullopt;
-                color_wheel_.hovered_segment = std::nullopt;
+                selection_wheel_.text_mode = (*hub_hit == core::TextWheelHubSide::Color)
+                                                 ? core::TextWheelMode::Color
+                                                 : core::TextWheelMode::Font;
+                selection_wheel_.hovered_hub = std::nullopt;
+                selection_wheel_.mouse_hovered_segment = std::nullopt;
                 Refresh_cursor();
                 InvalidateRect(hwnd_, nullptr, FALSE);
                 return 0; // wheel stays open
             }
         }
-        std::optional<size_t> const segment = core::Hit_test_color_wheel_segment(
-            color_wheel_.center, cur, Current_color_wheel_segment_count());
-        Dismiss_color_wheel(false);
+        std::optional<size_t> const segment = core::Hit_test_selection_wheel_segment(
+            selection_wheel_.center, cur, Current_selection_wheel_segment_count());
+        Dismiss_selection_wheel(false);
         if (segment.has_value()) {
-            Select_color_wheel_segment(*segment);
+            Select_wheel_segment(*segment);
         }
         Refresh_cursor();
         InvalidateRect(hwnd_, nullptr, FALSE);
@@ -2457,9 +2572,9 @@ LRESULT OverlayWindow::On_mouse_move() {
         Refresh_cursor();
         return 0;
     }
-    if (color_wheel_.visible) {
+    if (selection_wheel_.visible) {
         bool const hover_changed =
-            Update_color_wheel_hover(Get_client_cursor_pos_px(hwnd_));
+            Update_selection_wheel_hover(Get_client_cursor_pos_px(hwnd_));
         bool const toolbar_changed = Clear_toolbar_hover_states();
         if (last_hover_handle_.has_value()) {
             last_hover_handle_ = std::nullopt;
@@ -2552,7 +2667,14 @@ LRESULT OverlayWindow::On_mouse_wheel(WPARAM wparam) {
     if (obfuscate_warning_dialog_.Is_visible()) {
         return 0;
     }
-    if (color_wheel_.visible) {
+    if (selection_wheel_.visible) {
+        // Wheel up = positive Windows delta = counter-clockwise; negate for
+        // Navigate_wheel.
+        int const steps = Drain_wheel_ticks(selection_wheel_.scroll_delta_remainder,
+                                            GET_WHEEL_DELTA_WPARAM(wparam));
+        if (steps != 0) {
+            Navigate_wheel(-steps);
+        }
         return 0;
     }
     if (hotkey_help_overlay_.Is_visible()) {
@@ -2565,16 +2687,8 @@ LRESULT OverlayWindow::On_mouse_wheel(WPARAM wparam) {
         return 0;
     }
 
-    mouse_wheel_delta_remainder_ += GET_WHEEL_DELTA_WPARAM(wparam);
-    int32_t delta_steps = 0;
-    while (mouse_wheel_delta_remainder_ >= WHEEL_DELTA) {
-        ++delta_steps;
-        mouse_wheel_delta_remainder_ -= WHEEL_DELTA;
-    }
-    while (mouse_wheel_delta_remainder_ <= -WHEEL_DELTA) {
-        --delta_steps;
-        mouse_wheel_delta_remainder_ += WHEEL_DELTA;
-    }
+    int32_t const delta_steps =
+        Drain_wheel_ticks(mouse_wheel_delta_remainder_, GET_WHEEL_DELTA_WPARAM(wparam));
     if (delta_steps != 0) {
         (void)Handle_tool_size_delta(delta_steps);
     }
@@ -2703,8 +2817,8 @@ LRESULT OverlayWindow::On_r_button_down() {
     if (obfuscate_warning_dialog_.Is_visible()) {
         return 0;
     }
-    if (Can_show_color_wheel()) {
-        Show_color_wheel(Get_client_cursor_pos_px(hwnd_));
+    if (Can_show_selection_wheel()) {
+        Show_selection_wheel(Get_client_cursor_pos_px(hwnd_));
     }
     return 0;
 }
@@ -3313,17 +3427,17 @@ LRESULT OverlayWindow::On_paint() {
         input.transient_center_label_text = transient_center_label_text_;
         input.toolbar_tooltip_text = Hovered_toolbar_tooltip_text();
         input.hovered_toolbar_bounds = Hovered_toolbar_button_bounds();
-        input.show_color_wheel = color_wheel_.visible;
-        input.color_wheel_center_px = color_wheel_.center;
-        input.color_wheel_colors = Current_tool_color_palette();
+        input.show_selection_wheel = selection_wheel_.visible;
+        input.selection_wheel_center_px = selection_wheel_.center;
+        input.selection_wheel_colors = Current_tool_color_palette();
         auto const active_tool_for_wheel = controller_.Active_annotation_tool();
         bool const is_style_hub =
             active_tool_for_wheel == core::AnnotationToolId::Text ||
             active_tool_for_wheel == core::AnnotationToolId::Bubble;
-        input.color_wheel_has_style_hub = is_style_hub;
+        input.selection_wheel_has_style_hub = is_style_hub;
         if (is_style_hub) {
-            input.text_wheel_active_mode = color_wheel_.text_mode;
-            input.text_wheel_hovered_hub = color_wheel_.hovered_hub;
+            input.text_wheel_active_mode = selection_wheel_.text_mode;
+            input.text_wheel_hovered_hub = selection_wheel_.hovered_hub;
             std::array<std::wstring_view, 4> const font_families =
                 Resolve_text_font_families(config_);
             core::TextFontChoice const hub_font =
@@ -3332,26 +3446,28 @@ LRESULT OverlayWindow::On_paint() {
                     : controller_.Text_current_font();
             input.text_wheel_hub_font_family =
                 font_families[core::Text_font_choice_index(hub_font)];
-            input.color_wheel_font_families = font_families;
-            if (color_wheel_.text_mode == core::TextWheelMode::Color) {
-                input.color_wheel_segment_count = core::kAnnotationColorSlotCount;
-                input.color_wheel_selected_segment = Current_annotation_color_index();
+            input.selection_wheel_font_families = font_families;
+            if (selection_wheel_.text_mode == core::TextWheelMode::Color) {
+                input.selection_wheel_segment_count = core::kAnnotationColorSlotCount;
+                input.selection_wheel_selected_segment =
+                    Current_annotation_color_index();
             } else {
-                input.color_wheel_segment_count = kTextWheelFontChoices.size();
-                input.color_wheel_selected_segment =
+                input.selection_wheel_segment_count = kTextWheelFontChoices.size();
+                input.selection_wheel_selected_segment =
                     core::Text_font_choice_index(hub_font);
             }
-            input.color_wheel_hovered_segment = color_wheel_.hovered_segment;
+            input.selection_wheel_hovered_segment = Effective_wheel_segment_hover();
         } else {
-            input.color_wheel_segment_count = Current_color_wheel_segment_count();
-            input.color_wheel_selected_segment = Current_annotation_color_index();
-            input.color_wheel_hovered_segment = color_wheel_.hovered_segment;
+            input.selection_wheel_segment_count =
+                Current_selection_wheel_segment_count();
+            input.selection_wheel_selected_segment = Current_annotation_color_index();
+            input.selection_wheel_hovered_segment = Effective_wheel_segment_hover();
         }
         if (s.handle_dragging && s.resize_handle.has_value()) {
             input.highlight_handle = s.resize_handle;
         } else if (!s.move_dragging && !s.dragging && !s.modifier_preview &&
                    !controller_.Has_active_annotation_gesture() &&
-                   !color_wheel_.visible) {
+                   !selection_wheel_.visible) {
             input.highlight_handle = last_hover_handle_;
         }
         if (Should_show_brush_cursor_preview()) {
@@ -3367,7 +3483,7 @@ LRESULT OverlayWindow::On_paint() {
                     *controller_.Active_annotation_tool());
             }
         }
-        if (!color_wheel_.visible && !s.final_selection.Is_empty() && !s.dragging &&
+        if (!selection_wheel_.visible && !s.final_selection.Is_empty() && !s.dragging &&
             !s.handle_dragging && !s.move_dragging && !s.modifier_preview &&
             !last_hover_handle_.has_value() &&
             !controller_.Has_active_annotation_gesture() &&
@@ -3377,7 +3493,7 @@ LRESULT OverlayWindow::On_paint() {
                 .font_choice = controller_.Text_current_font(),
                 .point_size = controller_.Text_point_size(),
             };
-            input.color_wheel_font_families = Resolve_text_font_families(config_);
+            input.selection_wheel_font_families = Resolve_text_font_families(config_);
         }
         input.toolbar_buttons = std::span<IOverlayButton *const>(btn_ptrs);
         input.toolbar_button_glyphs = std::span<ID2D1Bitmap *const>(btn_glyphs);
@@ -3440,7 +3556,7 @@ LRESULT OverlayWindow::On_destroy() {
     Cancel_highlighter_straighten_pending();
     mouse_wheel_delta_remainder_ = 0;
     suppress_next_lbutton_up_ = false;
-    color_wheel_ = {};
+    selection_wheel_ = {};
     toolbar_buttons_.clear();
     controller_.Set_text_layout_engine(nullptr);
     controller_.Set_obfuscate_source_provider(nullptr);
@@ -3463,7 +3579,7 @@ LRESULT OverlayWindow::On_close() {
 }
 
 void OverlayWindow::Refresh_cursor() {
-    if (color_wheel_.visible) {
+    if (selection_wheel_.visible) {
         SetCursor(LoadCursorW(nullptr, IDC_ARROW));
         return;
     }

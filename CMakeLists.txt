@@ -210,8 +210,8 @@ add_library(greenflame_core STATIC
     src/greenflame_core/rectangle_annotation_tool.h
     src/greenflame_core/annotation_tool_registry.cpp
     src/greenflame_core/annotation_tool_registry.h
-    src/greenflame_core/color_wheel.cpp
-    src/greenflame_core/color_wheel.h
+    src/greenflame_core/selection_wheel.cpp
+    src/greenflame_core/selection_wheel.h
     src/greenflame_core/overlay_controller.cpp
     src/greenflame_core/overlay_controller.h
     src/greenflame_core/overlay_help_content.h

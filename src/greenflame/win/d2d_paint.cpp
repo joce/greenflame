@@ -6,8 +6,8 @@
 #include "greenflame/win/overlay_button.h"
 #include "greenflame/win/overlay_top_layer.h"
 #include "greenflame_core/annotation_hit_test.h"
-#include "greenflame_core/color_wheel.h"
 #include "greenflame_core/selection_handles.h"
+#include "greenflame_core/selection_wheel.h"
 #include "win/ui_palette.h"
 
 namespace greenflame {
@@ -20,8 +20,8 @@ constexpr float kMagnifierBorderStrokeWidth = 1.5f;
 constexpr float kOverlayDimAlpha = 0.5f;
 constexpr float kDraftTextSelectionAlpha = 0.7f;
 constexpr float kDraftTextOverwriteCaretAlpha = 0.65f;
-constexpr float kColorWheelFontPreviewPointSize = 18.f;
-constexpr float kColorWheelFontPreviewLayoutPaddingPx = 4.f;
+constexpr float kSelectionWheelFontPreviewPointSize = 18.f;
+constexpr float kSelectionWheelFontPreviewLayoutPaddingPx = 4.f;
 
 void Draw_clipped_screenshot_rect(ID2D1RenderTarget *rt, ID2D1Bitmap *screenshot,
                                   core::RectPx restore_rect, int vd_width,
@@ -332,7 +332,7 @@ void Draw_draft_text(ID2D1RenderTarget *rt, D2DOverlayResources &res,
     Microsoft::WRL::ComPtr<IDWriteTextFormat> format;
     Microsoft::WRL::ComPtr<IDWriteTextLayout> layout;
     DraftTextLayoutData layout_data{};
-    if (Build_draft_text_layout(res, *annotation, input.color_wheel_font_families,
+    if (Build_draft_text_layout(res, *annotation, input.selection_wheel_font_families,
                                 format, layout, layout_data)) {
         res.solid_brush->SetColor(Colorref_to_d2d(annotation->base_style.color));
         rt->DrawTextLayout(Pt(annotation->origin), layout.Get(), res.solid_brush.Get());
@@ -1285,30 +1285,32 @@ void Draw_toolbar(ID2D1RenderTarget *rt, D2DOverlayResources &res,
 // Color wheel
 // ---------------------------------------------------------------------------
 
-void Draw_color_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
-                      D2DPaintInput const &input) {
-    if (!input.show_color_wheel || input.color_wheel_segment_count == 0) {
+void Draw_selection_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
+                          D2DPaintInput const &input) {
+    if (!input.show_selection_wheel || input.selection_wheel_segment_count == 0) {
         return;
     }
     if (!res.factory) {
         return;
     }
 
-    bool const has_hub = input.color_wheel_has_style_hub;
+    bool const has_hub = input.selection_wheel_has_style_hub;
     bool const font_ring =
         has_hub && input.text_wheel_active_mode == core::TextWheelMode::Font;
 
     // Validate: non-hub wheels need a color array matching the segment count.
-    if (!has_hub && input.color_wheel_colors.size() < input.color_wheel_segment_count) {
+    if (!has_hub &&
+        input.selection_wheel_colors.size() < input.selection_wheel_segment_count) {
         return;
     }
 
-    float const outer_r = static_cast<float>(core::kColorWheelOuterDiameterPx) / 2.f;
-    float const inner_r = outer_r - core::kColorWheelWidthPx;
+    float const outer_r =
+        static_cast<float>(core::kSelectionWheelOuterDiameterPx) / 2.f;
+    float const inner_r = outer_r - core::kSelectionWheelWidthPx;
     float const hub_r = inner_r - core::kTextWheelHubRingGapPx;
     float const half_gap = core::kTextWheelHubHalfGapPx;
-    float const cx = static_cast<float>(input.color_wheel_center_px.x);
-    float const cy = static_cast<float>(input.color_wheel_center_px.y);
+    float const cx = static_cast<float>(input.selection_wheel_center_px.x);
+    float const cy = static_cast<float>(input.selection_wheel_center_px.y);
 
     constexpr double deg_to_rad = 3.14159265358979323846 / 180.0;
     constexpr double rad_to_deg = 180.0 / 3.14159265358979323846;
@@ -1322,7 +1324,7 @@ void Draw_color_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
     // Per-radius chord gap angles: asin(half_gap / r) gives the angular offset
     // at each radius such that the gap edge is a chord at distance half_gap_px
     // from the slot boundary — producing parallel segment edges.
-    float const half_seg_gap_px = core::kColorWheelSegmentGapPx / 2.0f;
+    float const half_seg_gap_px = core::kSelectionWheelSegmentGapPx / 2.0f;
     float const outer_gap_deg = static_cast<float>(
         std::asin(static_cast<double>(half_seg_gap_px) / static_cast<double>(outer_r)) *
         rad_to_deg);
@@ -1330,15 +1332,15 @@ void Draw_color_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         std::asin(static_cast<double>(half_seg_gap_px) / static_cast<double>(inner_r)) *
         rad_to_deg);
     float const half_slot_deg =
-        (input.color_wheel_segment_count > 0)
-            ? 180.f / static_cast<float>(input.color_wheel_segment_count)
+        (input.selection_wheel_segment_count > 0)
+            ? 180.f / static_cast<float>(input.selection_wheel_segment_count)
             : 0.f;
 
     // --- Ring segments ---
-    for (size_t seg = 0; seg < input.color_wheel_segment_count; ++seg) {
-        core::ColorWheelSegmentGeometry const geo =
-            core::Get_color_wheel_segment_geometry(seg,
-                                                   input.color_wheel_segment_count);
+    for (size_t seg = 0; seg < input.selection_wheel_segment_count; ++seg) {
+        core::SelectionWheelSegmentGeometry const geo =
+            core::Get_selection_wheel_segment_geometry(
+                seg, input.selection_wheel_segment_count);
         float const b_before = geo.center_angle_degrees - half_slot_deg;
         float const b_after = geo.center_angle_degrees + half_slot_deg;
         float const outer_sa = b_before + outer_gap_deg;
@@ -1380,8 +1382,9 @@ void Draw_color_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         bool const is_font_seg = font_ring;
         if (is_font_seg) {
             res.solid_brush->SetColor(kOverlayButtonFillColor);
-        } else if (seg < input.color_wheel_colors.size()) {
-            res.solid_brush->SetColor(Colorref_to_d2d(input.color_wheel_colors[seg]));
+        } else if (seg < input.selection_wheel_colors.size()) {
+            res.solid_brush->SetColor(
+                Colorref_to_d2d(input.selection_wheel_colors[seg]));
         } else {
             continue;
         }
@@ -1390,19 +1393,19 @@ void Draw_color_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         // Segment border.
         res.solid_brush->SetColor(D2D1::ColorF(0.f, 0.f, 0.f));
         rt->DrawGeometry(path.Get(), res.solid_brush.Get(),
-                         core::kColorWheelSegmentBorderWidthPx,
+                         core::kSelectionWheelSegmentBorderWidthPx,
                          res.round_cap_style.Get());
 
         if (is_font_seg && res.dwrite_factory != nullptr) {
             size_t const font_index = seg;
-            if (font_index < input.color_wheel_font_families.size()) {
+            if (font_index < input.selection_wheel_font_families.size()) {
                 std::wstring_view const family =
-                    input.color_wheel_font_families[font_index].empty()
+                    input.selection_wheel_font_families[font_index].empty()
                         ? core::kDefaultTextFontFamilies[font_index]
-                        : input.color_wheel_font_families[font_index];
+                        : input.selection_wheel_font_families[font_index];
                 Microsoft::WRL::ComPtr<IDWriteTextFormat> preview_format =
                     Create_text_format(res.dwrite_factory.Get(), family,
-                                       kColorWheelFontPreviewPointSize);
+                                       kSelectionWheelFontPreviewPointSize);
                 if (preview_format) {
                     constexpr std::wstring_view preview_glyph = L"A";
                     float text_w = 0.f;
@@ -1413,8 +1416,8 @@ void Draw_color_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
                             Create_text_layout(
                                 res.dwrite_factory.Get(), preview_format.Get(),
                                 preview_glyph,
-                                text_w + kColorWheelFontPreviewLayoutPaddingPx,
-                                text_h + kColorWheelFontPreviewLayoutPaddingPx);
+                                text_w + kSelectionWheelFontPreviewLayoutPaddingPx,
+                                text_h + kSelectionWheelFontPreviewLayoutPaddingPx);
                         if (preview_layout) {
                             float const mid_r = (outer_r + inner_r) / 2.f;
                             D2D1_POINT_2F const label_center =
@@ -1433,18 +1436,18 @@ void Draw_color_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
 
     // --- Halos for selected/hovered ring segments ---
     auto draw_halo = [&](size_t seg, float inner_w, float outer_w) {
-        if (seg >= input.color_wheel_segment_count) {
+        if (seg >= input.selection_wheel_segment_count) {
             return;
         }
-        core::ColorWheelSegmentGeometry const geo =
-            core::Get_color_wheel_segment_geometry(seg,
-                                                   input.color_wheel_segment_count);
+        core::SelectionWheelSegmentGeometry const geo =
+            core::Get_selection_wheel_segment_geometry(
+                seg, input.selection_wheel_segment_count);
         float const sa = geo.center_angle_degrees - half_slot_deg + outer_gap_deg;
         float const ea = geo.center_angle_degrees + half_slot_deg - outer_gap_deg;
 
-        float const inner_halo_r = outer_r +
-                                   core::kColorWheelSegmentBorderWidthPx / 2.f +
-                                   core::kColorWheelSelectionHaloGapPx + inner_w / 2.f;
+        float const inner_halo_r =
+            outer_r + core::kSelectionWheelSegmentBorderWidthPx / 2.f +
+            core::kSelectionWheelSelectionHaloGapPx + inner_w / 2.f;
         float const outer_halo_r = inner_halo_r + inner_w / 2.f + outer_w / 2.f;
 
         float const halo_sweep = ea - sa;
@@ -1497,15 +1500,15 @@ void Draw_color_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         }
     };
 
-    if (input.color_wheel_selected_segment.has_value()) {
-        draw_halo(*input.color_wheel_selected_segment,
-                  core::kColorWheelSelectionHaloInnerWidthPx,
-                  core::kColorWheelSelectionHaloOuterWidthPx);
+    if (input.selection_wheel_selected_segment.has_value()) {
+        draw_halo(*input.selection_wheel_selected_segment,
+                  core::kSelectionWheelSelectionHaloInnerWidthPx,
+                  core::kSelectionWheelSelectionHaloOuterWidthPx);
     }
-    if (input.color_wheel_hovered_segment.has_value()) {
-        draw_halo(*input.color_wheel_hovered_segment,
-                  core::kColorWheelHoverHaloInnerWidthPx,
-                  core::kColorWheelHoverHaloOuterWidthPx);
+    if (input.selection_wheel_hovered_segment.has_value()) {
+        draw_halo(*input.selection_wheel_hovered_segment,
+                  core::kSelectionWheelHoverHaloInnerWidthPx,
+                  core::kSelectionWheelHoverHaloOuterWidthPx);
     }
 
     // --- Hub (text tool only) ---
@@ -1597,12 +1600,12 @@ void Draw_color_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
             arc_sink->Close();
             res.solid_brush->SetColor(border_col);
             rt->DrawGeometry(arc_path.Get(), res.solid_brush.Get(),
-                             core::kColorWheelSegmentBorderWidthPx,
+                             core::kSelectionWheelSegmentBorderWidthPx,
                              res.round_cap_style.Get());
 
             // Chord portion.
             rt->DrawLine(p_top, p_bot, res.solid_brush.Get(),
-                         core::kColorWheelSegmentBorderWidthPx,
+                         core::kSelectionWheelSegmentBorderWidthPx,
                          res.flat_cap_style.Get());
         };
         draw_hub_border(true, left_active);
@@ -1629,16 +1632,16 @@ void Draw_color_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         float const glyph_cx = cx + (hub_r + half_gap) / 2.f;
         Microsoft::WRL::ComPtr<IDWriteTextFormat> fmt = Create_text_format(
             res.dwrite_factory.Get(), input.text_wheel_hub_font_family,
-            kColorWheelFontPreviewPointSize);
+            kSelectionWheelFontPreviewPointSize);
         if (fmt) {
             constexpr std::wstring_view label = L"A";
             float text_w = 0.f;
             float text_h = 0.f;
             if (Measure_text(res, fmt.Get(), label, text_w, text_h)) {
-                Microsoft::WRL::ComPtr<IDWriteTextLayout> layout =
-                    Create_text_layout(res.dwrite_factory.Get(), fmt.Get(), label,
-                                       text_w + kColorWheelFontPreviewLayoutPaddingPx,
-                                       text_h + kColorWheelFontPreviewLayoutPaddingPx);
+                Microsoft::WRL::ComPtr<IDWriteTextLayout> layout = Create_text_layout(
+                    res.dwrite_factory.Get(), fmt.Get(), label,
+                    text_w + kSelectionWheelFontPreviewLayoutPaddingPx,
+                    text_h + kSelectionWheelFontPreviewLayoutPaddingPx);
                 if (layout) {
                     res.solid_brush->SetColor(right_active
                                                   ? kOverlayButtonFillColor
@@ -1925,7 +1928,7 @@ void Draw_live_layer(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         if (input.text_cursor_preview_style.has_value()) {
             Draw_text_cursor_preview(rt, res, input.cursor_client_px,
                                      *input.text_cursor_preview_style,
-                                     input.color_wheel_font_families);
+                                     input.selection_wheel_font_families);
         }
 
         if (has_clip) {
@@ -1937,7 +1940,7 @@ void Draw_live_layer(ID2D1RenderTarget *rt, D2DOverlayResources &res,
     Draw_toolbar(rt, res, input);
 
     // Color wheel.
-    Draw_color_wheel(rt, res, input);
+    Draw_selection_wheel(rt, res, input);
 }
 
 // Draws all annotations to rt using multiply blend for square-tip freehand.

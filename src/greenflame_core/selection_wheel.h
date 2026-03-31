@@ -11,15 +11,15 @@ constexpr size_t kHighlighterColorSlotCount = 6;
 using AnnotationColorPalette = std::array<COLORREF, kAnnotationColorSlotCount>;
 using HighlighterColorPalette = std::array<COLORREF, kHighlighterColorSlotCount>;
 
-inline constexpr int32_t kColorWheelOuterDiameterPx = 130;
-inline constexpr float kColorWheelWidthPx = 22.0f;
-inline constexpr float kColorWheelSegmentGapPx = 8.0f;
-inline constexpr float kColorWheelSegmentBorderWidthPx = 2.0f;
-inline constexpr float kColorWheelSelectionHaloGapPx = 2.0f;
-inline constexpr float kColorWheelSelectionHaloInnerWidthPx = 3.0f;
-inline constexpr float kColorWheelSelectionHaloOuterWidthPx = 3.0f;
-inline constexpr float kColorWheelHoverHaloInnerWidthPx = 5.0f;
-inline constexpr float kColorWheelHoverHaloOuterWidthPx = 5.0f;
+inline constexpr int32_t kSelectionWheelOuterDiameterPx = 130;
+inline constexpr float kSelectionWheelWidthPx = 22.0f;
+inline constexpr float kSelectionWheelSegmentGapPx = 8.0f;
+inline constexpr float kSelectionWheelSegmentBorderWidthPx = 2.0f;
+inline constexpr float kSelectionWheelSelectionHaloGapPx = 2.0f;
+inline constexpr float kSelectionWheelSelectionHaloInnerWidthPx = 3.0f;
+inline constexpr float kSelectionWheelSelectionHaloOuterWidthPx = 3.0f;
+inline constexpr float kSelectionWheelHoverHaloInnerWidthPx = 5.0f;
+inline constexpr float kSelectionWheelHoverHaloOuterWidthPx = 5.0f;
 
 inline constexpr float kTextWheelHubGapPx = 8.0f;
 inline constexpr float kTextWheelHubHalfGapPx = kTextWheelHubGapPx / 2.0f;
@@ -28,10 +28,10 @@ inline constexpr float kTextWheelHubGlyphRectWidthPx = 20.0f;
 inline constexpr float kTextWheelHubGlyphRectHeightPx = 12.0f;
 inline constexpr bool kTextWheelHubDrawBorder = true;
 
-static_assert(kColorWheelOuterDiameterPx > 0);
-static_assert(kColorWheelWidthPx > 0.0f);
-static_assert(kColorWheelWidthPx <
-              static_cast<float>(kColorWheelOuterDiameterPx) / 2.0f);
+static_assert(kSelectionWheelOuterDiameterPx > 0);
+static_assert(kSelectionWheelWidthPx > 0.0f);
+static_assert(kSelectionWheelWidthPx <
+              static_cast<float>(kSelectionWheelOuterDiameterPx) / 2.0f);
 
 [[nodiscard]] constexpr COLORREF Make_colorref(uint8_t red, uint8_t green,
                                                uint8_t blue) noexcept {
@@ -71,7 +71,7 @@ enum class TextWheelHubSide : uint8_t { Color, Font };
     return 0;
 }
 
-struct ColorWheelSegmentGeometry final {
+struct SelectionWheelSegmentGeometry final {
     float center_angle_degrees = 0.0f;
     float start_angle_degrees = 0.0f;
     float sweep_angle_degrees = 0.0f;
@@ -93,11 +93,11 @@ struct ColorWheelSegmentGeometry final {
     return Clamp_color_index(index, kHighlighterColorSlotCount);
 }
 
-[[nodiscard]] ColorWheelSegmentGeometry
-Get_color_wheel_segment_geometry(size_t index, size_t segment_count) noexcept;
+[[nodiscard]] SelectionWheelSegmentGeometry
+Get_selection_wheel_segment_geometry(size_t index, size_t segment_count) noexcept;
 [[nodiscard]] std::optional<size_t>
-Hit_test_color_wheel_segment(PointPx center, PointPx point,
-                             size_t segment_count) noexcept;
+Hit_test_selection_wheel_segment(PointPx center, PointPx point,
+                                 size_t segment_count) noexcept;
 [[nodiscard]] std::optional<TextWheelHubSide>
 Hit_test_text_wheel_hub(PointPx center, PointPx point) noexcept;
 

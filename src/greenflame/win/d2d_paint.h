@@ -3,9 +3,9 @@
 // Direct2D overlay paint pipeline.
 
 #include "greenflame_core/annotation_hit_test.h"
-#include "greenflame_core/color_wheel.h"
 #include "greenflame_core/rect_px.h"
 #include "greenflame_core/selection_handles.h"
+#include "greenflame_core/selection_wheel.h"
 #include "greenflame_core/text_annotation_types.h"
 
 namespace greenflame {
@@ -60,17 +60,17 @@ struct D2DPaintInput {
     std::span<ID2D1Bitmap *const> toolbar_button_glyphs = {};
     std::wstring_view toolbar_tooltip_text = {};
     std::optional<core::RectPx> hovered_toolbar_bounds = std::nullopt;
-    bool show_color_wheel = false;
-    core::PointPx color_wheel_center_px = {};
-    std::span<const COLORREF> color_wheel_colors = {};
-    size_t color_wheel_segment_count = 0;
-    std::optional<size_t> color_wheel_selected_segment = std::nullopt;
-    std::optional<size_t> color_wheel_hovered_segment = std::nullopt;
-    bool color_wheel_has_style_hub = false;
+    bool show_selection_wheel = false;
+    core::PointPx selection_wheel_center_px = {};
+    std::span<const COLORREF> selection_wheel_colors = {};
+    size_t selection_wheel_segment_count = 0;
+    std::optional<size_t> selection_wheel_selected_segment = std::nullopt;
+    std::optional<size_t> selection_wheel_hovered_segment = std::nullopt;
+    bool selection_wheel_has_style_hub = false;
     core::TextWheelMode text_wheel_active_mode = core::TextWheelMode::Color;
     std::optional<core::TextWheelHubSide> text_wheel_hovered_hub = std::nullopt;
     std::wstring_view text_wheel_hub_font_family = {};
-    std::array<std::wstring_view, 4> color_wheel_font_families = {};
+    std::array<std::wstring_view, 4> selection_wheel_font_families = {};
 };
 
 // Rebuild the annotations off-screen bitmap from committed annotations.

@@ -93,8 +93,8 @@ The annotation system applies only to the interactive overlay flow.
 - Pressing `N` or clicking the `Bubble tool` toolbar button toggles that tool on or
   off.
 - While an annotation tool other than Obfuscate is active, right-click opens that
-  tool's color wheel centered on the cursor.
-- While the color wheel is visible:
+  tool's selection wheel centered on the cursor.
+- While the selection wheel is visible:
   - moving the mouse highlights the hovered color slot
   - left-clicking a slot selects that color for future annotations and closes the
     wheel
@@ -422,7 +422,7 @@ The overlay paint path draws in this order:
    - ellipse uses corner/side resize handles on its bounding rect
    - obfuscate uses corner/side resize handles on its bounding rect
 7. toolbar buttons and tooltip
-8. color wheel, when visible
+8. selection wheel, when visible
 
 ### Saved/copied image
 

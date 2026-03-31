@@ -239,7 +239,7 @@ Color, font, and point size do **not** change during editing:
 
 ### Right-click wheel
 
-The existing color wheel becomes a text-specific **style wheel** while the active
+The existing selection wheel becomes a text-specific **style wheel** while the active
 tool is `Text` and no draft is active.
 
 - Left half:
@@ -676,7 +676,7 @@ Add manual cases for:
 - `Ctrl+A`, `Ctrl+C`, `Ctrl+X`, `Ctrl+V`
 - draft-local `Ctrl+Z` / `Ctrl+Shift+Z`
 - style toggles
-- font wheel half and color wheel half before drafting
+- font wheel half and selection wheel half before drafting
 - size wheel stepping and persistence before drafting
 - no size changes while editing from mouse wheel or `Ctrl+=` / `Ctrl+-`
 - multi-line via `Ctrl+Enter`

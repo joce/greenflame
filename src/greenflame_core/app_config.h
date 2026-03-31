@@ -1,6 +1,6 @@
 #pragma once
 
-#include "greenflame_core/color_wheel.h"
+#include "greenflame_core/selection_wheel.h"
 #include "greenflame_core/text_annotation_types.h"
 
 namespace greenflame::core {

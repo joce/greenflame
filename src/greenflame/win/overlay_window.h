@@ -1,9 +1,9 @@
 #pragma once
 
-#include "greenflame_core/color_wheel.h"
 #include "greenflame_core/overlay_controller.h"
 #include "greenflame_core/overlay_help_content.h"
 #include "greenflame_core/rect_px.h"
+#include "greenflame_core/selection_wheel.h"
 #include "win/d2d_text_layout_engine.h"
 #include "win/overlay_button.h"
 #include "win/overlay_help_overlay.h"
@@ -124,14 +124,17 @@ class OverlayWindow final {
     void Reset_caret_blink();
     void Cancel_highlighter_straighten_pending() noexcept;
     void Handle_device_loss();
-    [[nodiscard]] bool Can_show_color_wheel() const noexcept;
+    [[nodiscard]] bool Can_show_selection_wheel() const noexcept;
     [[nodiscard]] std::span<const COLORREF> Current_tool_color_palette() const noexcept;
     [[nodiscard]] size_t Current_annotation_color_index() const noexcept;
-    [[nodiscard]] size_t Current_color_wheel_segment_count() const noexcept;
-    void Show_color_wheel(core::PointPx center);
-    void Dismiss_color_wheel(bool repaint);
-    [[nodiscard]] bool Update_color_wheel_hover(core::PointPx cursor);
-    void Select_color_wheel_segment(size_t index);
+    [[nodiscard]] size_t Current_selection_wheel_segment_count() const noexcept;
+    void Show_selection_wheel(core::PointPx center);
+    void Dismiss_selection_wheel(bool repaint);
+    [[nodiscard]] bool Update_selection_wheel_hover(core::PointPx cursor);
+    void Select_wheel_segment(size_t index);
+    [[nodiscard]] bool Selection_wheel_has_multiple_views() const noexcept;
+    [[nodiscard]] std::optional<size_t> Effective_wheel_segment_hover() const noexcept;
+    void Navigate_wheel(int steps);
     [[nodiscard]] bool Clear_toolbar_hover_states();
     [[nodiscard]] bool Update_toolbar_hover_states(core::PointPx cursor);
     [[nodiscard]] bool Should_show_brush_cursor_preview() const;
@@ -175,12 +178,18 @@ class OverlayWindow final {
         ToolbarButtonEntry &operator=(ToolbarButtonEntry &&) noexcept = default;
     };
 
-    struct ColorWheelState final {
+    struct SelectionWheelState final {
         bool visible = false;
         core::PointPx center = {};
-        std::optional<size_t> hovered_segment = std::nullopt;
+        // Mouse hover: set by Update_selection_wheel_hover on WM_MOUSEMOVE.
+        std::optional<size_t> mouse_hovered_segment = std::nullopt;
+        // Nav hover: set by keyboard/scroll-wheel navigation; cleared when
+        // the cursor enters a ring segment.
+        std::optional<size_t> nav_hovered_segment = std::nullopt;
         core::TextWheelMode text_mode = core::TextWheelMode::Color;
         std::optional<core::TextWheelHubSide> hovered_hub = std::nullopt;
+        // Accumulator for fractional scroll-wheel ticks; reset on show/dismiss.
+        int scroll_delta_remainder = 0;
     };
 
     bool highlighter_straighten_pending_ = false;
@@ -205,7 +214,7 @@ class OverlayWindow final {
     bool caret_blink_visible_ = true;
     bool suppress_next_lbutton_up_ = false;
     std::vector<ToolbarButtonEntry> toolbar_buttons_;
-    ColorWheelState color_wheel_ = {};
+    SelectionWheelState selection_wheel_ = {};
 };
 
 } // namespace greenflame

@@ -39,7 +39,7 @@ add_executable(greenflame_tests
     text_draft_buffer_tests.cpp
     text_html_tests.cpp
     text_rtf_tests.cpp
-    color_wheel_tests.cpp
+    selection_wheel_tests.cpp
     overlay_controller_tests.cpp
     app_controller_tests.cpp
     undo_stack_tests.cpp

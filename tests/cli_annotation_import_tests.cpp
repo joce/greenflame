@@ -1,6 +1,6 @@
 #include "greenflame_core/app_config.h"
 #include "greenflame_core/cli_annotation_import.h"
-#include "greenflame_core/color_wheel.h"
+#include "greenflame_core/selection_wheel.h"
 
 using namespace greenflame::core;
 

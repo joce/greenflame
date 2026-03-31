@@ -77,7 +77,7 @@ Press a hotkey or use the toolbar to toggle a tool on or off.
 
 ### Tool options
 
-**Color:** With an annotation tool other than **Obfuscate** active, **right-click** anywhere to open that tool's **color wheel** at the cursor. Left-click a segment to select a color, or press **Escape** to dismiss. For Text and Bubble, the wheel has a central hub that switches between 8 color slots and 4 font choices.
+**Color:** With an annotation tool other than **Obfuscate** active, **right-click** anywhere (or press **Tab**) to open that tool's **selection wheel** at the cursor. Left-click a segment or press **Enter** to select it. Use **mouse-wheel up/down** or **↑ / ↓** to navigate between segments without the mouse. Press **Escape** to dismiss without selecting. For Text and Bubble, the wheel has a central hub that switches between 8 color slots and 4 font choices; pressing **Tab** while the wheel is open cycles between the color and font views.
 
 **Size:** With **Brush**, **Highlighter**, **Line**, **Arrow**, **Rectangle**, **Ellipse**, **Bubble**, **Obfuscate**, or **Text** active, use **mouse-wheel up/down** or **Ctrl+= / Ctrl+-** to change that tool's size step (1–50). Each tool has its own independent persisted setting. For Obfuscate, the setting is `block_size`: `1` means blur and `2..50` means block pixelation.
 
@@ -94,7 +94,7 @@ Press a hotkey or use the toolbar to toggle a tool on or off.
 With the Text tool active and no draft open:
 
 - **Left-click inside the selection** to start a text annotation at the click point.
-- **Right-click** to open a style wheel. A central hub switches between 8 annotation-color slots and 4 font choices.
+- **Right-click** (or **Tab**) to open the selection wheel. A central hub switches between 8 annotation-color slots and 4 font choices.
 - **Mouse-wheel up/down** or **Ctrl+= / Ctrl+-** to change text size step (1–50, mapped to 5–288 pt). The chosen step is persisted.
 
 While editing a draft:
@@ -330,14 +330,14 @@ Greenflame reads `~/.config/greenflame/greenflame.json` (i.e. `%USERPROFILE%\.co
 | `tools.arrow.size` | `2` | Arrow tool size step (1–50). |
 | `tools.rect.size` | `2` | Rectangle tool size step (1–50). |
 | `tools.ellipse.size` | `2` | Ellipse tool size step (1–50). |
-| `tools.colors` | Object with slot index keys (e.g. `{"4": "#ff00ff"}`) | Annotation color wheel slots (indices 0–7). Only non-default slots are written. Values use `#rrggbb`. |
+| `tools.colors` | Object with slot index keys (e.g. `{"4": "#ff00ff"}`) | Annotation selection wheel slots (indices 0–7). Only non-default slots are written. Values use `#rrggbb`. |
 | `tools.current_color` | `0` | Current annotation color slot index, clamped to `0..7`. |
 | `tools.font.sans` | `Arial` | Font family for the `sans` slot (shared by Text and Bubble tools). |
 | `tools.font.serif` | `Times New Roman` | Font family for the `serif` slot. |
 | `tools.font.mono` | `Courier New` | Font family for the `mono` slot. |
 | `tools.font.art` | `Comic Sans MS` | Font family for the `art` slot. |
 | `tools.highlighter.size` | `10` | Highlighter size step (1–50). |
-| `tools.highlighter.colors` | Object with slot index keys (e.g. `{"2": "#ffb44d"}`) | Highlighter color wheel slots (indices 0–5). Only non-default slots are written. Values use `#rrggbb`. |
+| `tools.highlighter.colors` | Object with slot index keys (e.g. `{"2": "#ffb44d"}`) | Highlighter selection wheel slots (indices 0–5). Only non-default slots are written. Values use `#rrggbb`. |
 | `tools.highlighter.current_color` | `0` | Current Highlighter color slot index, clamped to `0..5`. |
 | `tools.highlighter.opacity_percent` | `35` | Default Highlighter opacity for live preview, save output, and clipboard output. Values are clamped to `0..100`. |
 | `tools.highlighter.pause_straighten_ms` | `800` | After the mouse is still for this many milliseconds during a highlighter stroke, the stroke snaps to a straight bar (start to cursor). `0` means always straight. |

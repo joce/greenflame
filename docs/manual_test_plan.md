@@ -308,13 +308,13 @@ unless a real end-to-end bug escapes into the Win32 shell:
 - Run on: `ENV-A`
 - Steps:
   1. Open the overlay and press `Esc` before making a selection.
-  2. Create a selection and open the color wheel, then press `Esc`.
+  2. Create a selection and open the selection wheel, then press `Esc`.
   3. Open the help overlay and press `Esc`.
   4. Activate an annotation tool, start a stroke, and press `Esc` before releasing the mouse.
   5. With a normal stable selection and no sub-UI open, press `Esc`.
 - Expected:
   - `Esc` closes the innermost active UI first.
-  - Color wheel closes before the overlay cancels.
+  - Selection wheel closes before the overlay cancels.
   - Help closes before the overlay cancels.
   - Pressing `Esc` during an active annotation gesture cancels only the in-progress gesture and leaves the tool armed.
   - With no nested UI open, the overlay cancels or backs out cleanly.
@@ -573,7 +573,7 @@ unless a real end-to-end bug escapes into the Win32 shell:
   7. Return to default mode, select each committed obfuscate, move one, and resize the other from both a corner and a side handle.
 - Expected:
   - The Obfuscate tool shows an axis-aligned square cursor preview while armed.
-  - Right-click does not open a color wheel for Obfuscate.
+  - Right-click does not open a selection wheel for Obfuscate.
   - During the initial drag, the live obfuscate preview includes any already-committed annotations underneath the dragged bounds instead of sampling only the raw screenshot.
   - The first obfuscate commits as block pixelation, with visibly discrete square cells.
   - The committed block-pixelated result matches the preview state at mouse-up aside from minor GPU-vs-CPU sampling differences.
@@ -626,13 +626,13 @@ unless a real end-to-end bug escapes into the Win32 shell:
   - Undo walks backward through both region and annotation history.
   - Redo restores the undone changes in order.
 
-### GF-MAN-ANN-007 - Color Wheel Selection And Cancel
+### GF-MAN-ANN-007 - Selection Wheel Selection And Cancel
 
 - Priority: `P1`
 - Run on: `ENV-A`
 - Steps:
   1. Activate any annotation tool except Obfuscate.
-  2. Right-click to open the color wheel.
+  2. Right-click to open the selection wheel.
   3. Hover different segments.
   4. Pick a segment once, then reopen and dismiss with `Esc`.
   5. Repeat with the Highlighter tool active.
@@ -644,17 +644,17 @@ unless a real end-to-end bug escapes into the Win32 shell:
   - Highlighter shows the 6-slot highlighter palette.
   - `Esc` closes the wheel without changing the current color.
 
-### GF-MAN-ANN-007A - Color Wheel Dismissed By Toolbar Click
+### GF-MAN-ANN-007A - Selection Wheel Dismissed By Toolbar Click
 
 - Priority: `P1`
 - Run on: `ENV-A`
 - Steps:
   1. Activate any annotation tool except Obfuscate.
-  2. Right-click to open the color wheel.
+  2. Right-click to open the selection wheel.
   3. Without moving the wheel, left-click directly on a toolbar button (e.g. switch to a different annotation tool).
   4. Repeat, but this time right-click to open the wheel then click the Undo toolbar button if available, or the Help button.
 - Expected:
-  - The color wheel closes immediately on the toolbar click.
+  - The selection wheel closes immediately on the toolbar click.
   - The toolbar button's action is executed (tool switches, or Help opens) — the click is not swallowed.
   - No phantom annotation is started and no stray mouse-up event fires after the dismiss.
 
@@ -736,7 +736,7 @@ unless a real end-to-end bug escapes into the Win32 shell:
   7. Hover a font segment in the outer ring and click it.
   8. Reopen the wheel and press `Esc`.
   9. Reopen the wheel again and note which mode is active.
-  10. Activate a non-Text annotation tool, right-click to open its color wheel, and
+  10. Activate a non-Text annotation tool, right-click to open its selection wheel, and
       compare the layout to the text style wheel.
 - Expected:
   - The wheel shows a center hub with two semi-circles separated by a visible vertical
@@ -757,7 +757,7 @@ unless a real end-to-end bug escapes into the Win32 shell:
   - Reopening the wheel opens in the mode last used in the session (font mode if font
     was the last mode selected).
   - Right-click while a text draft is active does not open the style wheel.
-  - Non-text annotation color wheels show no hub; only a plain color ring.
+  - Non-text annotation selection wheels show no hub; only a plain color ring.
 
 ### GF-MAN-ANN-012 - Text Draft Editing, Navigation, And Formatting
 
@@ -815,6 +815,110 @@ unless a real end-to-end bug escapes into the Win32 shell:
   - Committed text annotations are not re-editable as text.
   - Saved or copied output includes committed text annotations.
   - Saved or copied output excludes live draft caret, selection highlight, and other draft chrome.
+
+### GF-MAN-ANN-016 - Selection Wheel Keyboard Navigation (Up/Down arrows)
+
+- Priority: `P1`
+- Run on: `ENV-A`
+- Steps:
+  1. Activate the Brush tool. Right-click the selection to open the selection wheel.
+  2. Without moving the mouse, press `↓` once and observe which segment highlights.
+  3. Press `↓` several more times and verify the highlight advances clockwise each time.
+  4. Press `↑` to navigate counter-clockwise.
+  5. Press `↑` past segment 0 and verify the highlight wraps to the last segment.
+  6. Press `Enter` to confirm the highlighted segment.
+  7. Draw a stroke and verify it uses the newly selected color.
+- Expected:
+  - Each `↓` press advances the highlight one segment clockwise; each `↑` press
+    advances it one segment counter-clockwise.
+  - Navigation wraps seamlessly at both ends.
+  - Pressing `Enter` selects the highlighted segment, closes the wheel, and subsequent
+    annotations use that color.
+  - Holding `↓` or `↑` (key repeat) keeps cycling.
+
+### GF-MAN-ANN-017 - Selection Wheel Scroll-Wheel Navigation
+
+- Priority: `P1`
+- Run on: `ENV-A`
+- Steps:
+  1. Open the selection wheel with right-click.
+  2. Scroll the mouse wheel upward (away from you) several clicks.
+  3. Scroll downward (toward you) several clicks past the starting position.
+  4. Scroll past the boundary in either direction to verify wrap.
+  5. Press `Enter` to confirm, then open the wheel again and verify the selection persists.
+- Expected:
+  - Scroll up moves the highlight counter-clockwise; scroll down moves it clockwise.
+  - Fractional ticks accumulate; the highlight does not jump until a full tick is reached.
+  - Wrap is seamless in both directions.
+  - `Enter` confirms the navigated segment.
+
+### GF-MAN-ANN-018 - Selection Wheel Nav Hover And Mouse Hover Priority
+
+- Priority: `P1`
+- Run on: `ENV-A`
+- Steps:
+  1. Open the selection wheel. Press `↓` twice to establish a nav hover two segments
+     clockwise from the current selection.
+  2. Move the mouse directly onto a different segment.
+  3. Observe which segment is highlighted.
+  4. Move the mouse off all segments (into empty space between/outside the ring).
+  5. Observe the hover state.
+  6. Without moving the mouse, press `↓` once more.
+  7. Observe the hover state.
+- Expected:
+  - Step 2–3: moving the mouse onto a segment immediately clears the nav hover and
+    the hovered segment becomes the one under the cursor.
+  - Step 4–5: moving the mouse off all segments does **not** clear the hover; the
+    previously mouse-hovered segment remains highlighted.
+  - Step 6–7: pressing `↓` sets a new nav hover, overriding the mouse position;
+    the highlight jumps to the next segment regardless of where the cursor is.
+
+### GF-MAN-ANN-019 - Selection Wheel Tab Shows Wheel And Cycles Views (Text Tool)
+
+- Priority: `P1`
+- Run on: `ENV-A`
+- Steps:
+  1. Activate the Text tool (no draft active). Ensure the selection wheel is closed.
+  2. Press bare `Tab` (no modifiers) and observe whether the wheel opens.
+  3. Press `Tab` again while the wheel is open.
+  4. Press `Tab` a third time to verify the view cycles back.
+  5. Close the wheel with `Esc`.
+  6. Activate the Brush tool and press `Tab`.
+  7. While the Brush wheel is open, press `Tab` again.
+- Expected:
+  - Step 2: the wheel opens at the cursor position.
+  - Step 3: the wheel cycles from Color view to Font view (or vice versa); nav hover and
+    hub hover are cleared on each cycle.
+  - Step 4: the view returns to the view shown in step 2.
+  - Step 7: pressing `Tab` on a single-view wheel (Brush) is a no-op — the wheel stays
+    open and the view does not change.
+
+### GF-MAN-ANN-020 - Selection Wheel Enter With No Prior Nav/Mouse Hover
+
+- Priority: `P1`
+- Run on: `ENV-A`
+- Steps:
+  1. Open the selection wheel with right-click.
+  2. Move the mouse entirely off the ring and hub (empty space inside or outside).
+  3. Without pressing any navigation key, press `Enter` immediately.
+- Expected:
+  - The currently selected segment (the one with the selection halo) is treated as the
+    effective hover and is re-confirmed.
+  - The wheel closes; no color change occurs (same segment was selected).
+
+### GF-MAN-ANN-021 - Selection Wheel Scroll Remainder Reset On Show/Dismiss
+
+- Priority: `P2`
+- Run on: `ENV-A`
+- Steps:
+  1. Open the selection wheel. Scroll the mouse wheel by a small fractional amount that
+     does not yet advance a full segment (only possible on high-resolution scroll devices;
+     otherwise scroll exactly one tick and note the starting segment).
+  2. Dismiss the wheel with `Esc`.
+  3. Reopen the wheel and scroll by the same fractional amount again.
+- Expected:
+  - The scroll accumulator is reset on dismiss. The second scroll does not carry over the
+    remainder from the first session and does not advance the highlight unexpectedly.
 
 ### GF-MAN-TXT-RTF-001 - Rich Text Copy And Paste Within Greenflame
 
@@ -966,7 +1070,7 @@ unless a real end-to-end bug escapes into the Win32 shell:
   - Diagonal and curved annotation edges remain anti-aliased in the pasted image and match the live overlay appearance.
   - Highlighter annotations remain semi-transparent in the pasted image and preserve the marker-like darkening effect over the captured content.
   - Highlighter edges remain anti-aliased in the pasted image.
-  - Overlay chrome, labels, toolbar, help, and color wheel are absent from the pasted image.
+  - Overlay chrome, labels, toolbar, help, and selection wheel are absent from the pasted image.
 
 ### GF-MAN-OUT-002 - Direct Save
 
@@ -1108,7 +1212,7 @@ unless a real end-to-end bug escapes into the Win32 shell:
   1. Change the brush color slot and the highlighter color slot.
   2. Close the overlay and exit the app.
   3. Relaunch and start a fresh capture.
-  4. Open the brush color wheel and then the highlighter color wheel.
+  4. Open the brush selection wheel and then the highlighter selection wheel.
 - Expected:
   - The previously chosen brush color slot is restored.
   - The previously chosen highlighter color slot is restored.
@@ -1204,7 +1308,7 @@ unless a real end-to-end bug escapes into the Win32 shell:
   3. Create, move, and resize selections.
   4. Draw annotations and hover resize handles.
 - Expected:
-  - Crosshair, handles, toolbar hit-testing, cursor previews, and color wheel stay under the pointer.
+  - Crosshair, handles, toolbar hit-testing, cursor previews, and selection wheel stay under the pointer.
   - No visual offset appears when crossing monitors with different DPI.
 
 ### GF-MAN-DPI-002 - Cross-Monitor Selection And Save

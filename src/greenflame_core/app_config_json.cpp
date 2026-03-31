@@ -1,6 +1,6 @@
 #include "greenflame_core/app_config_json.h"
 #include "greenflame_core/annotation_types.h"
-#include "greenflame_core/color_wheel.h"
+#include "greenflame_core/selection_wheel.h"
 #include "greenflame_core/text_annotation_types.h"
 
 namespace greenflame::core {

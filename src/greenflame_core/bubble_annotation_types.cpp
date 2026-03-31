@@ -1,6 +1,6 @@
 #include "greenflame_core/bubble_annotation_types.h"
 
-#include "greenflame_core/color_wheel.h"
+#include "greenflame_core/selection_wheel.h"
 
 namespace greenflame::core {
 

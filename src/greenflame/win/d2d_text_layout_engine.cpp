@@ -1,6 +1,6 @@
 #include "greenflame/win/d2d_text_layout_engine.h"
 
-#include "greenflame_core/color_wheel.h"
+#include "greenflame_core/selection_wheel.h"
 
 namespace greenflame {
 

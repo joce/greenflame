@@ -38,7 +38,7 @@ into a single 12-segment ring.  This design replaces that layout with a two-laye
   apply any selection.
 - Pressing a ring segment applies that selection and closes the wheel.
 
-The outer ring in color mode mirrors the standard annotation color wheel exactly.  If
+The outer ring in color mode mirrors the standard annotation selection wheel exactly.  If
 the palette size ever changes, the color mode ring reflects it automatically.
 
 ---
@@ -58,27 +58,27 @@ the palette size ever changes, the color mode ring reflects it automatically.
 
 ### Outer ring
 
-Identical geometry to the existing annotation color wheel:
+Identical geometry to the existing annotation selection wheel:
 
-- outer diameter: `kColorWheelOuterDiameterPx` (currently 130 px)
-- ring width: `kColorWheelWidthPx` (currently 22 px)
-- segment gap: `kColorWheelSegmentGapPx` (currently 10 px)
+- outer diameter: `kSelectionWheelOuterDiameterPx` (currently 130 px)
+- ring width: `kSelectionWheelWidthPx` (currently 22 px)
+- segment gap: `kSelectionWheelSegmentGapPx` (currently 10 px)
 - border, hover halo, and selection halo: same constants and rendering as today
 
 In **color mode** the ring shows exactly the annotation color palette (currently 8
-segments) at the same geometry produced by `Get_color_wheel_segment_geometry`.
+segments) at the same geometry produced by `Get_selection_wheel_segment_geometry`.
 
 In **font mode** the ring shows 4 font-choice segments at the same geometry produced by
-`Get_color_wheel_segment_geometry` for 4 segments.  Each segment has a neutral fill
+`Get_selection_wheel_segment_geometry` for 4 segments.  Each segment has a neutral fill
 (`kOverlayButtonFillColor`) with the letter `A` rendered in the corresponding
 font family, centered at the segment midpoint — identical to the existing font-segment
-rendering already in `Draw_color_wheel`.
+rendering already in `Draw_selection_wheel`.
 
 ### Center hub
 
 Define the two key radii:
 
-- `inner_radius = (kColorWheelOuterDiameterPx / 2) − kColorWheelWidthPx` — the inner
+- `inner_radius = (kSelectionWheelOuterDiameterPx / 2) − kSelectionWheelWidthPx` — the inner
   boundary of the outer ring (currently 43 px).
 - `hub_r = inner_radius − kTextWheelHubRingGapPx` — the radius of the hub button arcs
   (currently 35 px).
@@ -103,7 +103,7 @@ Each button has:
 
 The hub is therefore split into a left and right button by a vertical gap.
 
-**New constants to add in `color_wheel.h`:**
+**New constants to add in `selection_wheel.h`:**
 
 ```cpp
 inline constexpr float kTextWheelHubGapPx = 8.0f;
@@ -118,7 +118,7 @@ inline constexpr float kTextWheelHubGlyphRectWidthPx  = 20.0f;
 inline constexpr float kTextWheelHubGlyphRectHeightPx = 12.0f;
 
 inline constexpr bool kTextWheelHubDrawBorder = true;
-// When true, a thin stroke (kColorWheelSegmentBorderWidthPx) is drawn along both
+// When true, a thin stroke (kSelectionWheelSegmentBorderWidthPx) is drawn along both
 // the curved outer edge and the flat chord edge of each hub button.
 // Set to false to try the borderless look.
 ```
@@ -143,7 +143,7 @@ inline constexpr bool kTextWheelHubDrawBorder = true;
 - Geometry: circular segment of radius `hub_r`, chord at `x = center.x + kTextWheelHubGapPx/2`,
   curved edge facing right (major arc).  Mirror of the left button.
 - Fill: same active/inactive rule as left button, mirrored.
-- Glyph: the letter `A` rendered at `kColorWheelFontPreviewPointSize` (the
+- Glyph: the letter `A` rendered at `kSelectionWheelFontPreviewPointSize` (the
   same constant already used for ring font glyphs) in the current selected font family,
   centered in the right button (`center.x + (hub_r + kTextWheelHubGapPx/2) / 2`, `center.y`).
   This always reflects the currently active `TextFontChoice`
@@ -204,7 +204,7 @@ Clicking a hub button that is already the active mode is a no-op (idempotent).
 
 ### New hub hit-test function
 
-Add to `color_wheel.h` / `color_wheel.cpp`:
+Add to `selection_wheel.h` / `selection_wheel.cpp`:
 
 ```cpp
 enum class TextWheelHubSide : uint8_t {
@@ -220,7 +220,7 @@ Hit_test_text_wheel_hub(PointPx center, PointPx point) noexcept;
 
 Implementation rules:
 
-Let `hub_r = kColorWheelOuterDiameterPx / 2 − kColorWheelWidthPx − kTextWheelHubRingGapPx`.
+Let `hub_r = kSelectionWheelOuterDiameterPx / 2 − kSelectionWheelWidthPx − kTextWheelHubRingGapPx`.
 
 1. Compute `d = distance(point, center)`.
 2. If `d > hub_r` → return `nullopt` (point is in the ring-gap, ring, or outside).
@@ -233,7 +233,7 @@ Let `hub_r = kColorWheelOuterDiameterPx / 2 − kColorWheelWidthPx − kTextWhee
 
 ## Code Changes
 
-### `src/greenflame_core/color_wheel.h`
+### `src/greenflame_core/selection_wheel.h`
 
 - Add `kTextWheelHubGapPx`, `kTextWheelHubRingGapPx`, `kTextWheelHubGlyphRectWidthPx`,
   `kTextWheelHubGlyphRectHeightPx`, `kTextWheelHubDrawBorder`.
@@ -241,7 +241,7 @@ Let `hub_r = kColorWheelOuterDiameterPx / 2 − kColorWheelWidthPx − kTextWhee
 - Add `TextWheelHubSide` enum.
 - Add `Hit_test_text_wheel_hub` declaration.
 
-### `src/greenflame_core/color_wheel.cpp`
+### `src/greenflame_core/selection_wheel.cpp`
 
 - Implement `Hit_test_text_wheel_hub`.
 
@@ -250,28 +250,28 @@ Let `hub_r = kColorWheelOuterDiameterPx / 2 − kColorWheelWidthPx − kTextWhee
 Replace:
 
 ```cpp
-bool color_wheel_is_text_style = false;
-std::array<std::wstring_view, 4> color_wheel_font_families = {};
+bool selection_wheel_is_text_style = false;
+std::array<std::wstring_view, 4> selection_wheel_font_families = {};
 ```
 
 With:
 
 ```cpp
-bool color_wheel_has_text_hub = false;
+bool selection_wheel_has_text_hub = false;
 core::TextWheelMode text_wheel_active_mode = core::TextWheelMode::Color;
 std::optional<core::TextWheelHubSide> text_wheel_hovered_hub = std::nullopt;
 std::wstring_view text_wheel_hub_font_family = {};   // font for right-hub "A" glyph
-std::array<std::wstring_view, 4> color_wheel_font_families = {};
+std::array<std::wstring_view, 4> selection_wheel_font_families = {};
 ```
 
-`color_wheel_segment_count` is set by the caller to the count for the active mode:
+`selection_wheel_segment_count` is set by the caller to the count for the active mode:
 - Color mode: `kAnnotationColorSlotCount` (currently 8).
 - Font mode: 4.
 
-`color_wheel_selected_segment` carries the active color index in color mode and
+`selection_wheel_selected_segment` carries the active color index in color mode and
 the active font index in font mode (use `Text_font_choice_index()` to convert).
 
-`color_wheel_hovered_segment` applies to the outer ring only; hub hover is tracked
+`selection_wheel_hovered_segment` applies to the outer ring only; hub hover is tracked
 separately via `text_wheel_hovered_hub`.
 
 ### `src/greenflame/win/d2d_overlay_resources.h` / `.cpp`
@@ -300,16 +300,16 @@ All stops at alpha = 1.0.  The gradient start point is the left edge of the glyp
 rectangle and end point is the right edge; set these at draw time via
 `SetStartPoint` / `SetEndPoint` on the cached brush before filling.
 
-### `src/greenflame/win/d2d_paint.cpp` — `Draw_color_wheel`
+### `src/greenflame/win/d2d_paint.cpp` — `Draw_selection_wheel`
 
-When `input.color_wheel_has_text_hub` is `true`:
+When `input.selection_wheel_has_text_hub` is `true`:
 
 **A. Draw the outer ring first** using the existing arc-segment loop, but driven by
 `text_wheel_active_mode`:
 
 - Segment content: color slots in color mode (existing fill logic); font glyphs in font
   mode (existing font-segment logic, `is_font_segment = true` for all segments).
-- `color_segment_count` = `input.color_wheel_segment_count` (already set correctly by
+- `color_segment_count` = `input.selection_wheel_segment_count` (already set correctly by
   caller).
 - Selection / hover halos on the ring use the existing `draw_halo` lambda.
 - The font selection halo in font mode: use `draw_halo` at the active font index
@@ -341,7 +341,7 @@ side (clockwise).
 
 Fill each path with the appropriate idle or active fill color.  If
 `kTextWheelHubDrawBorder` is `true`, draw a thin stroke at
-`kColorWheelSegmentBorderWidthPx` along both the curved outer edge (arc path) and the
+`kSelectionWheelSegmentBorderWidthPx` along both the curved outer edge (arc path) and the
 flat chord edge (straight line).
 
 *Left button glyph (hue gradient rectangle):*
@@ -356,7 +356,7 @@ flat chord edge (straight line).
 
 - Use the same DWrite layout logic already used for ring font segments.
 - Font family: `input.text_wheel_hub_font_family`.
-- Point size: `kColorWheelFontPreviewPointSize`.
+- Point size: `kSelectionWheelFontPreviewPointSize`.
 - Glyph center x = `cx + (hub_r + half_gap) / 2`, y = `cy`.
 - Draw in `kOverlayButtonOutlineColor` when the right button is active (inverted fill),
   else `kOverlayButtonFillColor` — same swap as the fill.
@@ -368,10 +368,10 @@ rectangle covering the hovered button's bounding box, clipped by the same circul
 segment path.  Use `ID2D1RenderTarget::PushLayer` with a `D2D1_LAYER_PARAMETERS`
 using the circular-segment geometry as the geometric mask.
 
-### `src/greenflame/win/overlay_window.h` — `ColorWheelState`
+### `src/greenflame/win/overlay_window.h` — `SelectionWheelState`
 
 ```cpp
-struct ColorWheelState final {
+struct SelectionWheelState final {
     bool visible = false;
     core::PointPx center = {};
     std::optional<size_t> hovered_segment = std::nullopt;
@@ -387,59 +387,59 @@ The `text_mode` field persists for the lifetime of the overlay session (reset on
 
 **Opening the wheel (right-click with Text tool armed):**
 
-- Keep existing logic to set `color_wheel_.visible`, `color_wheel_.center`.
-- Do NOT reset `color_wheel_.text_mode`; it carries over from the previous open.
-- Clear `color_wheel_.hovered_segment` and `color_wheel_.hovered_hub`.
+- Keep existing logic to set `selection_wheel_.visible`, `selection_wheel_.center`.
+- Do NOT reset `selection_wheel_.text_mode`; it carries over from the previous open.
+- Clear `selection_wheel_.hovered_segment` and `selection_wheel_.hovered_hub`.
 
 **Building `D2DPaintInput` (in `Build_paint_input` or equivalent):**
 
 ```cpp
 bool const is_text_tool =
     controller_.Active_annotation_tool() == core::AnnotationToolId::Text;
-input.color_wheel_has_text_hub = is_text_tool;
+input.selection_wheel_has_text_hub = is_text_tool;
 
 if (is_text_tool) {
-    input.text_wheel_active_mode = color_wheel_.text_mode;
-    input.text_wheel_hovered_hub = color_wheel_.hovered_hub;
+    input.text_wheel_active_mode = selection_wheel_.text_mode;
+    input.text_wheel_hovered_hub = selection_wheel_.hovered_hub;
     input.text_wheel_hub_font_family =
         Resolve_text_font_families(config_)[
             core::Text_font_choice_index(controller_.Text_current_font())];
 
-    if (color_wheel_.text_mode == core::TextWheelMode::Color) {
-        input.color_wheel_segment_count = core::kAnnotationColorSlotCount;
-        input.color_wheel_selected_segment = Current_annotation_color_index();
+    if (selection_wheel_.text_mode == core::TextWheelMode::Color) {
+        input.selection_wheel_segment_count = core::kAnnotationColorSlotCount;
+        input.selection_wheel_selected_segment = Current_annotation_color_index();
     } else {
-        input.color_wheel_segment_count = 4;
-        input.color_wheel_selected_segment =
+        input.selection_wheel_segment_count = 4;
+        input.selection_wheel_selected_segment =
             core::Text_font_choice_index(controller_.Text_current_font());
     }
-    input.color_wheel_hovered_segment = color_wheel_.hovered_segment;
+    input.selection_wheel_hovered_segment = selection_wheel_.hovered_segment;
 } else {
     // Non-text tools: existing logic unchanged.
-    input.color_wheel_segment_count = Current_color_wheel_segment_count();
-    input.color_wheel_selected_segment = Current_annotation_color_index();
-    input.color_wheel_hovered_segment = color_wheel_.hovered_segment;
+    input.selection_wheel_segment_count = Current_selection_wheel_segment_count();
+    input.selection_wheel_selected_segment = Current_annotation_color_index();
+    input.selection_wheel_hovered_segment = selection_wheel_.hovered_segment;
 }
 ```
 
 **Mouse-move while wheel is visible (hit-testing):**
 
-When `color_wheel_.visible` and `is_text_tool`:
+When `selection_wheel_.visible` and `is_text_tool`:
 
-1. Call `Hit_test_text_wheel_hub(color_wheel_.center, cursor_client)`.
-2. If it returns a side: set `color_wheel_.hovered_hub`, clear `color_wheel_.hovered_segment`.
-3. Else: clear `color_wheel_.hovered_hub`, run the existing
-   `Hit_test_color_wheel_segment` against the ring with the current mode's segment count.
+1. Call `Hit_test_text_wheel_hub(selection_wheel_.center, cursor_client)`.
+2. If it returns a side: set `selection_wheel_.hovered_hub`, clear `selection_wheel_.hovered_segment`.
+3. Else: clear `selection_wheel_.hovered_hub`, run the existing
+   `Hit_test_selection_wheel_segment` against the ring with the current mode's segment count.
 
-When `color_wheel_.visible` and not `is_text_tool`: existing behavior unchanged.
+When `selection_wheel_.visible` and not `is_text_tool`: existing behavior unchanged.
 
 **Left-click while wheel is visible:**
 
-When `color_wheel_.visible` and `is_text_tool`:
+When `selection_wheel_.visible` and `is_text_tool`:
 
-1. Test hub first: `Hit_test_text_wheel_hub(color_wheel_.center, cursor_client)`.
-2. If left hub: `color_wheel_.text_mode = TextWheelMode::Color` → repaint, do NOT close.
-3. If right hub: `color_wheel_.text_mode = TextWheelMode::Font` → repaint, do NOT close.
+1. Test hub first: `Hit_test_text_wheel_hub(selection_wheel_.center, cursor_client)`.
+2. If left hub: `selection_wheel_.text_mode = TextWheelMode::Color` → repaint, do NOT close.
+3. If right hub: `selection_wheel_.text_mode = TextWheelMode::Font` → repaint, do NOT close.
 4. Else: test ring with current mode's segment count.
    - Color mode hit: `controller_.Set_annotation_color(...)`, close wheel, persist config.
    - Font mode hit: `controller_.Set_text_current_font(...)`, close wheel, persist config.
@@ -478,7 +478,7 @@ off-center.  Numbers based on current constants.  All values in physical pixels.
 
 ## Non-Goals For This Change
 
-- Changing any behavior of the standard annotation color wheel (non-text tools).
+- Changing any behavior of the standard annotation selection wheel (non-text tools).
 - Adding a third hub mode or any other mode.
 - Persisting `text_mode` across sessions (session-local only).
 - Animating the mode transition.
@@ -489,7 +489,7 @@ off-center.  Numbers based on current constants.  All values in physical pixels.
 
 ### Automated unit tests
 
-Add to `tests/color_wheel_tests.cpp`:
+Add to `tests/selection_wheel_tests.cpp`:
 
 - `Hit_test_text_wheel_hub` returns `nullopt` for a point outside `hub_r`
   (`inner_radius − kTextWheelHubRingGapPx`).

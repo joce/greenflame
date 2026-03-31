@@ -35,7 +35,7 @@ in `AnnotationToolRegistry`, producing a new `ObfuscateAnnotation` payload.
 - On mouse-up the annotation is committed and becomes undoable. Completing the
   annotation does not deactivate the tool.
 - The tool does not use the annotation color palette. Right-click while the tool is
-  active does not open a color wheel.
+  active does not open a selection wheel.
 - Block size is controlled by mouse-wheel up/down or `Ctrl+=` / `Ctrl+-`, range
   `1..50`, with the same temporary centered size overlay used by other tools.
   Block size 1 means "blur mode" (no pixelation blocks); values 2..50 are block

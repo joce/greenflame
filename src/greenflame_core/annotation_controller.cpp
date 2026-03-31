@@ -1,8 +1,8 @@
 #include "greenflame_core/annotation_controller.h"
 
 #include "greenflame_core/annotation_commands.h"
-#include "greenflame_core/color_wheel.h"
 #include "greenflame_core/freehand_annotation_tool.h"
+#include "greenflame_core/selection_wheel.h"
 #include "greenflame_core/undo_stack.h"
 
 namespace greenflame::core {

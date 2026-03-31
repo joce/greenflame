@@ -1,4 +1,4 @@
-#include "greenflame_core/color_wheel.h"
+#include "greenflame_core/selection_wheel.h"
 
 namespace greenflame::core {
 
@@ -8,20 +8,21 @@ constexpr float kPi = 3.14159265358979323846f;
 constexpr float kDegreesPerTurn = 360.0f;
 constexpr float kTopGapCenterDegrees = 270.0f;
 
-[[nodiscard]] constexpr float Color_wheel_outer_radius_px() noexcept {
-    return static_cast<float>(kColorWheelOuterDiameterPx) / 2.0f;
+[[nodiscard]] constexpr float Selection_wheel_outer_radius_px() noexcept {
+    return static_cast<float>(kSelectionWheelOuterDiameterPx) / 2.0f;
 }
 
-[[nodiscard]] constexpr float Color_wheel_inner_radius_px() noexcept {
-    return Color_wheel_outer_radius_px() - kColorWheelWidthPx;
+[[nodiscard]] constexpr float Selection_wheel_inner_radius_px() noexcept {
+    return Selection_wheel_outer_radius_px() - kSelectionWheelWidthPx;
 }
 
-[[nodiscard]] constexpr float Color_wheel_mid_radius_px() noexcept {
-    return (Color_wheel_outer_radius_px() + Color_wheel_inner_radius_px()) / 2.0f;
+[[nodiscard]] constexpr float Selection_wheel_mid_radius_px() noexcept {
+    return (Selection_wheel_outer_radius_px() + Selection_wheel_inner_radius_px()) /
+           2.0f;
 }
 
-[[nodiscard]] constexpr float Color_wheel_gap_degrees() noexcept {
-    return (kColorWheelSegmentGapPx / Color_wheel_mid_radius_px()) *
+[[nodiscard]] constexpr float Selection_wheel_gap_degrees() noexcept {
+    return (kSelectionWheelSegmentGapPx / Selection_wheel_mid_radius_px()) *
            (kDegreesPerTurn / (2.0f * kPi));
 }
 
@@ -53,9 +54,9 @@ constexpr float kTopGapCenterDegrees = 270.0f;
 
 } // namespace
 
-ColorWheelSegmentGeometry
-Get_color_wheel_segment_geometry(size_t index, size_t segment_count) noexcept {
-    ColorWheelSegmentGeometry geometry{};
+SelectionWheelSegmentGeometry
+Get_selection_wheel_segment_geometry(size_t index, size_t segment_count) noexcept {
+    SelectionWheelSegmentGeometry geometry{};
     if (segment_count == 0 || index >= segment_count) {
         return geometry;
     }
@@ -65,14 +66,14 @@ Get_color_wheel_segment_geometry(size_t index, size_t segment_count) noexcept {
         kTopGapCenterDegrees + degrees_per_segment / 2.0f;
     geometry.center_angle_degrees = Normalize_degrees(
         first_segment_center_degrees + static_cast<float>(index) * degrees_per_segment);
-    geometry.sweep_angle_degrees = degrees_per_segment - Color_wheel_gap_degrees();
+    geometry.sweep_angle_degrees = degrees_per_segment - Selection_wheel_gap_degrees();
     geometry.start_angle_degrees = Normalize_degrees(
         geometry.center_angle_degrees - geometry.sweep_angle_degrees / 2.0f);
     return geometry;
 }
 
-std::optional<size_t> Hit_test_color_wheel_segment(PointPx center, PointPx point,
-                                                   size_t segment_count) noexcept {
+std::optional<size_t> Hit_test_selection_wheel_segment(PointPx center, PointPx point,
+                                                       size_t segment_count) noexcept {
     if (segment_count == 0) {
         return std::nullopt;
     }
@@ -80,8 +81,8 @@ std::optional<size_t> Hit_test_color_wheel_segment(PointPx center, PointPx point
     float const dx = static_cast<float>(point.x - center.x);
     float const dy = static_cast<float>(point.y - center.y);
     float const distance_sq = dx * dx + dy * dy;
-    float const inner_radius = Color_wheel_inner_radius_px();
-    float const outer_radius = Color_wheel_outer_radius_px();
+    float const inner_radius = Selection_wheel_inner_radius_px();
+    float const outer_radius = Selection_wheel_outer_radius_px();
     if (distance_sq < inner_radius * inner_radius ||
         distance_sq > outer_radius * outer_radius) {
         return std::nullopt;
@@ -90,8 +91,8 @@ std::optional<size_t> Hit_test_color_wheel_segment(PointPx center, PointPx point
     float const angle =
         Normalize_degrees(std::atan2(dy, dx) * (kDegreesPerTurn / (2.0f * kPi)));
     for (size_t index = 0; index < segment_count; ++index) {
-        ColorWheelSegmentGeometry const geometry =
-            Get_color_wheel_segment_geometry(index, segment_count);
+        SelectionWheelSegmentGeometry const geometry =
+            Get_selection_wheel_segment_geometry(index, segment_count);
         float const half_sweep = geometry.sweep_angle_degrees / 2.0f;
         if (std::fabs(Smallest_angle_delta_degrees(geometry.center_angle_degrees,
                                                    angle)) <= half_sweep) {
@@ -104,7 +105,7 @@ std::optional<size_t> Hit_test_color_wheel_segment(PointPx center, PointPx point
 
 std::optional<TextWheelHubSide> Hit_test_text_wheel_hub(PointPx center,
                                                         PointPx point) noexcept {
-    float const hub_r = Color_wheel_inner_radius_px() - kTextWheelHubRingGapPx;
+    float const hub_r = Selection_wheel_inner_radius_px() - kTextWheelHubRingGapPx;
     float const dx = static_cast<float>(point.x - center.x);
     float const dy = static_cast<float>(point.y - center.y);
     if (dx * dx + dy * dy > hub_r * hub_r) {

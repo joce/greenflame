@@ -13,6 +13,8 @@ constexpr float kHintTextFormatSizePt = 12.f;
 constexpr size_t kTextWheelHueStopCount = 7;
 constexpr float kTextWheelHuePositionDivisor =
     static_cast<float>(kTextWheelHueStopCount - 1);
+constexpr UINT32 kCheckerCellPx = 8;
+constexpr UINT32 kCheckerBitmapPx = kCheckerCellPx * 2;
 
 // Convert an OverlayButtonGlyph alpha mask (single-channel, row-major) into an
 // A8_UNORM D2D bitmap and store it in out_bitmap.
@@ -296,6 +298,42 @@ bool D2DOverlayResources::Create_shared_resources() {
         }
     }
 
+    // Checker brush for highlighter opacity ring segments.
+    // 16×16 bitmap (two 8×8 cells): TL=dark, TR=light, BL=light, BR=dark.
+    {
+        constexpr UINT32 dark_color = 0xFF666666u;  // 0xAARRGGBB: opaque mid-dark grey
+        constexpr UINT32 light_color = 0xFF999999u; // 0xAARRGGBB: opaque mid-light grey
+        std::array<UINT32, kCheckerBitmapPx * kCheckerBitmapPx> pixels{};
+        for (UINT32 y = 0; y < kCheckerBitmapPx; ++y) {
+            for (UINT32 x = 0; x < kCheckerBitmapPx; ++x) {
+                bool const left_half = x < kCheckerCellPx;
+                bool const top_half = y < kCheckerCellPx;
+                pixels[y * kCheckerBitmapPx + x] =
+                    ((left_half == top_half) ? dark_color : light_color);
+            }
+        }
+        D2D1_BITMAP_PROPERTIES checker_props{};
+        checker_props.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        checker_props.pixelFormat.alphaMode = D2D1_ALPHA_MODE_IGNORE;
+        float const dpi = Target_dpi();
+        checker_props.dpiX = dpi;
+        checker_props.dpiY = dpi;
+        Microsoft::WRL::ComPtr<ID2D1Bitmap> checker_bmp;
+        hr = hwnd_rt->CreateBitmap(D2D1::SizeU(kCheckerBitmapPx, kCheckerBitmapPx),
+                                   pixels.data(), kCheckerBitmapPx * sizeof(UINT32),
+                                   checker_props, checker_bmp.ReleaseAndGetAddressOf());
+        if (FAILED(hr)) {
+            return false;
+        }
+        D2D1_BITMAP_BRUSH_PROPERTIES const brush_props =
+            D2D1::BitmapBrushProperties(D2D1_EXTEND_MODE_WRAP, D2D1_EXTEND_MODE_WRAP);
+        hr = hwnd_rt->CreateBitmapBrush(checker_bmp.Get(), brush_props,
+                                        checker_brush.ReleaseAndGetAddressOf());
+        if (FAILED(hr)) {
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -371,6 +409,14 @@ bool D2DOverlayResources::Upload_glyph_bitmaps(
     return true;
 }
 
+bool D2DOverlayResources::Upload_alpha_wheel_hub_glyph(
+    OverlayButtonGlyph const *glyph) {
+    if (!hwnd_rt) {
+        return false;
+    }
+    return Upload_glyph(hwnd_rt.Get(), glyph, alpha_wheel_hub_bitmap);
+}
+
 ID2D1Bitmap *
 D2DOverlayResources::Toolbar_glyph_bitmap(OverlayToolbarGlyphId glyph) const noexcept {
     size_t const index = Overlay_toolbar_glyph_index(glyph);
@@ -409,6 +455,8 @@ void D2DOverlayResources::Release_device_resources() {
     text_center.Reset();
     text_hint.Reset();
     text_wheel_hue_brush.Reset();
+    alpha_wheel_hub_bitmap.Reset();
+    checker_brush.Reset();
     for (auto &glyph : toolbar_glyphs) {
         glyph.Reset();
     }

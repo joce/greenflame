@@ -7,6 +7,7 @@ namespace {
 constexpr float kPi = 3.14159265358979323846f;
 constexpr float kDegreesPerTurn = 360.0f;
 constexpr float kTopGapCenterDegrees = 270.0f;
+constexpr float kBottomAngleDegrees = 90.0f;
 
 [[nodiscard]] constexpr float Selection_wheel_outer_radius_px() noexcept {
     return static_cast<float>(kSelectionWheelOuterDiameterPx) / 2.0f;
@@ -52,10 +53,39 @@ constexpr float kTopGapCenterDegrees = 270.0f;
     return delta;
 }
 
+// Returns nullopt if the point is outside the hub circle or in the center gap;
+// true = left side, false = right side.
+[[nodiscard]] std::optional<bool> Hit_test_hub_side(PointPx center,
+                                                    PointPx point) noexcept {
+    float const hub_r = Selection_wheel_inner_radius_px() - kTextWheelHubRingGapPx;
+    float const dx = static_cast<float>(point.x - center.x);
+    float const dy = static_cast<float>(point.y - center.y);
+    if (dx * dx + dy * dy > hub_r * hub_r) {
+        return std::nullopt;
+    }
+    if (dx >= -kTextWheelHubHalfGapPx && dx <= kTextWheelHubHalfGapPx) {
+        return std::nullopt;
+    }
+    return dx < -kTextWheelHubHalfGapPx;
+}
+
 } // namespace
 
+float Clamped_wheel_ring_angle_offset(size_t real_segment_count) noexcept {
+    // Layout has real_segment_count + 1 slots. We want the phantom slot
+    // (index real_segment_count) to land at 90° (6 o'clock).
+    // center(i) = kTopGapCenterDegrees + dps/2 + offset + i * dps
+    // Solve for offset such that center(real_segment_count) = 90°.
+    size_t const total = real_segment_count + 1;
+    float const dps = kDegreesPerTurn / static_cast<float>(total);
+    float offset = kBottomAngleDegrees - kTopGapCenterDegrees - dps / 2.0f -
+                   static_cast<float>(real_segment_count) * dps;
+    return Normalize_degrees(offset);
+}
+
 SelectionWheelSegmentGeometry
-Get_selection_wheel_segment_geometry(size_t index, size_t segment_count) noexcept {
+Get_selection_wheel_segment_geometry(size_t index, size_t segment_count,
+                                     float ring_angle_offset) noexcept {
     SelectionWheelSegmentGeometry geometry{};
     if (segment_count == 0 || index >= segment_count) {
         return geometry;
@@ -63,7 +93,7 @@ Get_selection_wheel_segment_geometry(size_t index, size_t segment_count) noexcep
 
     float const degrees_per_segment = Degrees_per_segment(segment_count);
     float const first_segment_center_degrees =
-        kTopGapCenterDegrees + degrees_per_segment / 2.0f;
+        kTopGapCenterDegrees + degrees_per_segment / 2.0f + ring_angle_offset;
     geometry.center_angle_degrees = Normalize_degrees(
         first_segment_center_degrees + static_cast<float>(index) * degrees_per_segment);
     geometry.sweep_angle_degrees = degrees_per_segment - Selection_wheel_gap_degrees();
@@ -72,8 +102,9 @@ Get_selection_wheel_segment_geometry(size_t index, size_t segment_count) noexcep
     return geometry;
 }
 
-std::optional<size_t> Hit_test_selection_wheel_segment(PointPx center, PointPx point,
-                                                       size_t segment_count) noexcept {
+std::optional<size_t>
+Hit_test_selection_wheel_segment(PointPx center, PointPx point, size_t segment_count,
+                                 float ring_angle_offset) noexcept {
     if (segment_count == 0) {
         return std::nullopt;
     }
@@ -92,7 +123,8 @@ std::optional<size_t> Hit_test_selection_wheel_segment(PointPx center, PointPx p
         Normalize_degrees(std::atan2(dy, dx) * (kDegreesPerTurn / (2.0f * kPi)));
     for (size_t index = 0; index < segment_count; ++index) {
         SelectionWheelSegmentGeometry const geometry =
-            Get_selection_wheel_segment_geometry(index, segment_count);
+            Get_selection_wheel_segment_geometry(index, segment_count,
+                                                 ring_angle_offset);
         float const half_sweep = geometry.sweep_angle_degrees / 2.0f;
         if (std::fabs(Smallest_angle_delta_degrees(geometry.center_angle_degrees,
                                                    angle)) <= half_sweep) {
@@ -105,17 +137,20 @@ std::optional<size_t> Hit_test_selection_wheel_segment(PointPx center, PointPx p
 
 std::optional<TextWheelHubSide> Hit_test_text_wheel_hub(PointPx center,
                                                         PointPx point) noexcept {
-    float const hub_r = Selection_wheel_inner_radius_px() - kTextWheelHubRingGapPx;
-    float const dx = static_cast<float>(point.x - center.x);
-    float const dy = static_cast<float>(point.y - center.y);
-    if (dx * dx + dy * dy > hub_r * hub_r) {
+    auto const side = Hit_test_hub_side(center, point);
+    if (!side.has_value()) {
         return std::nullopt;
     }
-    if (dx >= -kTextWheelHubHalfGapPx && dx <= kTextWheelHubHalfGapPx) {
+    return *side ? TextWheelHubSide::Color : TextWheelHubSide::Font;
+}
+
+std::optional<HighlighterWheelHubSide>
+Hit_test_highlighter_wheel_hub(PointPx center, PointPx point) noexcept {
+    auto const side = Hit_test_hub_side(center, point);
+    if (!side.has_value()) {
         return std::nullopt;
     }
-    return (dx < -kTextWheelHubHalfGapPx) ? TextWheelHubSide::Color
-                                          : TextWheelHubSide::Font;
+    return *side ? HighlighterWheelHubSide::Color : HighlighterWheelHubSide::Opacity;
 }
 
 } // namespace greenflame::core

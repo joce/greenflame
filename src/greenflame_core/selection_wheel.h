@@ -52,10 +52,15 @@ inline constexpr HighlighterColorPalette kDefaultHighlighterColorPalette = {
 
 inline constexpr int32_t kDefaultAnnotationColorIndex = 0;
 inline constexpr int32_t kDefaultHighlighterColorIndex = 0;
-inline constexpr int32_t kDefaultHighlighterOpacityPercent = 35;
+inline constexpr int32_t kDefaultHighlighterOpacityPercent = 33;
+inline constexpr std::array<int32_t, 5> kHighlighterOpacityPresets = {
+    {75, 66, 50, 33, 25}};
 
 enum class TextWheelMode : uint8_t { Color, Font };
 enum class TextWheelHubSide : uint8_t { Color, Font };
+
+enum class HighlighterWheelMode : uint8_t { Color, Opacity };
+enum class HighlighterWheelHubSide : uint8_t { Color, Opacity };
 
 [[nodiscard]] constexpr size_t Text_font_choice_index(TextFontChoice choice) noexcept {
     switch (choice) {
@@ -93,12 +98,19 @@ struct SelectionWheelSegmentGeometry final {
     return Clamp_color_index(index, kHighlighterColorSlotCount);
 }
 
+// Returns the ring angle offset (degrees) that places the phantom slot of a
+// clamped-nav wheel at 6 o'clock, for a ring with real_segment_count real slots.
+[[nodiscard]] float Clamped_wheel_ring_angle_offset(size_t real_segment_count) noexcept;
+
 [[nodiscard]] SelectionWheelSegmentGeometry
-Get_selection_wheel_segment_geometry(size_t index, size_t segment_count) noexcept;
+Get_selection_wheel_segment_geometry(size_t index, size_t segment_count,
+                                     float ring_angle_offset = 0.0f) noexcept;
 [[nodiscard]] std::optional<size_t>
-Hit_test_selection_wheel_segment(PointPx center, PointPx point,
-                                 size_t segment_count) noexcept;
+Hit_test_selection_wheel_segment(PointPx center, PointPx point, size_t segment_count,
+                                 float ring_angle_offset = 0.0f) noexcept;
 [[nodiscard]] std::optional<TextWheelHubSide>
 Hit_test_text_wheel_hub(PointPx center, PointPx point) noexcept;
+[[nodiscard]] std::optional<HighlighterWheelHubSide>
+Hit_test_highlighter_wheel_hub(PointPx center, PointPx point) noexcept;
 
 } // namespace greenflame::core

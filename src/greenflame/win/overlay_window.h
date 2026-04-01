@@ -128,6 +128,12 @@ class OverlayWindow final {
     [[nodiscard]] std::span<const COLORREF> Current_tool_color_palette() const noexcept;
     [[nodiscard]] size_t Current_annotation_color_index() const noexcept;
     [[nodiscard]] size_t Current_selection_wheel_segment_count() const noexcept;
+    // Interactive segment count: layout count minus the phantom slot (if any).
+    [[nodiscard]] size_t Nav_segment_count() const noexcept;
+    // Ring angle offset for the current wheel; non-zero only for clamped-nav wheels.
+    [[nodiscard]] float Effective_ring_angle_offset() const noexcept;
+    // Set highlighter_mode and keep clamp_nav in sync.
+    void Set_highlighter_mode(core::HighlighterWheelMode mode) noexcept;
     void Show_selection_wheel(core::PointPx center);
     void Dismiss_selection_wheel(bool repaint);
     [[nodiscard]] bool Update_selection_wheel_hover(core::PointPx cursor);
@@ -188,6 +194,12 @@ class OverlayWindow final {
         std::optional<size_t> nav_hovered_segment = std::nullopt;
         core::TextWheelMode text_mode = core::TextWheelMode::Color;
         std::optional<core::TextWheelHubSide> hovered_hub = std::nullopt;
+        core::HighlighterWheelMode highlighter_mode = core::HighlighterWheelMode::Color;
+        std::optional<core::HighlighterWheelHubSide> highlighter_hovered_hub =
+            std::nullopt;
+        // When true: last slot is a phantom (not drawn/interactive), and keyboard/
+        // scroll-wheel navigation clamps at the first/last real segment.
+        bool clamp_nav = false;
         // Accumulator for fractional scroll-wheel ticks; reset on show/dismiss.
         int scroll_delta_remainder = 0;
     };

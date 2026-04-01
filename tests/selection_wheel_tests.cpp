@@ -235,3 +235,40 @@ TEST(selection_wheel, HubHitTest_ReturnsFontForRightHalf) {
     EXPECT_EQ(Hit_test_text_wheel_hub(center, right),
               std::optional<TextWheelHubSide>{TextWheelHubSide::Font});
 }
+
+TEST(selection_wheel, HighlighterHubHitTest_ReturnsNulloptOutsideHubRadius) {
+    PointPx const center{500, 500};
+    float const hub_r = Hub_r_px();
+    PointPx const outside{center.x + static_cast<int32_t>(hub_r) + 1, center.y};
+    EXPECT_EQ(Hit_test_highlighter_wheel_hub(center, outside), std::nullopt);
+}
+
+TEST(selection_wheel, HighlighterHubHitTest_ReturnsNulloptInVerticalGap) {
+    PointPx const center{500, 500};
+    // Exact center falls in the gap.
+    EXPECT_EQ(Hit_test_highlighter_wheel_hub(center, center), std::nullopt);
+    // Point at left edge of gap.
+    PointPx const left_gap{center.x - static_cast<int32_t>(kTextWheelHubHalfGapPx),
+                           center.y};
+    EXPECT_EQ(Hit_test_highlighter_wheel_hub(center, left_gap), std::nullopt);
+    // Point at right edge of gap.
+    PointPx const right_gap{center.x + static_cast<int32_t>(kTextWheelHubHalfGapPx),
+                            center.y};
+    EXPECT_EQ(Hit_test_highlighter_wheel_hub(center, right_gap), std::nullopt);
+}
+
+TEST(selection_wheel, HighlighterHubHitTest_ReturnsColorForLeftHalf) {
+    PointPx const center{500, 500};
+    float const hub_r = Hub_r_px();
+    PointPx const left{center.x - static_cast<int32_t>(hub_r / 2.f), center.y};
+    EXPECT_EQ(Hit_test_highlighter_wheel_hub(center, left),
+              std::optional<HighlighterWheelHubSide>{HighlighterWheelHubSide::Color});
+}
+
+TEST(selection_wheel, HighlighterHubHitTest_ReturnsOpacityForRightHalf) {
+    PointPx const center{500, 500};
+    float const hub_r = Hub_r_px();
+    PointPx const right{center.x + static_cast<int32_t>(hub_r / 2.f), center.y};
+    EXPECT_EQ(Hit_test_highlighter_wheel_hub(center, right),
+              std::optional<HighlighterWheelHubSide>{HighlighterWheelHubSide::Opacity});
+}

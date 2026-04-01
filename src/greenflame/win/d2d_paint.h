@@ -23,27 +23,46 @@ struct AnnotationPreviewPatch {
 
 // Per-frame paint input for the Direct2D overlay renderer.
 struct D2DPaintInput {
-    core::RectPx live_rect = {};
-    core::RectPx final_selection = {};
-    core::PointPx cursor_client_px = {};
+    core::Annotation const *draft_annotation = nullptr;
+    core::TextAnnotation const *draft_text_annotation = nullptr;
+    core::Annotation const *selected_annotation = nullptr;
+    size_t selection_wheel_segment_count = 0;
     std::span<const core::RectPx> monitor_rects_client = {};
     std::span<const core::Annotation> annotations = {};
     std::span<const AnnotationPreviewPatch> annotation_patches = {};
-    core::Annotation const *draft_annotation = nullptr;
-    core::TextAnnotation const *draft_text_annotation = nullptr;
-    std::vector<core::RectPx> draft_text_selection_rects = {};
-    core::RectPx draft_text_caret_rect = {};
-    bool draft_text_insert_mode = true;
-    bool draft_text_blink_visible = true;
     std::span<const core::PointPx> draft_freehand_points = {};
-    std::optional<core::StrokeStyle> draft_freehand_style = std::nullopt;
-    core::FreehandTipShape draft_freehand_tip_shape = core::FreehandTipShape::Round;
+    std::wstring_view transient_center_label_text = {};
+    std::span<IOverlayButton *const> toolbar_buttons = {};
+    // Parallel to toolbar_buttons: D2D glyph bitmap for each button (may be null).
+    std::span<ID2D1Bitmap *const> toolbar_button_glyphs = {};
+    std::wstring_view toolbar_tooltip_text = {};
+    std::span<const COLORREF> selection_wheel_colors = {};
+    std::optional<size_t> selection_wheel_selected_segment = std::nullopt;
+    std::optional<size_t> selection_wheel_hovered_segment = std::nullopt;
+    std::wstring_view text_wheel_hub_font_family = {};
+    std::vector<core::RectPx> draft_text_selection_rects = {};
+    std::optional<core::TextAnnotationBaseStyle> text_cursor_preview_style =
+        std::nullopt;
+    std::array<std::wstring_view, 4> selection_wheel_font_families = {};
     float draft_freehand_blit_opacity = 1.0f;
+    int32_t highlighter_wheel_current_opacity_percent = 0;
+    COLORREF highlighter_wheel_current_color = 0;
+    // Ring layout for clamped-nav wheels: the last segment is a phantom (not drawn).
+    float selection_wheel_ring_angle_offset = 0.0f;
+    core::PointPx cursor_client_px = {};
     std::optional<int32_t> brush_cursor_preview_width_px = std::nullopt;
     std::optional<int32_t> square_cursor_preview_width_px = std::nullopt;
     std::optional<int32_t> arrow_cursor_preview_width_px = std::nullopt;
-    std::optional<core::TextAnnotationBaseStyle> text_cursor_preview_style =
-        std::nullopt;
+    core::PointPx selection_wheel_center_px = {};
+    core::RectPx live_rect = {};
+    core::RectPx final_selection = {};
+    core::RectPx draft_text_caret_rect = {};
+    std::optional<core::StrokeStyle> draft_freehand_style = std::nullopt;
+    std::optional<core::RectPx> selected_annotation_bounds = std::nullopt;
+    std::optional<core::RectPx> hovered_toolbar_bounds = std::nullopt;
+    bool draft_text_insert_mode = true;
+    bool draft_text_blink_visible = true;
+    core::FreehandTipShape draft_freehand_tip_shape = core::FreehandTipShape::Round;
     bool dragging = false;
     bool handle_dragging = false;
     bool move_dragging = false;
@@ -51,26 +70,17 @@ struct D2DPaintInput {
     bool modifier_preview = false;
     bool show_selection_size_side_labels = true;
     bool show_selection_size_center_label = true;
-    std::optional<core::SelectionHandle> highlight_handle = std::nullopt;
-    core::Annotation const *selected_annotation = nullptr;
-    std::optional<core::RectPx> selected_annotation_bounds = std::nullopt;
-    std::wstring_view transient_center_label_text = {};
-    std::span<IOverlayButton *const> toolbar_buttons = {};
-    // Parallel to toolbar_buttons: D2D glyph bitmap for each button (may be null).
-    std::span<ID2D1Bitmap *const> toolbar_button_glyphs = {};
-    std::wstring_view toolbar_tooltip_text = {};
-    std::optional<core::RectPx> hovered_toolbar_bounds = std::nullopt;
     bool show_selection_wheel = false;
-    core::PointPx selection_wheel_center_px = {};
-    std::span<const COLORREF> selection_wheel_colors = {};
-    size_t selection_wheel_segment_count = 0;
-    std::optional<size_t> selection_wheel_selected_segment = std::nullopt;
-    std::optional<size_t> selection_wheel_hovered_segment = std::nullopt;
     bool selection_wheel_has_style_hub = false;
     core::TextWheelMode text_wheel_active_mode = core::TextWheelMode::Color;
+    bool selection_wheel_has_highlighter_hub = false;
+    core::HighlighterWheelMode highlighter_wheel_active_mode =
+        core::HighlighterWheelMode::Color;
+    bool selection_wheel_clamp_nav = false;
+    std::optional<core::SelectionHandle> highlight_handle = std::nullopt;
     std::optional<core::TextWheelHubSide> text_wheel_hovered_hub = std::nullopt;
-    std::wstring_view text_wheel_hub_font_family = {};
-    std::array<std::wstring_view, 4> selection_wheel_font_families = {};
+    std::optional<core::HighlighterWheelHubSide> highlighter_wheel_hovered_hub =
+        std::nullopt;
 };
 
 // Rebuild the annotations off-screen bitmap from committed annotations.

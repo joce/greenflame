@@ -1915,9 +1915,15 @@ void Update_draft_stroke_bitmap(D2DOverlayResources &res,
 // Live layer (drawn every frame)
 // ---------------------------------------------------------------------------
 
-void Draw_live_layer(ID2D1RenderTarget *rt, D2DOverlayResources &res,
-                     D2DPaintInput const &input, int vd_width, int vd_height) {
-    // Draft annotation (while gesture is active).
+[[nodiscard]] bool Has_live_annotation_draft(D2DPaintInput const &input) noexcept {
+    return input.draft_annotation != nullptr ||
+           input.draft_text_annotation != nullptr ||
+           (!input.draft_freehand_points.empty() &&
+            input.draft_freehand_style.has_value());
+}
+
+void Draw_live_annotation_draft(ID2D1RenderTarget *rt, D2DOverlayResources &res,
+                                D2DPaintInput const &input) {
     if (input.draft_text_annotation != nullptr) {
         Draw_draft_text(rt, res, input);
     } else if (input.draft_annotation != nullptr) {
@@ -1950,6 +1956,15 @@ void Draw_live_layer(ID2D1RenderTarget *rt, D2DOverlayResources &res,
                                input.draft_freehand_blit_opacity);
             }
         }
+    }
+}
+
+void Draw_live_layer(ID2D1RenderTarget *rt, D2DOverlayResources &res,
+                     D2DPaintInput const &input, int vd_width, int vd_height,
+                     bool draw_annotation_draft = true) {
+    // Draft annotation (while gesture is active).
+    if (draw_annotation_draft) {
+        Draw_live_annotation_draft(rt, res, input);
     }
 
     // Selection border: live_rect while dragging; final_selection otherwise.
@@ -2211,13 +2226,14 @@ bool Paint_d2d_frame(D2DOverlayResources &res, D2DPaintInput const &input, int v
         Rebuild_annotations_bitmap(res, input.annotations, input.annotation_patches);
     }
 
-    // A draft annotation must be drawn before the dim in the dynamic path so the
-    // dim sits on top outside the selection. Force the dynamic path whenever one
+    // Any live annotation draft must be drawn before the dim in the dynamic path so
+    // the dim sits on top outside the selection. Force the dynamic path whenever one
     // is present.
+    bool const has_live_annotation_draft = Has_live_annotation_draft(input);
     bool const is_steady_state = res.frozen_valid && !input.dragging &&
                                  !input.handle_dragging && !input.move_dragging &&
                                  !input.annotation_editing && !input.modifier_preview &&
-                                 input.draft_annotation == nullptr;
+                                 !has_live_annotation_draft;
 
     res.hwnd_rt->BeginDraw();
 
@@ -2240,17 +2256,17 @@ bool Paint_d2d_frame(D2DOverlayResources &res, D2DPaintInput const &input, int v
             res.hwnd_rt->DrawBitmap(res.annotations_bitmap.Get());
         }
 
-        // Draft annotation also drawn before the dim for the same reason.
-        if (input.draft_annotation != nullptr) {
-            Draw_annotation(res.hwnd_rt.Get(), res, *input.draft_annotation);
+        // Draft annotations also draw before the dim for the same reason.
+        if (has_live_annotation_draft) {
+            Draw_live_annotation_draft(res.hwnd_rt.Get(), res, input);
         }
 
         // Dim the entire canvas (on top of screenshot and all annotations).
         res.solid_brush->SetColor(D2D1::ColorF(0.f, 0.f, 0.f, kOverlayDimAlpha));
         res.hwnd_rt->FillRectangle(full, res.solid_brush.Get());
 
-        // Restore selection area undimmed: screenshot, annotations, and draft
-        // annotation — all clipped to the selection rect.
+        // Restore selection area undimmed: screenshot, annotations, and live draft
+        // visuals — all clipped to the selection rect.
         // Use live_rect while dragging the selection; fall back to final_selection
         // when an annotation tool gesture is active (live_rect is empty then).
         core::RectPx const restore_rect =
@@ -2265,18 +2281,17 @@ bool Paint_d2d_frame(D2DOverlayResources &res, D2DPaintInput const &input, int v
             if (res.annotations_bitmap) {
                 res.hwnd_rt->DrawBitmap(res.annotations_bitmap.Get());
             }
-            if (input.draft_annotation != nullptr) {
-                Draw_annotation(res.hwnd_rt.Get(), res, *input.draft_annotation);
+            if (has_live_annotation_draft) {
+                Draw_live_annotation_draft(res.hwnd_rt.Get(), res, input);
             }
             res.hwnd_rt->PopAxisAlignedClip();
         }
     }
 
-    // The draft annotation was already composited in the dynamic path above;
-    // pass nullptr so Draw_live_layer does not draw it again on top of the dim.
-    D2DPaintInput live_input = input;
-    live_input.draft_annotation = nullptr;
-    Draw_live_layer(res.hwnd_rt.Get(), res, live_input, vd_width, vd_height);
+    // Draft visuals were already composited in the dynamic path above; skip them here
+    // so Draw_live_layer does not draw them again on top of the dim.
+    Draw_live_layer(res.hwnd_rt.Get(), res, input, vd_width, vd_height,
+                    /*draw_annotation_draft=*/!has_live_annotation_draft);
 
     if (top_layer != nullptr && top_layer->Is_visible()) {
         (void)top_layer->Paint_d2d(res.hwnd_rt.Get(), res.dwrite_factory.Get(),

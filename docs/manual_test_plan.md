@@ -703,6 +703,27 @@ unless a real end-to-end bug escapes into the Win32 shell:
   - The committed stroke matches what was shown during the live preview.
   - The selected-annotation brackets enclose all visible highlighter pixels.
 
+### GF-MAN-ANN-010A - Live Brush And Text Drafts Stay Under The Dim
+
+- Priority: `P1`
+- Run on: `ENV-A`
+- Steps:
+  1. Create a selection that leaves obvious dimmed desktop visible around it.
+  2. Activate the Brush tool, start a stroke inside the selection, and drag the live
+     stroke so part of it extends outside the selection before releasing the mouse.
+  3. Repeat with the Highlighter tool.
+  4. Activate the Text tool, click near a selection edge, and type enough text for the
+     live draft to extend into the dimmed area before committing it.
+- Expected:
+  - While the brush or highlighter gesture is still active, the portion outside the
+    selection stays under the dim instead of painting over the obscured region.
+  - While the text draft is active, glyphs, selection highlight, and caret stay under
+    the dim outside the selection instead of painting over the obscured region.
+  - Committing each draft does not change the outside-selection layering; the committed
+    result matches the live preview.
+- Regression: brush/highlighter strokes and live text drafts previously painted on top
+  of the dimmed region until commit.
+
 ### GF-MAN-ANN-011 - Text Tool Activation And Style Defaults
 
 - Priority: `P1`

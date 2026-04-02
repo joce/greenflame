@@ -72,27 +72,9 @@ unchanged.
 
 ## Hub Icon
 
-### Source artwork
-
-`resources/alpha.png` — provided.  The image shows a gradient from black (opaque) to
-white (transparent), visually encoding the concept of variable opacity.
-
-### Derived asset
-
-Generate `resources/alpha-mask.png` with the standard ImageMagick workflow from
-[docs/resource_processing.md](resource_processing.md):
-
-```bat
-magick resources\alpha.png -colorspace Gray -negate -alpha copy -fill white -colorize 100 -strip resources\alpha-mask.png
-```
-
-Check in both `resources/alpha.png` (source) and `resources/alpha-mask.png` (embedded
-asset) following the same pattern as all other toolbar glyphs.
-
-### Embedding
-
-Add `alpha-mask.png` to `resources/greenflame.rc.in` under the existing glyph
-resources.
+The opacity hub icon is generated at paint time as a small rectangular strip, matching
+the hue strip geometry. It is filled with black vertical bands whose alpha decreases
+across the strip, so the icon reads as opacity rather than as the current color.
 
 ---
 
@@ -147,16 +129,22 @@ Same construction as the text style wheel (two circular-segment buttons split by
 **Left button — Color mode:**
 
 - Glyph: hue-spectrum gradient rectangle (identical to the text wheel's color button).
-- Active/inactive fill: same inverted-fill rule as the text wheel.
+- Inactive content treatment: dim the hue strip by blending it toward the current hub
+  fill so the active side reads more strongly.
+- Fill and borders: same quiet inner-segment treatment as the text wheel hub, with
+  full light-gray and inset-black perimeter borders plus a near-neutral inactive fill,
+  mint-tinted active/hovered fills, and curved-edge-only outward inflation for active
+  and hovered states.
 
 **Right button — Opacity mode:**
 
-- Glyph: `alpha-mask.png` bitmap tinted with `kOverlayButtonOutlineColor` when active,
-  `kOverlayButtonFillColor` when inactive — rendered at `kTextWheelHubGlyphRectWidthPx`
-  × `kTextWheelHubGlyphRectHeightPx`, centered in the right button.
-- Fill: same active/inactive rule as the left button.
+ - Glyph: a procedurally drawn rectangular opacity strip rendered inside the
+  `kTextWheelHubGlyphRectWidthPx` × `kTextWheelHubGlyphRectHeightPx` hub glyph box.
+  The strip uses black vertical bands with opacity decreasing across the mark.  The
+  inactive icon is dimmed by lowering that alpha range.
+- Fill and borders: same quiet inner-segment treatment as the left button.
 
-Hover tint, border, and gap behavior are identical to the text style wheel.
+Gap behavior is identical to the text style wheel.
 
 ---
 
@@ -248,14 +236,15 @@ When the wheel opens in opacity mode, the active segment is the entry in
 
 ### `src/greenflame/win/d2d_overlay_resources.h` / `.cpp`
 
-- Load and cache `alpha-mask.png` bitmap (same pattern as other mask glyphs).
+- No opacity icon asset is loaded; generate the rectangular opacity strip procedurally
+  during wheel paint.
 - Create and cache the checker bitmap brush for opacity segment backgrounds.
 
 ### `src/greenflame/win/d2d_paint.cpp` — `Draw_selection_wheel`
 
 - When `input.selection_wheel_has_highlighter_hub`:
   - Draw the hub (two buttons, same geometry as text wheel).
-  - Right button: draw the `alpha-mask.png` glyph tinted appropriately.
+  - Right button: draw the procedural rectangular opacity strip with state-based dimming.
   - In color mode: draw 6 color segments filled at full opacity (hues must be
     clearly readable independent of the active opacity setting).
   - In opacity mode: draw 5 opacity segments with checker + color overlay.
@@ -294,6 +283,10 @@ Add to `docs/manual_test_plan.md` under the Highlighter tool section:
 - Right-click while Highlighter is armed (no draft active): verify the wheel opens with
   the hub, left and right buttons visible.
 - Verify left hub shows hue-spectrum gradient; right hub shows the alpha gradient glyph.
+- Verify inactive hub content looks dimmer than active hub content for both the hue
+  strip and the opacity icon.
+- Verify the opacity icon shows the hub fill through its transparent portions rather
+  than a checkerboard inside the icon bounds.
 - Verify outer ring opens in color mode (6 highlighter color segments at full opacity).
 - Click right hub: verify ring switches to 5 opacity segments; wheel stays open.
   - Confirm the 50 % segment is visually centered at the top.

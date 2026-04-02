@@ -638,10 +638,12 @@ unless a real end-to-end bug escapes into the Win32 shell:
   5. Repeat with the Highlighter tool active.
 - Expected:
   - The wheel opens centered on the cursor.
-  - Hovering highlights the segment under the pointer.
+  - Each ring segment shows a full light-gray perimeter border with a full inset black perimeter border.
+  - Hovering inflates the segment under the pointer without widening its angular span.
+  - The currently selected segment keeps the smaller outward-only inflation when no other segment is hovered.
   - Selecting a segment changes the color used by future annotations.
   - Brush, Line, Arrow, Rectangle, Filled rectangle, Ellipse, and Filled ellipse show the 8-slot annotation palette.
-  - Highlighter shows the 6-slot highlighter palette.
+  - Highlighter shows the 6-slot highlighter palette, and when its hub is visible the hub halves use the same quiet border language as the ring with a subtler curved-edge inflation for active and hovered states.
   - `Esc` closes the wheel without changing the current color.
 
 ### GF-MAN-ANN-007A - Selection Wheel Dismissed By Toolbar Click
@@ -762,16 +764,31 @@ unless a real end-to-end bug escapes into the Win32 shell:
 - Expected:
   - The wheel shows a center hub with two semi-circles separated by a visible vertical
     gap.  The left semi-circle contains a small hue-spectrum gradient rectangle; the
-    right semi-circle shows a lowercase `A` in the current font.
-  - Hovering a hub semi-circle shows a green tint on that semi-circle; the outer ring
-    is unchanged.
+    right semi-circle shows an `A` in the current font.
+  - Each hub semi-circle uses the same restyled border language as the ring: a full
+    light-gray perimeter border with a full inset black perimeter border, including the
+    straight center edge.  The old green structural outline/divider is absent.
+  - Inactive hub halves use a near-neutral light fill; the active hub half uses a
+    clearly stronger mint-tinted fill.  Hovering a hub semi-circle keeps the ring
+    unchanged and gives that hub half the strongest fill plus a larger outward
+    inflation on the curved outer edge only.
+  - Ring segments use the same restyled treatment as the non-text wheel: a full
+    light-gray perimeter border, a full inset black perimeter border, smaller
+    outward-only inflation for the selected segment, and larger inflation for the
+    explicitly hovered segment.
   - Color mode (initial): the outer ring shows 8 annotation color segments.  The active
-    hub side (color) has an inverted (darker) fill.
+    hub side (color) stands out via the mint fill and the stronger curved-edge
+    inflation, but it still does not invert to a dark green fill.
   - Clicking the left hub when already in color mode is a no-op; the wheel stays open.
   - After selecting a color segment, the wheel closes and that color is used by the next
     text draft.
-  - Font mode: the outer ring changes to 4 font segments each labeled with `A` in its
-    font.  The right hub has the inverted fill.
+  - Font mode: the outer ring changes to 4 font segments each labeled with a black `A`
+    in its font.  The inactive hub glyphs look intentionally dimmer, while the active
+    hub glyph stays darker and easier to read.
+  - The same dimming rule applies to non-text hub content: inactive hue-strip and
+    opacity icons look toned down, while the active hub content is full strength.
+    The highlighter opacity icon is a generated rectangular strip, like the hue strip,
+    using black bands with varying alpha instead of colored bands or a bitmap.
   - After selecting a font segment, the wheel closes and that font is used by the next
     text draft.  The right-hub `A` updates when the wheel is reopened.
   - `Esc` closes the wheel without changing color or font.
@@ -936,7 +953,7 @@ unless a real end-to-end bug escapes into the Win32 shell:
   2. Move the mouse entirely off the ring and hub (empty space inside or outside).
   3. Without pressing any navigation key, press `Enter` immediately.
 - Expected:
-  - The currently selected segment (the one with the selection halo) is treated as the
+  - The currently selected segment (the one with the smaller selection inflation) is treated as the
     effective hover and is re-confirmed.
   - The wheel closes; no color change occurs (same segment was selected).
 

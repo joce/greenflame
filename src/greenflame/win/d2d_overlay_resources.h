@@ -48,7 +48,6 @@ struct D2DOverlayResources final {
     Microsoft::WRL::ComPtr<IDWriteTextFormat> text_center; // 36pt Segoe UI Black
     Microsoft::WRL::ComPtr<IDWriteTextFormat> text_hint;   // 16pt Segoe UI
     Microsoft::WRL::ComPtr<ID2D1LinearGradientBrush> text_wheel_hue_brush;
-    Microsoft::WRL::ComPtr<ID2D1Bitmap> alpha_wheel_hub_bitmap;
     Microsoft::WRL::ComPtr<ID2D1BitmapBrush> checker_brush;
 
     // Toolbar glyph bitmaps (BGRA premultiplied, from OverlayButtonGlyph alpha
@@ -101,9 +100,6 @@ struct D2DOverlayResources final {
     // OverlayToolbarGlyphId. Null entries are skipped.
     [[nodiscard]] bool
     Upload_glyph_bitmaps(std::span<OverlayButtonGlyph const *const> glyphs);
-
-    // Upload the alpha-wheel hub glyph (alpha-mask.png) as an A8_UNORM bitmap.
-    [[nodiscard]] bool Upload_alpha_wheel_hub_glyph(OverlayButtonGlyph const *glyph);
     [[nodiscard]] ID2D1Bitmap *
     Toolbar_glyph_bitmap(OverlayToolbarGlyphId glyph) const noexcept;
 

@@ -134,11 +134,14 @@ class OverlayWindow final {
     [[nodiscard]] float Effective_ring_angle_offset() const noexcept;
     // Set highlighter_mode and keep clamp_nav in sync.
     void Set_highlighter_mode(core::HighlighterWheelMode mode) noexcept;
+    [[nodiscard]] std::optional<size_t>
+    Current_selection_wheel_selected_segment() const noexcept;
     void Show_selection_wheel(core::PointPx center);
     void Dismiss_selection_wheel(bool repaint);
     [[nodiscard]] bool Update_selection_wheel_hover(core::PointPx cursor);
     void Select_wheel_segment(size_t index);
     [[nodiscard]] bool Selection_wheel_has_multiple_views() const noexcept;
+    [[nodiscard]] std::optional<size_t> Explicit_wheel_segment_hover() const noexcept;
     [[nodiscard]] std::optional<size_t> Effective_wheel_segment_hover() const noexcept;
     void Navigate_wheel(int steps);
     [[nodiscard]] bool Clear_toolbar_hover_states();

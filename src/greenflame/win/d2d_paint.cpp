@@ -22,7 +22,15 @@ constexpr float kDraftTextSelectionAlpha = 0.7f;
 constexpr float kDraftTextOverwriteCaretAlpha = 0.65f;
 constexpr float kSelectionWheelFontPreviewPointSize = 18.f;
 constexpr float kSelectionWheelFontPreviewLayoutPaddingPx = 4.f;
-constexpr float kHubHoverTintAlpha = 0.20f;
+constexpr float kSelectionWheelHubContentDimBlendAlpha = 0.55f;
+constexpr float kSelectionWheelHubInactiveOpacitySwipeOpacity =
+    1.0f - kSelectionWheelHubContentDimBlendAlpha;
+constexpr float kSelectionWheelHubOpacitySwipeLeadingAlpha = 0.9f;
+constexpr float kSelectionWheelHubOpacitySwipeTrailingAlpha = 0.18f;
+constexpr size_t kSelectionWheelHubOpacitySwipeBandCount = 6u;
+constexpr D2D1_COLOR_F kSelectionWheelHubInactiveFill = Make_d2d_color(244, 246, 241);
+constexpr D2D1_COLOR_F kSelectionWheelHubActiveFill = Make_d2d_color(220, 239, 216);
+constexpr D2D1_COLOR_F kSelectionWheelHubHoverFill = Make_d2d_color(206, 231, 199);
 
 void Draw_clipped_screenshot_rect(ID2D1RenderTarget *rt, ID2D1Bitmap *screenshot,
                                   core::RectPx restore_rect, int vd_width,
@@ -45,6 +53,15 @@ void Draw_clipped_screenshot_rect(ID2D1RenderTarget *rt, ID2D1Bitmap *screenshot
 [[nodiscard]] constexpr D2D1_COLOR_F With_alpha(D2D1_COLOR_F color,
                                                 float alpha) noexcept {
     return {color.r, color.g, color.b, alpha};
+}
+
+[[nodiscard]] constexpr D2D1_COLOR_F
+Blend_colors(D2D1_COLOR_F base, D2D1_COLOR_F overlay, float overlay_alpha) noexcept {
+    float const inverse_alpha = 1.0f - overlay_alpha;
+    return {base.r * inverse_alpha + overlay.r * overlay_alpha,
+            base.g * inverse_alpha + overlay.g * overlay_alpha,
+            base.b * inverse_alpha + overlay.b * overlay_alpha,
+            base.a * inverse_alpha + overlay.a * overlay_alpha};
 }
 
 [[nodiscard]] std::wstring_view
@@ -1309,16 +1326,11 @@ void Draw_selection_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         return;
     }
 
-    float const outer_r =
-        static_cast<float>(core::kSelectionWheelOuterDiameterPx) / 2.f;
-    float const inner_r = outer_r - core::kSelectionWheelWidthPx;
-    float const hub_r = inner_r - core::kTextWheelHubRingGapPx;
     float const half_gap = core::kTextWheelHubHalfGapPx;
     float const cx = static_cast<float>(input.selection_wheel_center_px.x);
     float const cy = static_cast<float>(input.selection_wheel_center_px.y);
 
     constexpr double deg_to_rad = 3.14159265358979323846 / 180.0;
-    constexpr double rad_to_deg = 180.0 / 3.14159265358979323846;
 
     auto arc_pt = [&](float r, float angle_deg) -> D2D1_POINT_2F {
         float const rad =
@@ -1326,16 +1338,6 @@ void Draw_selection_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         return D2D1::Point2F(cx + r * std::cosf(rad), cy + r * std::sinf(rad));
     };
 
-    // Per-radius chord gap angles: asin(half_gap / r) gives the angular offset
-    // at each radius such that the gap edge is a chord at distance half_gap_px
-    // from the slot boundary — producing parallel segment edges.
-    float const half_seg_gap_px = core::kSelectionWheelSegmentGapPx / 2.0f;
-    float const outer_gap_deg = static_cast<float>(
-        std::asin(static_cast<double>(half_seg_gap_px) / static_cast<double>(outer_r)) *
-        rad_to_deg);
-    float const inner_gap_deg = static_cast<float>(
-        std::asin(static_cast<double>(half_seg_gap_px) / static_cast<double>(inner_r)) *
-        rad_to_deg);
     float const half_slot_deg =
         (input.selection_wheel_segment_count > 0)
             ? 180.f / static_cast<float>(input.selection_wheel_segment_count)
@@ -1349,6 +1351,78 @@ void Draw_selection_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         res.checker_brush->SetTransform(D2D1::Matrix3x2F::Translation(cx, cy));
     }
 
+    auto build_segment_path =
+        [&](core::SelectionWheelSegmentGeometry const &geo, float segment_outer_r,
+            float segment_inner_r,
+            float half_gap_px = core::kSelectionWheelSegmentGapPx /
+                                2.0f) -> Microsoft::WRL::ComPtr<ID2D1PathGeometry> {
+        Microsoft::WRL::ComPtr<ID2D1PathGeometry> path;
+        if (segment_outer_r <= segment_inner_r || segment_inner_r <= 0.0f) {
+            return path;
+        }
+
+        float const outer_gap_deg =
+            core::Selection_wheel_gap_half_angle_degrees(segment_outer_r, half_gap_px);
+        float const inner_gap_deg =
+            core::Selection_wheel_gap_half_angle_degrees(segment_inner_r, half_gap_px);
+        float const b_before = geo.center_angle_degrees - half_slot_deg;
+        float const b_after = geo.center_angle_degrees + half_slot_deg;
+        float const outer_sa = b_before + outer_gap_deg;
+        float const outer_ea = b_after - outer_gap_deg;
+        float const inner_sa = b_before + inner_gap_deg;
+        float const inner_ea = b_after - inner_gap_deg;
+
+        float const outer_sweep = outer_ea - outer_sa;
+        float const inner_sweep = inner_ea - inner_sa;
+        if (outer_sweep <= 0.0f || inner_sweep <= 0.0f) {
+            return path;
+        }
+
+        D2D1_POINT_2F const outer_start = arc_pt(segment_outer_r, outer_sa);
+        D2D1_POINT_2F const outer_end = arc_pt(segment_outer_r, outer_ea);
+        D2D1_POINT_2F const inner_end = arc_pt(segment_inner_r, inner_ea);
+        D2D1_POINT_2F const inner_start = arc_pt(segment_inner_r, inner_sa);
+
+        D2D1_ARC_SIZE const outer_arc_sz =
+            (outer_sweep >= 180.f) ? D2D1_ARC_SIZE_LARGE : D2D1_ARC_SIZE_SMALL;
+        D2D1_ARC_SIZE const inner_arc_sz =
+            (inner_sweep >= 180.f) ? D2D1_ARC_SIZE_LARGE : D2D1_ARC_SIZE_SMALL;
+
+        if (FAILED(res.factory->CreatePathGeometry(path.GetAddressOf()))) {
+            return {};
+        }
+        Microsoft::WRL::ComPtr<ID2D1GeometrySink> sink;
+        if (FAILED(path->Open(sink.GetAddressOf()))) {
+            return {};
+        }
+        sink->BeginFigure(outer_start, D2D1_FIGURE_BEGIN_FILLED);
+        sink->AddArc(
+            D2D1::ArcSegment(outer_end, D2D1::SizeF(segment_outer_r, segment_outer_r),
+                             0.f, D2D1_SWEEP_DIRECTION_CLOCKWISE, outer_arc_sz));
+        sink->AddLine(inner_end);
+        sink->AddArc(D2D1::ArcSegment(
+            inner_start, D2D1::SizeF(segment_inner_r, segment_inner_r), 0.f,
+            D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE, inner_arc_sz));
+        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+        sink->Close();
+        return path;
+    };
+
+    auto build_segment_band = [&](ID2D1Geometry *outer_geometry,
+                                  ID2D1Geometry *inner_geometry)
+        -> Microsoft::WRL::ComPtr<ID2D1GeometryGroup> {
+        Microsoft::WRL::ComPtr<ID2D1GeometryGroup> band;
+        if (outer_geometry == nullptr || inner_geometry == nullptr) {
+            return band;
+        }
+        ID2D1Geometry *geometries[] = {outer_geometry, inner_geometry};
+        if (FAILED(res.factory->CreateGeometryGroup(
+                D2D1_FILL_MODE_ALTERNATE, geometries, 2, band.GetAddressOf()))) {
+            return {};
+        }
+        return band;
+    };
+
     // --- Ring segments ---
     for (size_t seg = 0; seg < input.selection_wheel_segment_count; ++seg) {
         // Skip the phantom slot at the end of a clamped-nav ring.
@@ -1359,81 +1433,95 @@ void Draw_selection_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         core::SelectionWheelSegmentGeometry const geo =
             core::Get_selection_wheel_segment_geometry(
                 seg, input.selection_wheel_segment_count, ring_angle_offset);
-        float const b_before = geo.center_angle_degrees - half_slot_deg;
-        float const b_after = geo.center_angle_degrees + half_slot_deg;
-        float const outer_sa = b_before + outer_gap_deg;
-        float const outer_ea = b_after - outer_gap_deg;
-        float const inner_sa = b_before + inner_gap_deg;
-        float const inner_ea = b_after - inner_gap_deg;
-
-        float const outer_sweep = outer_ea - outer_sa;
-        float const inner_sweep = inner_ea - inner_sa;
-
-        D2D1_POINT_2F const outer_start = arc_pt(outer_r, outer_sa);
-        D2D1_POINT_2F const outer_end = arc_pt(outer_r, outer_ea);
-        D2D1_POINT_2F const inner_end = arc_pt(inner_r, inner_ea);
-        D2D1_POINT_2F const inner_start = arc_pt(inner_r, inner_sa);
-
-        D2D1_ARC_SIZE const outer_arc_sz =
-            (outer_sweep >= 180.f) ? D2D1_ARC_SIZE_LARGE : D2D1_ARC_SIZE_SMALL;
-        D2D1_ARC_SIZE const inner_arc_sz =
-            (inner_sweep >= 180.f) ? D2D1_ARC_SIZE_LARGE : D2D1_ARC_SIZE_SMALL;
-
-        Microsoft::WRL::ComPtr<ID2D1PathGeometry> path;
-        if (FAILED(res.factory->CreatePathGeometry(path.GetAddressOf()))) {
+        core::SelectionWheelSegmentVisualMetrics const metrics =
+            core::Get_selection_wheel_segment_visual_metrics(
+                seg, input.selection_wheel_selected_segment,
+                input.selection_wheel_hovered_segment);
+        Microsoft::WRL::ComPtr<ID2D1PathGeometry> path =
+            build_segment_path(geo, metrics.outer_radius_px, metrics.inner_radius_px);
+        if (!path) {
             continue;
         }
-        Microsoft::WRL::ComPtr<ID2D1GeometrySink> sink;
-        if (FAILED(path->Open(sink.GetAddressOf()))) {
-            continue;
+
+        float const gray_inner_outer_r =
+            metrics.outer_radius_px - core::kSelectionWheelRingOuterBorderWidthPx;
+        float const gray_inner_inner_r =
+            metrics.inner_radius_px + core::kSelectionWheelRingOuterBorderWidthPx;
+        float const gray_half_gap_px = core::kSelectionWheelSegmentGapPx / 2.0f +
+                                       core::kSelectionWheelRingOuterBorderWidthPx;
+        Microsoft::WRL::ComPtr<ID2D1PathGeometry> gray_inner_path;
+        if (gray_inner_outer_r > gray_inner_inner_r) {
+            gray_inner_path = build_segment_path(geo, gray_inner_outer_r,
+                                                 gray_inner_inner_r, gray_half_gap_px);
         }
-        sink->BeginFigure(outer_start, D2D1_FIGURE_BEGIN_FILLED);
-        sink->AddArc(D2D1::ArcSegment(outer_end, D2D1::SizeF(outer_r, outer_r), 0.f,
-                                      D2D1_SWEEP_DIRECTION_CLOCKWISE, outer_arc_sz));
-        sink->AddLine(inner_end);
-        sink->AddArc(D2D1::ArcSegment(inner_start, D2D1::SizeF(inner_r, inner_r), 0.f,
-                                      D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE,
-                                      inner_arc_sz));
-        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
-        sink->Close();
+
+        float const black_inner_outer_r =
+            gray_inner_outer_r - core::kSelectionWheelRingInnerBorderWidthPx;
+        float const black_inner_inner_r =
+            gray_inner_inner_r + core::kSelectionWheelRingInnerBorderWidthPx;
+        float const black_half_gap_px =
+            gray_half_gap_px + core::kSelectionWheelRingInnerBorderWidthPx;
+        Microsoft::WRL::ComPtr<ID2D1PathGeometry> black_inner_path;
+        if (black_inner_outer_r > black_inner_inner_r) {
+            black_inner_path = build_segment_path(
+                geo, black_inner_outer_r, black_inner_inner_r, black_half_gap_px);
+        }
+
+        ID2D1Geometry *fill_geometry =
+            black_inner_path  ? static_cast<ID2D1Geometry *>(black_inner_path.Get())
+            : gray_inner_path ? static_cast<ID2D1Geometry *>(gray_inner_path.Get())
+                              : static_cast<ID2D1Geometry *>(path.Get());
 
         bool const is_font_seg = font_ring;
         if (is_font_seg) {
             res.solid_brush->SetColor(kOverlayButtonFillColor);
-            rt->FillGeometry(path.Get(), res.solid_brush.Get());
+            rt->FillGeometry(fill_geometry, res.solid_brush.Get());
         } else if (opacity_ring) {
             // Checker background (transform already set above), then color overlay.
             if (res.checker_brush) {
-                rt->FillGeometry(path.Get(), res.checker_brush.Get());
+                rt->FillGeometry(fill_geometry, res.checker_brush.Get());
             }
             if (seg < core::kHighlighterOpacityPresets.size()) {
                 res.solid_brush->SetColor(Colorref_to_d2d(
                     input.highlighter_wheel_current_color,
                     Alpha_from_opacity_percent(core::kHighlighterOpacityPresets[seg])));
-                rt->FillGeometry(path.Get(), res.solid_brush.Get());
+                rt->FillGeometry(fill_geometry, res.solid_brush.Get());
             }
         } else if (has_highlighter_hub) {
             // Color mode: show fully opaque swatches so colors are clearly visible.
             if (seg < input.selection_wheel_colors.size()) {
                 res.solid_brush->SetColor(
                     Colorref_to_d2d(input.selection_wheel_colors[seg], 1.0f));
-                rt->FillGeometry(path.Get(), res.solid_brush.Get());
+                rt->FillGeometry(fill_geometry, res.solid_brush.Get());
             } else {
                 continue;
             }
         } else if (seg < input.selection_wheel_colors.size()) {
             res.solid_brush->SetColor(
                 Colorref_to_d2d(input.selection_wheel_colors[seg]));
-            rt->FillGeometry(path.Get(), res.solid_brush.Get());
+            rt->FillGeometry(fill_geometry, res.solid_brush.Get());
         } else {
             continue;
         }
 
-        // Segment border.
-        res.solid_brush->SetColor(D2D1::ColorF(0.f, 0.f, 0.f));
-        rt->DrawGeometry(path.Get(), res.solid_brush.Get(),
-                         core::kSelectionWheelSegmentBorderWidthPx,
-                         res.round_cap_style.Get());
+        if (gray_inner_path) {
+            Microsoft::WRL::ComPtr<ID2D1GeometryGroup> gray_band =
+                build_segment_band(path.Get(), gray_inner_path.Get());
+            if (gray_band) {
+                res.solid_brush->SetColor(
+                    Colorref_to_d2d(core::kSelectionWheelRingOuterBorderColor, 1.0f));
+                rt->FillGeometry(gray_band.Get(), res.solid_brush.Get());
+            }
+        }
+
+        if (gray_inner_path && black_inner_path) {
+            Microsoft::WRL::ComPtr<ID2D1GeometryGroup> black_band =
+                build_segment_band(gray_inner_path.Get(), black_inner_path.Get());
+            if (black_band) {
+                res.solid_brush->SetColor(D2D1::ColorF(0.f, 0.f, 0.f));
+                rt->FillGeometry(black_band.Get(), res.solid_brush.Get());
+            }
+        }
 
         if (is_font_seg && res.dwrite_factory != nullptr) {
             size_t const font_index = seg;
@@ -1458,10 +1546,12 @@ void Draw_selection_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
                                 text_w + kSelectionWheelFontPreviewLayoutPaddingPx,
                                 text_h + kSelectionWheelFontPreviewLayoutPaddingPx);
                         if (preview_layout) {
-                            float const mid_r = (outer_r + inner_r) / 2.f;
+                            float const mid_r =
+                                (metrics.outer_radius_px + metrics.inner_radius_px) /
+                                2.f;
                             D2D1_POINT_2F const label_center =
                                 arc_pt(mid_r, geo.center_angle_degrees);
-                            res.solid_brush->SetColor(kOverlayButtonOutlineColor);
+                            res.solid_brush->SetColor(D2D1::ColorF(0.f, 0.f, 0.f));
                             rt->DrawTextLayout(
                                 D2D1::Point2F(label_center.x - text_w / 2.f,
                                               label_center.y - text_h / 2.f),
@@ -1473,94 +1563,21 @@ void Draw_selection_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         }
     }
 
-    // --- Halos for selected/hovered ring segments ---
-    auto draw_halo = [&](size_t seg, float inner_w, float outer_w) {
-        if (seg >= input.selection_wheel_segment_count) {
-            return;
-        }
-        core::SelectionWheelSegmentGeometry const geo =
-            core::Get_selection_wheel_segment_geometry(
-                seg, input.selection_wheel_segment_count, ring_angle_offset);
-        float const sa = geo.center_angle_degrees - half_slot_deg + outer_gap_deg;
-        float const ea = geo.center_angle_degrees + half_slot_deg - outer_gap_deg;
-
-        float const inner_halo_r =
-            outer_r + core::kSelectionWheelSegmentBorderWidthPx / 2.f +
-            core::kSelectionWheelSelectionHaloGapPx + inner_w / 2.f;
-        float const outer_halo_r = inner_halo_r + inner_w / 2.f + outer_w / 2.f;
-
-        float const halo_sweep = ea - sa;
-        D2D1_ARC_SIZE const arc_sz =
-            (halo_sweep >= 180.f) ? D2D1_ARC_SIZE_LARGE : D2D1_ARC_SIZE_SMALL;
-
-        // Black inner ring.
-        {
-            D2D1_POINT_2F const p0 = arc_pt(inner_halo_r, sa);
-            D2D1_POINT_2F const p1 = arc_pt(inner_halo_r, ea);
-            Microsoft::WRL::ComPtr<ID2D1PathGeometry> arc_path;
-            if (FAILED(res.factory->CreatePathGeometry(arc_path.GetAddressOf()))) {
-                return;
-            }
-            Microsoft::WRL::ComPtr<ID2D1GeometrySink> arc_sink;
-            if (FAILED(arc_path->Open(arc_sink.GetAddressOf()))) {
-                return;
-            }
-            arc_sink->BeginFigure(p0, D2D1_FIGURE_BEGIN_HOLLOW);
-            arc_sink->AddArc(
-                D2D1::ArcSegment(p1, D2D1::SizeF(inner_halo_r, inner_halo_r), 0.f,
-                                 D2D1_SWEEP_DIRECTION_CLOCKWISE, arc_sz));
-            arc_sink->EndFigure(D2D1_FIGURE_END_OPEN);
-            arc_sink->Close();
-            res.solid_brush->SetColor(D2D1::ColorF(0.f, 0.f, 0.f));
-            rt->DrawGeometry(arc_path.Get(), res.solid_brush.Get(), inner_w,
-                             res.round_cap_style.Get());
-        }
-        // Green outer ring.
-        {
-            D2D1_POINT_2F const p0 = arc_pt(outer_halo_r, sa);
-            D2D1_POINT_2F const p1 = arc_pt(outer_halo_r, ea);
-            Microsoft::WRL::ComPtr<ID2D1PathGeometry> arc_path;
-            if (FAILED(res.factory->CreatePathGeometry(arc_path.GetAddressOf()))) {
-                return;
-            }
-            Microsoft::WRL::ComPtr<ID2D1GeometrySink> arc_sink;
-            if (FAILED(arc_path->Open(arc_sink.GetAddressOf()))) {
-                return;
-            }
-            arc_sink->BeginFigure(p0, D2D1_FIGURE_BEGIN_HOLLOW);
-            arc_sink->AddArc(
-                D2D1::ArcSegment(p1, D2D1::SizeF(outer_halo_r, outer_halo_r), 0.f,
-                                 D2D1_SWEEP_DIRECTION_CLOCKWISE, arc_sz));
-            arc_sink->EndFigure(D2D1_FIGURE_END_OPEN);
-            arc_sink->Close();
-            res.solid_brush->SetColor(kBorderColor);
-            rt->DrawGeometry(arc_path.Get(), res.solid_brush.Get(), outer_w,
-                             res.round_cap_style.Get());
-        }
-    };
-
-    if (input.selection_wheel_selected_segment.has_value()) {
-        draw_halo(*input.selection_wheel_selected_segment,
-                  core::kSelectionWheelSelectionHaloInnerWidthPx,
-                  core::kSelectionWheelSelectionHaloOuterWidthPx);
-    }
-    if (input.selection_wheel_hovered_segment.has_value()) {
-        draw_halo(*input.selection_wheel_hovered_segment,
-                  core::kSelectionWheelHoverHaloInnerWidthPx,
-                  core::kSelectionWheelHoverHaloOuterWidthPx);
-    }
-
     // --- Hub (text tool / highlighter) ---
     if (!has_hub && !has_highlighter_hub) {
         return;
     }
 
-    float const chord_h = std::sqrtf(hub_r * hub_r - half_gap * half_gap);
-
     // Build left and right hub path geometries (shared by both hub types).
-    auto make_hub_path =
-        [&](bool is_left) -> Microsoft::WRL::ComPtr<ID2D1PathGeometry> {
+    auto make_hub_path = [&](bool is_left, float hub_radius,
+                             float hub_half_gap = core::kTextWheelHubHalfGapPx)
+        -> Microsoft::WRL::ComPtr<ID2D1PathGeometry> {
         Microsoft::WRL::ComPtr<ID2D1PathGeometry> path;
+        if (hub_radius <= hub_half_gap) {
+            return path;
+        }
+        float const chord_h =
+            std::sqrtf(hub_radius * hub_radius - hub_half_gap * hub_half_gap);
         if (FAILED(res.factory->CreatePathGeometry(path.GetAddressOf()))) {
             return nullptr;
         }
@@ -1570,20 +1587,20 @@ void Draw_selection_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         }
         if (is_left) {
             // Left button: chord on right side, arc sweeps CCW through left side.
-            D2D1_POINT_2F const p_top = D2D1::Point2F(cx - half_gap, cy - chord_h);
-            D2D1_POINT_2F const p_bot = D2D1::Point2F(cx - half_gap, cy + chord_h);
+            D2D1_POINT_2F const p_top = D2D1::Point2F(cx - hub_half_gap, cy - chord_h);
+            D2D1_POINT_2F const p_bot = D2D1::Point2F(cx - hub_half_gap, cy + chord_h);
             sink->BeginFigure(p_top, D2D1_FIGURE_BEGIN_FILLED);
-            sink->AddArc(D2D1::ArcSegment(p_bot, D2D1::SizeF(hub_r, hub_r), 0.f,
-                                          D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE,
+            sink->AddArc(D2D1::ArcSegment(p_bot, D2D1::SizeF(hub_radius, hub_radius),
+                                          0.f, D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE,
                                           D2D1_ARC_SIZE_SMALL));
             sink->AddLine(p_top);
         } else {
             // Right button: chord on left side, arc sweeps CW through right side.
-            D2D1_POINT_2F const p_top = D2D1::Point2F(cx + half_gap, cy - chord_h);
-            D2D1_POINT_2F const p_bot = D2D1::Point2F(cx + half_gap, cy + chord_h);
+            D2D1_POINT_2F const p_top = D2D1::Point2F(cx + hub_half_gap, cy - chord_h);
+            D2D1_POINT_2F const p_bot = D2D1::Point2F(cx + hub_half_gap, cy + chord_h);
             sink->BeginFigure(p_top, D2D1_FIGURE_BEGIN_FILLED);
-            sink->AddArc(D2D1::ArcSegment(p_bot, D2D1::SizeF(hub_r, hub_r), 0.f,
-                                          D2D1_SWEEP_DIRECTION_CLOCKWISE,
+            sink->AddArc(D2D1::ArcSegment(p_bot, D2D1::SizeF(hub_radius, hub_radius),
+                                          0.f, D2D1_SWEEP_DIRECTION_CLOCKWISE,
                                           D2D1_ARC_SIZE_SMALL));
             sink->AddLine(p_top);
         }
@@ -1592,120 +1609,204 @@ void Draw_selection_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         return path;
     };
 
-    // Draw the hue-spectrum gradient rectangle glyph centered at the given x position.
-    auto draw_hue_glyph = [&](float side_cx) {
+    struct HubPathBundle final {
+        core::SelectionWheelHubVisualMetrics metrics = {};
+        Microsoft::WRL::ComPtr<ID2D1PathGeometry> outer_path;
+        Microsoft::WRL::ComPtr<ID2D1PathGeometry> gray_inner_path;
+        Microsoft::WRL::ComPtr<ID2D1PathGeometry> black_inner_path;
+        float glyph_center_x = 0.0f;
+    };
+
+    auto hub_fill_color = [](core::SelectionWheelHubVisualState state) noexcept {
+        switch (state) {
+        case core::SelectionWheelHubVisualState::Normal:
+            return kSelectionWheelHubInactiveFill;
+        case core::SelectionWheelHubVisualState::Selected:
+            return kSelectionWheelHubActiveFill;
+        case core::SelectionWheelHubVisualState::Hovered:
+            return kSelectionWheelHubHoverFill;
+        }
+        return kSelectionWheelHubInactiveFill;
+    };
+
+    auto hub_content_color = [&](core::SelectionWheelHubVisualState state,
+                                 D2D1_COLOR_F active_color) noexcept {
+        switch (state) {
+        case core::SelectionWheelHubVisualState::Normal:
+            return Blend_colors(active_color, hub_fill_color(state),
+                                kSelectionWheelHubContentDimBlendAlpha);
+        case core::SelectionWheelHubVisualState::Selected:
+        case core::SelectionWheelHubVisualState::Hovered:
+            return active_color;
+        }
+        return active_color;
+    };
+
+    auto hub_opacity_swipe_opacity =
+        [](core::SelectionWheelHubVisualState state) noexcept {
+            switch (state) {
+            case core::SelectionWheelHubVisualState::Normal:
+                return kSelectionWheelHubInactiveOpacitySwipeOpacity;
+            case core::SelectionWheelHubVisualState::Selected:
+            case core::SelectionWheelHubVisualState::Hovered:
+                return 1.0f;
+            }
+            return 1.0f;
+        };
+
+    auto build_hub_paths =
+        [&](bool is_left,
+            core::SelectionWheelHubVisualMetrics const &metrics) -> HubPathBundle {
+        HubPathBundle bundle{};
+        bundle.metrics = metrics;
+        bundle.outer_path = make_hub_path(is_left, metrics.radius_px);
+        bundle.glyph_center_x = is_left ? cx - (metrics.radius_px + half_gap) / 2.f
+                                        : cx + (metrics.radius_px + half_gap) / 2.f;
+        if (!bundle.outer_path || !core::kTextWheelHubDrawBorder) {
+            return bundle;
+        }
+
+        float const gray_inner_radius =
+            metrics.radius_px - core::kSelectionWheelRingOuterBorderWidthPx;
+        float const gray_half_gap =
+            half_gap + core::kSelectionWheelRingOuterBorderWidthPx;
+        if (gray_inner_radius > gray_half_gap) {
+            bundle.gray_inner_path =
+                make_hub_path(is_left, gray_inner_radius, gray_half_gap);
+        }
+
+        float const black_inner_radius =
+            gray_inner_radius - core::kSelectionWheelRingInnerBorderWidthPx;
+        float const black_half_gap =
+            gray_half_gap + core::kSelectionWheelRingInnerBorderWidthPx;
+        if (black_inner_radius > black_half_gap) {
+            bundle.black_inner_path =
+                make_hub_path(is_left, black_inner_radius, black_half_gap);
+        }
+
+        return bundle;
+    };
+
+    // Draw the hue-spectrum gradient rectangle glyph centered in the given hub half.
+    auto draw_hue_glyph = [&](HubPathBundle const &bundle) {
         if (!res.text_wheel_hue_brush) {
             return;
         }
         float const glyph_w = core::kTextWheelHubGlyphRectWidthPx;
         float const glyph_h = core::kTextWheelHubGlyphRectHeightPx;
         D2D1_RECT_F const glyph_rect =
-            D2D1::RectF(side_cx - glyph_w / 2.f, cy - glyph_h / 2.f,
-                        side_cx + glyph_w / 2.f, cy + glyph_h / 2.f);
+            D2D1::RectF(bundle.glyph_center_x - glyph_w / 2.f, cy - glyph_h / 2.f,
+                        bundle.glyph_center_x + glyph_w / 2.f, cy + glyph_h / 2.f);
         res.text_wheel_hue_brush->SetStartPoint(D2D1::Point2F(glyph_rect.left, cy));
         res.text_wheel_hue_brush->SetEndPoint(D2D1::Point2F(glyph_rect.right, cy));
         rt->FillRectangle(glyph_rect, res.text_wheel_hue_brush.Get());
-        res.solid_brush->SetColor(D2D1::ColorF(0.f, 0.f, 0.f));
+        if (bundle.metrics.state == core::SelectionWheelHubVisualState::Normal) {
+            res.solid_brush->SetColor(
+                With_alpha(hub_fill_color(bundle.metrics.state),
+                           kSelectionWheelHubContentDimBlendAlpha));
+            rt->FillRectangle(glyph_rect, res.solid_brush.Get());
+        }
+        res.solid_brush->SetColor(
+            hub_content_color(bundle.metrics.state, D2D1::ColorF(0.f, 0.f, 0.f)));
         rt->DrawRectangle(glyph_rect, res.solid_brush.Get(), 1.f);
     };
 
-    // Helper: fill+border hub buttons and apply hover tint.
-    auto draw_hub_buttons = [&](bool left_active, std::optional<bool> hovered_left_opt,
-                                ID2D1PathGeometry *left_path_raw,
-                                ID2D1PathGeometry *right_path_raw) {
-        bool const right_active = !left_active;
-
-        if (left_path_raw) {
-            res.solid_brush->SetColor(left_active ? kOverlayButtonOutlineColor
-                                                  : kOverlayButtonFillColor);
-            rt->FillGeometry(left_path_raw, res.solid_brush.Get());
-        }
-        if (right_path_raw) {
-            res.solid_brush->SetColor(right_active ? kOverlayButtonOutlineColor
-                                                   : kOverlayButtonFillColor);
-            rt->FillGeometry(right_path_raw, res.solid_brush.Get());
-        }
-
-        if (core::kTextWheelHubDrawBorder) {
-            auto draw_border = [&](bool is_left, bool is_active) {
-                float const chord_x = is_left ? cx - half_gap : cx + half_gap;
-                D2D1_COLOR_F const border_col =
-                    is_active ? kOverlayButtonFillColor : kOverlayButtonOutlineColor;
-                D2D1_POINT_2F const p_top = D2D1::Point2F(chord_x, cy - chord_h);
-                D2D1_POINT_2F const p_bot = D2D1::Point2F(chord_x, cy + chord_h);
-                Microsoft::WRL::ComPtr<ID2D1PathGeometry> arc_path;
-                if (FAILED(res.factory->CreatePathGeometry(arc_path.GetAddressOf()))) {
-                    return;
-                }
-                Microsoft::WRL::ComPtr<ID2D1GeometrySink> arc_sink;
-                if (FAILED(arc_path->Open(arc_sink.GetAddressOf()))) {
-                    return;
-                }
-                arc_sink->BeginFigure(p_top, D2D1_FIGURE_BEGIN_HOLLOW);
-                arc_sink->AddArc(
-                    D2D1::ArcSegment(p_bot, D2D1::SizeF(hub_r, hub_r), 0.f,
-                                     is_left ? D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE
-                                             : D2D1_SWEEP_DIRECTION_CLOCKWISE,
-                                     D2D1_ARC_SIZE_SMALL));
-                arc_sink->EndFigure(D2D1_FIGURE_END_OPEN);
-                arc_sink->Close();
-                res.solid_brush->SetColor(border_col);
-                rt->DrawGeometry(arc_path.Get(), res.solid_brush.Get(),
-                                 core::kSelectionWheelSegmentBorderWidthPx,
-                                 res.round_cap_style.Get());
-                rt->DrawLine(p_top, p_bot, res.solid_brush.Get(),
-                             core::kSelectionWheelSegmentBorderWidthPx,
-                             res.flat_cap_style.Get());
-            };
-            draw_border(true, left_active);
-            draw_border(false, right_active);
+    auto draw_opacity_swipe_glyph = [&](HubPathBundle const &bundle) {
+        float const glyph_w = core::kTextWheelHubGlyphRectWidthPx;
+        float const glyph_h = core::kTextWheelHubGlyphRectHeightPx;
+        D2D1_RECT_F const glyph_rect =
+            D2D1::RectF(bundle.glyph_center_x - glyph_w / 2.f, cy - glyph_h / 2.f,
+                        bundle.glyph_center_x + glyph_w / 2.f, cy + glyph_h / 2.f);
+        float const swipe_opacity = hub_opacity_swipe_opacity(bundle.metrics.state);
+        constexpr float band_position_divisor =
+            static_cast<float>(kSelectionWheelHubOpacitySwipeBandCount - 1u);
+        float const band_width =
+            (glyph_rect.right - glyph_rect.left) /
+            static_cast<float>(kSelectionWheelHubOpacitySwipeBandCount);
+        for (size_t i = 0; i < kSelectionWheelHubOpacitySwipeBandCount; ++i) {
+            float const t = static_cast<float>(i) / band_position_divisor;
+            float const alpha =
+                (kSelectionWheelHubOpacitySwipeLeadingAlpha * (1.0f - t) +
+                 kSelectionWheelHubOpacitySwipeTrailingAlpha * t) *
+                swipe_opacity;
+            float const band_left =
+                glyph_rect.left + band_width * static_cast<float>(i);
+            float const band_right = band_left + band_width + 1.0f;
+            res.solid_brush->SetColor(D2D1::ColorF(0.f, 0.f, 0.f, alpha));
+            rt->FillRectangle(
+                D2D1::RectF(band_left, glyph_rect.top, band_right, glyph_rect.bottom),
+                res.solid_brush.Get());
         }
 
-        if (hovered_left_opt.has_value()) {
-            ID2D1PathGeometry *hovered_path =
-                *hovered_left_opt ? left_path_raw : right_path_raw;
-            if (hovered_path) {
-                D2D1_LAYER_PARAMETERS layer_params = D2D1::LayerParameters();
-                layer_params.geometricMask = hovered_path;
-                Microsoft::WRL::ComPtr<ID2D1Layer> layer;
-                if (SUCCEEDED(rt->CreateLayer(nullptr, layer.GetAddressOf()))) {
-                    rt->PushLayer(layer_params, layer.Get());
-                    res.solid_brush->SetColor(
-                        With_alpha(kBorderColor, kHubHoverTintAlpha));
-                    D2D1_RECT_F const hub_bounds =
-                        D2D1::RectF(cx - hub_r, cy - hub_r, cx + hub_r, cy + hub_r);
-                    rt->FillRectangle(hub_bounds, res.solid_brush.Get());
-                    rt->PopLayer();
-                }
+        res.solid_brush->SetColor(D2D1::ColorF(0.f, 0.f, 0.f, swipe_opacity));
+        rt->DrawRectangle(glyph_rect, res.solid_brush.Get(), 1.0f);
+    };
+
+    auto draw_hub_half = [&](HubPathBundle const &bundle) {
+        if (!bundle.outer_path) {
+            return;
+        }
+
+        ID2D1Geometry *fill_geometry =
+            bundle.black_inner_path
+                ? static_cast<ID2D1Geometry *>(bundle.black_inner_path.Get())
+            : bundle.gray_inner_path
+                ? static_cast<ID2D1Geometry *>(bundle.gray_inner_path.Get())
+                : static_cast<ID2D1Geometry *>(bundle.outer_path.Get());
+
+        res.solid_brush->SetColor(hub_fill_color(bundle.metrics.state));
+        rt->FillGeometry(fill_geometry, res.solid_brush.Get());
+
+        if (!core::kTextWheelHubDrawBorder) {
+            return;
+        }
+        if (bundle.gray_inner_path) {
+            Microsoft::WRL::ComPtr<ID2D1GeometryGroup> gray_band = build_segment_band(
+                bundle.outer_path.Get(), bundle.gray_inner_path.Get());
+            if (gray_band) {
+                res.solid_brush->SetColor(
+                    Colorref_to_d2d(core::kSelectionWheelRingOuterBorderColor, 1.0f));
+                rt->FillGeometry(gray_band.Get(), res.solid_brush.Get());
+            }
+        }
+        if (bundle.gray_inner_path && bundle.black_inner_path) {
+            Microsoft::WRL::ComPtr<ID2D1GeometryGroup> black_band = build_segment_band(
+                bundle.gray_inner_path.Get(), bundle.black_inner_path.Get());
+            if (black_band) {
+                res.solid_brush->SetColor(D2D1::ColorF(0.f, 0.f, 0.f));
+                rt->FillGeometry(black_band.Get(), res.solid_brush.Get());
             }
         }
     };
 
     // --- Text style hub ---
     if (has_hub) {
-        Microsoft::WRL::ComPtr<ID2D1PathGeometry> left_path = make_hub_path(true);
-        Microsoft::WRL::ComPtr<ID2D1PathGeometry> right_path = make_hub_path(false);
-
         bool const left_active =
             (input.text_wheel_active_mode == core::TextWheelMode::Color);
+        bool const left_hovered =
+            input.text_wheel_hovered_hub ==
+            std::optional<core::TextWheelHubSide>{core::TextWheelHubSide::Color};
+        bool const right_hovered =
+            input.text_wheel_hovered_hub ==
+            std::optional<core::TextWheelHubSide>{core::TextWheelHubSide::Font};
+        HubPathBundle const left_bundle = build_hub_paths(
+            true,
+            core::Get_selection_wheel_hub_visual_metrics(left_active, left_hovered));
+        HubPathBundle const right_bundle = build_hub_paths(
+            false,
+            core::Get_selection_wheel_hub_visual_metrics(!left_active, right_hovered));
 
-        std::optional<bool> hovered_left;
-        if (input.text_wheel_hovered_hub.has_value()) {
-            hovered_left =
-                (*input.text_wheel_hovered_hub == core::TextWheelHubSide::Color);
-        }
-
-        draw_hub_buttons(left_active, hovered_left, left_path.Get(), right_path.Get());
+        draw_hub_half(left_bundle);
+        draw_hub_half(right_bundle);
 
         // Left glyph: hue gradient rectangle.
-        if (left_path) {
-            draw_hue_glyph(cx - (hub_r + half_gap) / 2.f);
+        if (left_bundle.outer_path) {
+            draw_hue_glyph(left_bundle);
         }
 
         // Right glyph: "A" label in current font.
-        if (right_path && res.dwrite_factory &&
+        if (right_bundle.outer_path && res.dwrite_factory &&
             !input.text_wheel_hub_font_family.empty()) {
-            float const glyph_cx = cx + (hub_r + half_gap) / 2.f;
             Microsoft::WRL::ComPtr<IDWriteTextFormat> fmt = Create_text_format(
                 res.dwrite_factory.Get(), input.text_wheel_hub_font_family,
                 kSelectionWheelFontPreviewPointSize);
@@ -1720,11 +1821,11 @@ void Draw_selection_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
                             text_w + kSelectionWheelFontPreviewLayoutPaddingPx,
                             text_h + kSelectionWheelFontPreviewLayoutPaddingPx);
                     if (layout) {
-                        res.solid_brush->SetColor(!left_active
-                                                      ? kOverlayButtonFillColor
-                                                      : kOverlayButtonOutlineColor);
+                        res.solid_brush->SetColor(hub_content_color(
+                            right_bundle.metrics.state, D2D1::ColorF(0.f, 0.f, 0.f)));
                         rt->DrawTextLayout(
-                            D2D1::Point2F(glyph_cx - text_w / 2.f, cy - text_h / 2.f),
+                            D2D1::Point2F(right_bundle.glyph_center_x - text_w / 2.f,
+                                          cy - text_h / 2.f),
                             layout.Get(), res.solid_brush.Get());
                     }
                 }
@@ -1734,48 +1835,32 @@ void Draw_selection_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
 
     // --- Highlighter opacity hub ---
     if (has_highlighter_hub) {
-        Microsoft::WRL::ComPtr<ID2D1PathGeometry> left_path = make_hub_path(true);
-        Microsoft::WRL::ComPtr<ID2D1PathGeometry> right_path = make_hub_path(false);
-
         bool const left_active =
             (input.highlighter_wheel_active_mode == core::HighlighterWheelMode::Color);
+        bool const left_hovered = input.highlighter_wheel_hovered_hub ==
+                                  std::optional<core::HighlighterWheelHubSide>{
+                                      core::HighlighterWheelHubSide::Color};
+        bool const right_hovered = input.highlighter_wheel_hovered_hub ==
+                                   std::optional<core::HighlighterWheelHubSide>{
+                                       core::HighlighterWheelHubSide::Opacity};
+        HubPathBundle const left_bundle = build_hub_paths(
+            true,
+            core::Get_selection_wheel_hub_visual_metrics(left_active, left_hovered));
+        HubPathBundle const right_bundle = build_hub_paths(
+            false,
+            core::Get_selection_wheel_hub_visual_metrics(!left_active, right_hovered));
 
-        std::optional<bool> hovered_left;
-        if (input.highlighter_wheel_hovered_hub.has_value()) {
-            hovered_left = (*input.highlighter_wheel_hovered_hub ==
-                            core::HighlighterWheelHubSide::Color);
-        }
-
-        draw_hub_buttons(left_active, hovered_left, left_path.Get(), right_path.Get());
+        draw_hub_half(left_bundle);
+        draw_hub_half(right_bundle);
 
         // Left glyph: hue gradient rectangle.
-        if (left_path) {
-            draw_hue_glyph(cx - (hub_r + half_gap) / 2.f);
+        if (left_bundle.outer_path) {
+            draw_hue_glyph(left_bundle);
         }
 
-        // Right glyph: alpha-mask bitmap tinted by active state.
-        if (right_path && res.alpha_wheel_hub_bitmap) {
-            float const glyph_cx = cx + (hub_r + half_gap) / 2.f;
-            float const glyph_w = core::kTextWheelHubGlyphRectWidthPx;
-            float const glyph_h = core::kTextWheelHubGlyphRectHeightPx;
-            D2D1_SIZE_F const bmp_size = res.alpha_wheel_hub_bitmap->GetSize();
-            float const scale =
-                (bmp_size.width > 0.f && bmp_size.height > 0.f)
-                    ? std::min(glyph_w / bmp_size.width, glyph_h / bmp_size.height)
-                    : 1.f;
-            float const draw_w = bmp_size.width * scale;
-            float const draw_h = bmp_size.height * scale;
-            D2D1_RECT_F const dest =
-                D2D1::RectF(glyph_cx - draw_w / 2.f, cy - draw_h / 2.f,
-                            glyph_cx + draw_w / 2.f, cy + draw_h / 2.f);
-            D2D1_RECT_F const src =
-                D2D1::RectF(0.f, 0.f, bmp_size.width, bmp_size.height);
-            res.solid_brush->SetColor(!left_active ? kOverlayButtonFillColor
-                                                   : kOverlayButtonOutlineColor);
-            rt->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
-            rt->FillOpacityMask(res.alpha_wheel_hub_bitmap.Get(), res.solid_brush.Get(),
-                                D2D1_OPACITY_MASK_CONTENT_GRAPHICS, &dest, &src);
-            rt->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+        // Right glyph: generated rectangular opacity strip in black alpha bands.
+        if (right_bundle.outer_path) {
+            draw_opacity_swipe_glyph(right_bundle);
         }
     }
 }

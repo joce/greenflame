@@ -60,10 +60,11 @@ the palette size ever changes, the color mode ring reflects it automatically.
 
 Identical geometry to the existing annotation selection wheel:
 
-- outer diameter: `kSelectionWheelOuterDiameterPx` (currently 130 px)
-- ring width: `kSelectionWheelWidthPx` (currently 22 px)
-- segment gap: `kSelectionWheelSegmentGapPx` (currently 10 px)
-- border, hover halo, and selection halo: same constants and rendering as today
+- outer diameter: `kSelectionWheelOuterDiameterPx` (currently 134 px)
+- ring width: `kSelectionWheelWidthPx` (currently 24 px)
+- segment gap: `kSelectionWheelSegmentGapPx` (currently 8 px)
+- border and hover/selection emphasis use the shared selection-wheel renderer and its
+  current border/inflation constants
 
 In **color mode** the ring shows exactly the annotation color palette (currently 8
 segments) at the same geometry produced by `Get_selection_wheel_segment_geometry`.
@@ -127,8 +128,9 @@ inline constexpr bool kTextWheelHubDrawBorder = true;
 
 - Geometry: circular segment of radius `hub_r`, chord at `x = center.x − kTextWheelHubGapPx/2`,
   curved edge facing left (major arc).
-- Fill: inactive = `kOverlayButtonFillColor`; active = inverted (`kOverlayButtonOutlineColor`
-  fill with `kOverlayButtonFillColor` glyph tint).
+- Fill: inactive = near-neutral light fill; active/hovered = progressively stronger
+  mint-tinted fills.  The active and hovered states also get a curved-edge-only outward
+  inflation, with hover stronger than active.
 - Glyph: a small hue-spectrum gradient rectangle drawn in the center of the button.
   - Dimensions: `kTextWheelHubGlyphRectWidthPx` × `kTextWheelHubGlyphRectHeightPx`.
   - Center x: midpoint of the button's horizontal span = `center.x − (hub_r + kTextWheelHubGapPx/2) / 2`,
@@ -137,31 +139,32 @@ inline constexpr bool kTextWheelHubDrawBorder = true;
     cyan → blue → magenta → red (7 stops, saturation=1, lightness=0.5, full opacity).
   - Use `ID2D1LinearGradientBrush` with 7 gradient stops.  Create it once per
     `D2DOverlayResources` device creation (or on first use) and cache it.
+  - When the hub half is inactive, dim the hue strip by blending it toward the current
+    hub fill instead of leaving it fully saturated.
 
 **Right button — font:**
 
 - Geometry: circular segment of radius `hub_r`, chord at `x = center.x + kTextWheelHubGapPx/2`,
   curved edge facing right (major arc).  Mirror of the left button.
-- Fill: same active/inactive rule as left button, mirrored.
+- Fill: same inactive/active/hovered treatment as the left button, mirrored.
 - Glyph: the letter `A` rendered at `kSelectionWheelFontPreviewPointSize` (the
   same constant already used for ring font glyphs) in the current selected font family,
   centered in the right button (`center.x + (hub_r + kTextWheelHubGapPx/2) / 2`, `center.y`).
   This always reflects the currently active `TextFontChoice`
-  so the user sees which font is selected even before opening font mode.
+  so the user sees which font is selected even before opening font mode.  The inactive
+  hub glyph is color-dimmed rather than flattened to gray, while the active glyph stays
+  at full contrast.
 
-**Hover state for hub semi-circles:**
+**Borders and hover state for hub semi-circles:**
 
-Both semi-circles follow the `IOverlayButton` visual contract:
+Both semi-circles use the same full-perimeter border language as the outer ring:
 
-- Idle: `kOverlayButtonFillColor` background.
-- Hovered (inactive mode): lighter overlay on top of idle fill — use `kBorderColor` at
-  20 % opacity as a tint, same as toolbar button hover treatment.
-- Active mode: fill and glyph colors inverted (`kOverlayButtonOutlineColor` background,
-  `kOverlayButtonFillColor` glyph).
-- Hovered (active mode): `kBorderColor` tint on top of active fill.
+- `1.5 px` light-gray outer border
+- `1 px` inset black inner border
+- the borders wrap both the curved outer edge and the straight center chord edge
 
-No outer halo is drawn for the hub buttons; the inverted active fill is the only
-active indicator.
+The hub does not use dark inverted fills or green structural outlines.  State is shown
+with the lighter fill tints plus the small curved-edge-only outward inflation.
 
 ---
 
@@ -358,8 +361,8 @@ flat chord edge (straight line).
 - Font family: `input.text_wheel_hub_font_family`.
 - Point size: `kSelectionWheelFontPreviewPointSize`.
 - Glyph center x = `cx + (hub_r + half_gap) / 2`, y = `cy`.
-- Draw in `kOverlayButtonOutlineColor` when the right button is active (inverted fill),
-  else `kOverlayButtonFillColor` — same swap as the fill.
+- Draw in black, with the inactive state dimmed by blending that black toward the
+  current hub fill.  The ring font-segment `A` glyphs use the same black content color.
 
 *Hub hover tint:*
 
@@ -452,7 +455,7 @@ consistent with current behavior.
 ## Geometry Reference Diagram
 
 ```
-                           outer_radius = 65 px
+                           outer_radius = 67 px
                     ┌──────────────────────────────┐
                     │         outer ring           │
                     │    inner_radius = 43 px      │
@@ -507,7 +510,8 @@ Add to `docs/manual_test_plan.md` under the Text tool section:
   - Verify center hub shows two circular-segment buttons with a visible vertical gap
     between them and a visible gap between the buttons and the outer ring.
   - Verify the hub buttons do NOT touch the outer ring segments.
-  - Verify left hub shows a hue-spectrum gradient rectangle.
+  - Verify left hub shows a hue-spectrum gradient rectangle, and that the inactive
+    strip is visibly dimmer than the active one.
   - Verify right hub shows `A` in the current font.
   - Verify outer ring initially shows the 8 annotation colors (color mode).
   - Toggle `kTextWheelHubDrawBorder` to `false` and rebuild; verify curved edge stroke

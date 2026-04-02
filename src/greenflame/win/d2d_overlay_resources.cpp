@@ -409,14 +409,6 @@ bool D2DOverlayResources::Upload_glyph_bitmaps(
     return true;
 }
 
-bool D2DOverlayResources::Upload_alpha_wheel_hub_glyph(
-    OverlayButtonGlyph const *glyph) {
-    if (!hwnd_rt) {
-        return false;
-    }
-    return Upload_glyph(hwnd_rt.Get(), glyph, alpha_wheel_hub_bitmap);
-}
-
 ID2D1Bitmap *
 D2DOverlayResources::Toolbar_glyph_bitmap(OverlayToolbarGlyphId glyph) const noexcept {
     size_t const index = Overlay_toolbar_glyph_index(glyph);
@@ -455,7 +447,6 @@ void D2DOverlayResources::Release_device_resources() {
     text_center.Reset();
     text_hint.Reset();
     text_wheel_hue_brush.Reset();
-    alpha_wheel_hub_bitmap.Reset();
     checker_brush.Reset();
     for (auto &glyph : toolbar_glyphs) {
         glyph.Reset();

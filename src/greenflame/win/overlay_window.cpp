@@ -43,7 +43,6 @@ constexpr int kHelpToolGlyphResourceId = 112;
 constexpr int kTextToolGlyphResourceId = 113;
 constexpr int kBubbleToolGlyphResourceId = 114;
 constexpr int kCursorToolGlyphResourceId = 115;
-constexpr int kAlphaWheelHubGlyphResourceId = 116;
 constexpr UINT_PTR kBrushSizeOverlayTimerId = 1;
 constexpr UINT_PTR kCaretBlinkTimerId = 2;
 constexpr UINT_PTR kHighlighterStraightenTimerId = 3;
@@ -608,7 +607,6 @@ struct OverlayWindow::OverlayResources {
     std::array<std::shared_ptr<OverlayButtonGlyph const>,
                static_cast<size_t>(OverlayToolbarGlyphId::Count)>
         toolbar_glyphs = {};
-    std::shared_ptr<OverlayButtonGlyph const> alpha_wheel_hub_glyph;
 
     OverlayResources() = default;
     ~OverlayResources() { Reset(); }
@@ -624,8 +622,6 @@ struct OverlayWindow::OverlayResources {
             toolbar_glyphs[Overlay_toolbar_glyph_index(spec.glyph)] =
                 Load_png_resource_alpha_mask(hinstance, spec.resource_id);
         }
-        alpha_wheel_hub_glyph =
-            Load_png_resource_alpha_mask(hinstance, kAlphaWheelHubGlyphResourceId);
         return true;
     }
 
@@ -649,7 +645,6 @@ struct OverlayWindow::OverlayResources {
         for (auto &glyph : toolbar_glyphs) {
             glyph.reset();
         }
-        alpha_wheel_hub_glyph.reset();
     }
 };
 
@@ -1142,8 +1137,6 @@ bool OverlayWindow::Create_and_show(HINSTANCE hinstance) {
         auto const glyphs = resources_->Glyph_pointers();
         (void)d2d_resources_->Upload_glyph_bitmaps(
             std::span<OverlayButtonGlyph const *const>(glyphs));
-        (void)d2d_resources_->Upload_alpha_wheel_hub_glyph(
-            resources_->alpha_wheel_hub_glyph.get());
         if (d2d_resources_->factory && d2d_resources_->dwrite_factory) {
             text_layout_engine_ = std::make_unique<D2DTextLayoutEngine>(
                 d2d_resources_->factory.Get(), d2d_resources_->dwrite_factory.Get());
@@ -1653,6 +1646,27 @@ void OverlayWindow::Set_highlighter_mode(core::HighlighterWheelMode mode) noexce
     selection_wheel_.clamp_nav = (mode == core::HighlighterWheelMode::Opacity);
 }
 
+std::optional<size_t>
+OverlayWindow::Current_selection_wheel_selected_segment() const noexcept {
+    auto const tool = controller_.Active_annotation_tool();
+    if (tool == core::AnnotationToolId::Text ||
+        tool == core::AnnotationToolId::Bubble) {
+        if (selection_wheel_.text_mode == core::TextWheelMode::Font) {
+            core::TextFontChoice const font_choice =
+                (tool == core::AnnotationToolId::Bubble)
+                    ? controller_.Bubble_current_font()
+                    : controller_.Text_current_font();
+            return core::Text_font_choice_index(font_choice);
+        }
+        return Current_annotation_color_index();
+    }
+    if (tool == core::AnnotationToolId::Highlighter &&
+        selection_wheel_.highlighter_mode == core::HighlighterWheelMode::Opacity) {
+        return Closest_opacity_preset_index(controller_.Highlighter_opacity_percent());
+    }
+    return Current_annotation_color_index();
+}
+
 bool OverlayWindow::Selection_wheel_has_multiple_views() const noexcept {
     auto const tool = controller_.Active_annotation_tool();
     return tool == core::AnnotationToolId::Text ||
@@ -1660,31 +1674,25 @@ bool OverlayWindow::Selection_wheel_has_multiple_views() const noexcept {
            tool == core::AnnotationToolId::Highlighter;
 }
 
-std::optional<size_t> OverlayWindow::Effective_wheel_segment_hover() const noexcept {
+std::optional<size_t> OverlayWindow::Explicit_wheel_segment_hover() const noexcept {
     if (selection_wheel_.nav_hovered_segment.has_value()) {
         return selection_wheel_.nav_hovered_segment;
     }
     if (selection_wheel_.mouse_hovered_segment.has_value()) {
         return selection_wheel_.mouse_hovered_segment;
     }
+    return std::nullopt;
+}
+
+std::optional<size_t> OverlayWindow::Effective_wheel_segment_hover() const noexcept {
+    if (std::optional<size_t> const explicit_hover = Explicit_wheel_segment_hover();
+        explicit_hover.has_value()) {
+        return explicit_hover;
+    }
     if (Nav_segment_count() == 0) {
         return std::nullopt;
     }
-    auto const tool = controller_.Active_annotation_tool();
-    if (tool == core::AnnotationToolId::Text ||
-        tool == core::AnnotationToolId::Bubble) {
-        if (selection_wheel_.text_mode == core::TextWheelMode::Font) {
-            core::TextFontChoice const f = (tool == core::AnnotationToolId::Bubble)
-                                               ? controller_.Bubble_current_font()
-                                               : controller_.Text_current_font();
-            return core::Text_font_choice_index(f);
-        }
-    }
-    if (tool == core::AnnotationToolId::Highlighter &&
-        selection_wheel_.highlighter_mode == core::HighlighterWheelMode::Opacity) {
-        return Closest_opacity_preset_index(controller_.Highlighter_opacity_percent());
-    }
-    return Current_annotation_color_index();
+    return Current_selection_wheel_selected_segment();
 }
 
 void OverlayWindow::Navigate_wheel(int steps) {
@@ -1749,7 +1757,9 @@ bool OverlayWindow::Update_selection_wheel_hover(core::PointPx cursor) {
     bool const is_style_hub = active_tool == core::AnnotationToolId::Text ||
                               active_tool == core::AnnotationToolId::Bubble;
     if (is_style_hub) {
-        auto hub_hit = core::Hit_test_text_wheel_hub(selection_wheel_.center, cursor);
+        auto hub_hit = core::Hit_test_text_wheel_hub(selection_wheel_.center, cursor,
+                                                     selection_wheel_.text_mode,
+                                                     selection_wheel_.hovered_hub);
         if (hub_hit.has_value()) {
             bool const changed = (hub_hit != selection_wheel_.hovered_hub ||
                                   selection_wheel_.mouse_hovered_segment.has_value());
@@ -1761,7 +1771,9 @@ bool OverlayWindow::Update_selection_wheel_hover(core::PointPx cursor) {
         bool changed = selection_wheel_.hovered_hub.has_value();
         selection_wheel_.hovered_hub = std::nullopt;
         std::optional<size_t> const ring = core::Hit_test_selection_wheel_segment(
-            selection_wheel_.center, cursor, Current_selection_wheel_segment_count());
+            selection_wheel_.center, cursor, Current_selection_wheel_segment_count(),
+            /*ring_angle_offset=*/0.0f, Current_selection_wheel_selected_segment(),
+            Explicit_wheel_segment_hover());
         if (ring != selection_wheel_.mouse_hovered_segment) {
             selection_wheel_.mouse_hovered_segment = ring;
             changed = true;
@@ -1775,8 +1787,9 @@ bool OverlayWindow::Update_selection_wheel_hover(core::PointPx cursor) {
     }
     bool const is_highlighter_hub = active_tool == core::AnnotationToolId::Highlighter;
     if (is_highlighter_hub) {
-        auto hub_hit =
-            core::Hit_test_highlighter_wheel_hub(selection_wheel_.center, cursor);
+        auto hub_hit = core::Hit_test_highlighter_wheel_hub(
+            selection_wheel_.center, cursor, selection_wheel_.highlighter_mode,
+            selection_wheel_.highlighter_hovered_hub);
         if (hub_hit.has_value()) {
             bool const changed = (hub_hit != selection_wheel_.highlighter_hovered_hub ||
                                   selection_wheel_.mouse_hovered_segment.has_value());
@@ -1789,7 +1802,8 @@ bool OverlayWindow::Update_selection_wheel_hover(core::PointPx cursor) {
         float const ring_offset = Effective_ring_angle_offset();
         size_t const layout_count = Current_selection_wheel_segment_count();
         std::optional<size_t> raw_ring = core::Hit_test_selection_wheel_segment(
-            selection_wheel_.center, cursor, layout_count, ring_offset);
+            selection_wheel_.center, cursor, layout_count, ring_offset,
+            Current_selection_wheel_selected_segment(), Explicit_wheel_segment_hover());
         if (selection_wheel_.clamp_nav && raw_ring.has_value() &&
             *raw_ring + 1 == layout_count) {
             raw_ring = std::nullopt;
@@ -1807,7 +1821,9 @@ bool OverlayWindow::Update_selection_wheel_hover(core::PointPx cursor) {
     }
     // Non-hub tool.
     std::optional<size_t> const hovered = core::Hit_test_selection_wheel_segment(
-        selection_wheel_.center, cursor, Current_selection_wheel_segment_count());
+        selection_wheel_.center, cursor, Current_selection_wheel_segment_count(),
+        /*ring_angle_offset=*/0.0f, Current_selection_wheel_selected_segment(),
+        Explicit_wheel_segment_hover());
     bool changed = (hovered != selection_wheel_.mouse_hovered_segment);
     if (changed) {
         selection_wheel_.mouse_hovered_segment = hovered;
@@ -2503,7 +2519,9 @@ LRESULT OverlayWindow::On_l_button_down() {
         bool const is_style_hub = lbd_tool == core::AnnotationToolId::Text ||
                                   lbd_tool == core::AnnotationToolId::Bubble;
         if (is_style_hub) {
-            auto hub_hit = core::Hit_test_text_wheel_hub(selection_wheel_.center, cur);
+            auto hub_hit = core::Hit_test_text_wheel_hub(selection_wheel_.center, cur,
+                                                         selection_wheel_.text_mode,
+                                                         selection_wheel_.hovered_hub);
             if (hub_hit.has_value()) {
                 selection_wheel_.text_mode = (*hub_hit == core::TextWheelHubSide::Color)
                                                  ? core::TextWheelMode::Color
@@ -2517,8 +2535,9 @@ LRESULT OverlayWindow::On_l_button_down() {
         }
         bool const is_highlighter_hub = lbd_tool == core::AnnotationToolId::Highlighter;
         if (is_highlighter_hub) {
-            auto hub_hit =
-                core::Hit_test_highlighter_wheel_hub(selection_wheel_.center, cur);
+            auto hub_hit = core::Hit_test_highlighter_wheel_hub(
+                selection_wheel_.center, cur, selection_wheel_.highlighter_mode,
+                selection_wheel_.highlighter_hovered_hub);
             if (hub_hit.has_value()) {
                 Set_highlighter_mode((*hub_hit == core::HighlighterWheelHubSide::Color)
                                          ? core::HighlighterWheelMode::Color
@@ -2533,7 +2552,8 @@ LRESULT OverlayWindow::On_l_button_down() {
         float const lbd_ring_offset = Effective_ring_angle_offset();
         size_t const lbd_layout_count = Current_selection_wheel_segment_count();
         std::optional<size_t> lbd_segment = core::Hit_test_selection_wheel_segment(
-            selection_wheel_.center, cur, lbd_layout_count, lbd_ring_offset);
+            selection_wheel_.center, cur, lbd_layout_count, lbd_ring_offset,
+            Current_selection_wheel_selected_segment(), Explicit_wheel_segment_hover());
         if (selection_wheel_.clamp_nav && lbd_segment.has_value() &&
             *lbd_segment + 1 == lbd_layout_count) {
             lbd_segment = std::nullopt;
@@ -3579,13 +3599,13 @@ LRESULT OverlayWindow::On_paint() {
             if (selection_wheel_.text_mode == core::TextWheelMode::Color) {
                 input.selection_wheel_segment_count = core::kAnnotationColorSlotCount;
                 input.selection_wheel_selected_segment =
-                    Current_annotation_color_index();
+                    Current_selection_wheel_selected_segment();
             } else {
                 input.selection_wheel_segment_count = kTextWheelFontChoices.size();
                 input.selection_wheel_selected_segment =
-                    core::Text_font_choice_index(hub_font);
+                    Current_selection_wheel_selected_segment();
             }
-            input.selection_wheel_hovered_segment = Effective_wheel_segment_hover();
+            input.selection_wheel_hovered_segment = Explicit_wheel_segment_hover();
         } else if (active_tool_for_wheel == core::AnnotationToolId::Highlighter) {
             input.selection_wheel_has_highlighter_hub = true;
             input.highlighter_wheel_active_mode = selection_wheel_.highlighter_mode;
@@ -3598,19 +3618,20 @@ LRESULT OverlayWindow::On_paint() {
                 core::HighlighterWheelMode::Color) {
                 input.selection_wheel_segment_count = core::kHighlighterColorSlotCount;
                 input.selection_wheel_selected_segment =
-                    Current_annotation_color_index();
+                    Current_selection_wheel_selected_segment();
             } else {
                 input.selection_wheel_segment_count =
                     Current_selection_wheel_segment_count();
-                input.selection_wheel_selected_segment = Closest_opacity_preset_index(
-                    controller_.Highlighter_opacity_percent());
+                input.selection_wheel_selected_segment =
+                    Current_selection_wheel_selected_segment();
             }
-            input.selection_wheel_hovered_segment = Effective_wheel_segment_hover();
+            input.selection_wheel_hovered_segment = Explicit_wheel_segment_hover();
         } else {
             input.selection_wheel_segment_count =
                 Current_selection_wheel_segment_count();
-            input.selection_wheel_selected_segment = Current_annotation_color_index();
-            input.selection_wheel_hovered_segment = Effective_wheel_segment_hover();
+            input.selection_wheel_selected_segment =
+                Current_selection_wheel_selected_segment();
+            input.selection_wheel_hovered_segment = Explicit_wheel_segment_hover();
         }
         input.selection_wheel_clamp_nav = selection_wheel_.clamp_nav;
         input.selection_wheel_ring_angle_offset = Effective_ring_angle_offset();
@@ -3687,8 +3708,6 @@ void OverlayWindow::Handle_device_loss() {
     auto const glyphs = resources_->Glyph_pointers();
     (void)d2d_resources_->Upload_glyph_bitmaps(
         std::span<OverlayButtonGlyph const *const>(glyphs));
-    (void)d2d_resources_->Upload_alpha_wheel_hub_glyph(
-        resources_->alpha_wheel_hub_glyph.get());
     if (!text_layout_engine_ && d2d_resources_->factory &&
         d2d_resources_->dwrite_factory) {
         text_layout_engine_ = std::make_unique<D2DTextLayoutEngine>(

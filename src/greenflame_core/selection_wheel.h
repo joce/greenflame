@@ -11,15 +11,17 @@ constexpr size_t kHighlighterColorSlotCount = 6;
 using AnnotationColorPalette = std::array<COLORREF, kAnnotationColorSlotCount>;
 using HighlighterColorPalette = std::array<COLORREF, kHighlighterColorSlotCount>;
 
-inline constexpr int32_t kSelectionWheelOuterDiameterPx = 130;
-inline constexpr float kSelectionWheelWidthPx = 22.0f;
+inline constexpr int32_t kSelectionWheelOuterDiameterPx = 134;
+inline constexpr float kSelectionWheelWidthPx = 24.0f;
 inline constexpr float kSelectionWheelSegmentGapPx = 8.0f;
-inline constexpr float kSelectionWheelSegmentBorderWidthPx = 2.0f;
-inline constexpr float kSelectionWheelSelectionHaloGapPx = 2.0f;
-inline constexpr float kSelectionWheelSelectionHaloInnerWidthPx = 3.0f;
-inline constexpr float kSelectionWheelSelectionHaloOuterWidthPx = 3.0f;
-inline constexpr float kSelectionWheelHoverHaloInnerWidthPx = 5.0f;
-inline constexpr float kSelectionWheelHoverHaloOuterWidthPx = 5.0f;
+inline constexpr float kSelectionWheelRingOuterBorderWidthPx = 1.5f;
+inline constexpr float kSelectionWheelRingInnerBorderWidthPx = 1.0f;
+inline constexpr float kSelectionWheelSelectedOuterInflationPx = 8.0f;
+inline constexpr float kSelectionWheelSelectedInnerInflationPx = 0.0f;
+inline constexpr float kSelectionWheelHoverOuterInflationPx = 11.0f;
+inline constexpr float kSelectionWheelHoverInnerInflationPx = 2.0f;
+inline constexpr float kSelectionWheelHubSelectedOuterInflationPx = 4.0f;
+inline constexpr float kSelectionWheelHubHoverOuterInflationPx = 6.0f;
 
 inline constexpr float kTextWheelHubGapPx = 8.0f;
 inline constexpr float kTextWheelHubHalfGapPx = kTextWheelHubGapPx / 2.0f;
@@ -32,12 +34,16 @@ static_assert(kSelectionWheelOuterDiameterPx > 0);
 static_assert(kSelectionWheelWidthPx > 0.0f);
 static_assert(kSelectionWheelWidthPx <
               static_cast<float>(kSelectionWheelOuterDiameterPx) / 2.0f);
+static_assert(kTextWheelHubRingGapPx > kSelectionWheelHubHoverOuterInflationPx);
 
 [[nodiscard]] constexpr COLORREF Make_colorref(uint8_t red, uint8_t green,
                                                uint8_t blue) noexcept {
     return static_cast<COLORREF>(red) | (static_cast<COLORREF>(green) << 8u) |
            (static_cast<COLORREF>(blue) << 16u);
 }
+
+inline constexpr COLORREF kSelectionWheelRingOuterBorderColor =
+    Make_colorref(0xC0, 0xC0, 0xC0);
 
 inline constexpr AnnotationColorPalette kDefaultAnnotationColorPalette = {
     {Make_colorref(0x00, 0x00, 0x00), Make_colorref(0xFF, 0x00, 0x00),
@@ -82,6 +88,24 @@ struct SelectionWheelSegmentGeometry final {
     float sweep_angle_degrees = 0.0f;
 };
 
+enum class SelectionWheelSegmentVisualState : uint8_t { Normal, Selected, Hovered };
+
+struct SelectionWheelSegmentVisualMetrics final {
+    SelectionWheelSegmentVisualState state = SelectionWheelSegmentVisualState::Normal;
+    float outer_inflation_px = 0.0f;
+    float inner_inflation_px = 0.0f;
+    float outer_radius_px = 0.0f;
+    float inner_radius_px = 0.0f;
+};
+
+enum class SelectionWheelHubVisualState : uint8_t { Normal, Selected, Hovered };
+
+struct SelectionWheelHubVisualMetrics final {
+    SelectionWheelHubVisualState state = SelectionWheelHubVisualState::Normal;
+    float outer_inflation_px = 0.0f;
+    float radius_px = 0.0f;
+};
+
 [[nodiscard]] constexpr int32_t Clamp_color_index(int32_t index,
                                                   size_t slot_count) noexcept {
     if (slot_count == 0) {
@@ -101,16 +125,29 @@ struct SelectionWheelSegmentGeometry final {
 // Returns the ring angle offset (degrees) that places the phantom slot of a
 // clamped-nav wheel at 6 o'clock, for a ring with real_segment_count real slots.
 [[nodiscard]] float Clamped_wheel_ring_angle_offset(size_t real_segment_count) noexcept;
+[[nodiscard]] float Selection_wheel_gap_half_angle_degrees(
+    float radius_px, float half_gap_px = kSelectionWheelSegmentGapPx / 2.0f) noexcept;
+[[nodiscard]] SelectionWheelSegmentVisualMetrics
+Get_selection_wheel_segment_visual_metrics(
+    size_t index, std::optional<size_t> selected_segment = std::nullopt,
+    std::optional<size_t> hovered_segment = std::nullopt) noexcept;
+[[nodiscard]] SelectionWheelHubVisualMetrics
+Get_selection_wheel_hub_visual_metrics(bool is_active = false,
+                                       bool is_hovered = false) noexcept;
 
 [[nodiscard]] SelectionWheelSegmentGeometry
 Get_selection_wheel_segment_geometry(size_t index, size_t segment_count,
                                      float ring_angle_offset = 0.0f) noexcept;
-[[nodiscard]] std::optional<size_t>
-Hit_test_selection_wheel_segment(PointPx center, PointPx point, size_t segment_count,
-                                 float ring_angle_offset = 0.0f) noexcept;
-[[nodiscard]] std::optional<TextWheelHubSide>
-Hit_test_text_wheel_hub(PointPx center, PointPx point) noexcept;
-[[nodiscard]] std::optional<HighlighterWheelHubSide>
-Hit_test_highlighter_wheel_hub(PointPx center, PointPx point) noexcept;
+[[nodiscard]] std::optional<size_t> Hit_test_selection_wheel_segment(
+    PointPx center, PointPx point, size_t segment_count, float ring_angle_offset = 0.0f,
+    std::optional<size_t> selected_segment = std::nullopt,
+    std::optional<size_t> hovered_segment = std::nullopt) noexcept;
+[[nodiscard]] std::optional<TextWheelHubSide> Hit_test_text_wheel_hub(
+    PointPx center, PointPx point, TextWheelMode active_mode = TextWheelMode::Color,
+    std::optional<TextWheelHubSide> hovered_hub = std::nullopt) noexcept;
+[[nodiscard]] std::optional<HighlighterWheelHubSide> Hit_test_highlighter_wheel_hub(
+    PointPx center, PointPx point,
+    HighlighterWheelMode active_mode = HighlighterWheelMode::Color,
+    std::optional<HighlighterWheelHubSide> hovered_hub = std::nullopt) noexcept;
 
 } // namespace greenflame::core

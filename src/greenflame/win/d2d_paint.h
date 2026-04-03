@@ -29,6 +29,7 @@ struct D2DPaintInput {
     core::Annotation const *draft_annotation = nullptr;
     core::TextAnnotation const *draft_text_annotation = nullptr;
     core::Annotation const *selected_annotation = nullptr;
+    std::optional<core::RectPx> selected_annotation_bounds = std::nullopt;
     size_t selection_wheel_segment_count = 0;
     std::span<const core::RectPx> monitor_rects_client = {};
     std::span<const core::Annotation> annotations = {};
@@ -59,6 +60,7 @@ struct D2DPaintInput {
     std::optional<int32_t> arrow_cursor_preview_width_px = std::nullopt;
     core::PointPx selection_wheel_center_px = {};
     core::RectPx live_rect = {};
+    core::RectPx annotation_selection_live_rect = {};
     core::RectPx final_selection = {};
     core::RectPx draft_text_caret_rect = {};
     std::optional<core::StrokeStyle> draft_freehand_style = std::nullopt;
@@ -69,6 +71,7 @@ struct D2DPaintInput {
     bool dragging = false;
     bool handle_dragging = false;
     bool move_dragging = false;
+    bool annotation_selection_dragging = false;
     bool annotation_editing = false; // annotation endpoint/resize/translate in progress
     bool modifier_preview = false;
     bool show_selection_size_side_labels = true;

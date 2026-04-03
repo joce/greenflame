@@ -18,6 +18,7 @@ constexpr float kTextMeasureMaxExtent = 8192.f;
 constexpr float kMagnifierBorderInset = 0.75f;
 constexpr float kMagnifierBorderStrokeWidth = 1.5f;
 constexpr float kOverlayDimAlpha = 0.5f;
+constexpr float kCommittedSelectionBorderOutsideThicknessPx = 2.0f;
 constexpr float kDraftTextSelectionAlpha = 0.7f;
 constexpr float kDraftTextOverwriteCaretAlpha = 0.65f;
 constexpr float kSelectionWheelFontPreviewPointSize = 18.f;
@@ -148,23 +149,39 @@ void Draw_selection_border(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         return;
     }
     res.solid_brush->SetColor(kBorderColor);
-    D2D1_RECT_F const rf = Rect(sel);
-    float const l = rf.left + kHalfPixel;
-    float const r = rf.right - kHalfPixel;
-    float const t = rf.top + kHalfPixel;
-    float const b = rf.bottom - kHalfPixel;
-    ID2D1StrokeStyle *style =
-        dashed ? res.dashed_style.Get() : res.flat_cap_style.Get();
-    // Four distinct lines (no marquee): horizontals both left-to-right,
-    // verticals both top-to-bottom.
-    rt->DrawLine(D2D1::Point2F(l, t), D2D1::Point2F(r, t), res.solid_brush.Get(), 1.f,
-                 style);
-    rt->DrawLine(D2D1::Point2F(l, b), D2D1::Point2F(r, b), res.solid_brush.Get(), 1.f,
-                 style);
-    rt->DrawLine(D2D1::Point2F(l, t), D2D1::Point2F(l, b), res.solid_brush.Get(), 1.f,
-                 style);
-    rt->DrawLine(D2D1::Point2F(r, t), D2D1::Point2F(r, b), res.solid_brush.Get(), 1.f,
-                 style);
+    if (dashed) {
+        D2D1_RECT_F const rf = Rect(sel);
+        float const l = rf.left + kHalfPixel;
+        float const r = rf.right - kHalfPixel;
+        float const t = rf.top + kHalfPixel;
+        float const b = rf.bottom - kHalfPixel;
+        // Four distinct lines (no marquee): horizontals both left-to-right,
+        // verticals both top-to-bottom.
+        rt->DrawLine(D2D1::Point2F(l, t), D2D1::Point2F(r, t), res.solid_brush.Get(),
+                     1.f, res.dashed_style.Get());
+        rt->DrawLine(D2D1::Point2F(l, b), D2D1::Point2F(r, b), res.solid_brush.Get(),
+                     1.f, res.dashed_style.Get());
+        rt->DrawLine(D2D1::Point2F(l, t), D2D1::Point2F(l, b), res.solid_brush.Get(),
+                     1.f, res.dashed_style.Get());
+        rt->DrawLine(D2D1::Point2F(r, t), D2D1::Point2F(r, b), res.solid_brush.Get(),
+                     1.f, res.dashed_style.Get());
+        return;
+    }
+
+    core::RectPx const bounds = sel.Normalized();
+    float const l = static_cast<float>(bounds.left);
+    float const t = static_cast<float>(bounds.top);
+    float const r = static_cast<float>(bounds.right);
+    float const b = static_cast<float>(bounds.bottom);
+    // Committed selection chrome sits fully outside the clipped capture so it
+    // remains visually distinct from the restored screenshot region.
+    float const outside = kCommittedSelectionBorderOutsideThicknessPx;
+    rt->FillRectangle(D2D1::RectF(l - outside, t - outside, r + outside, t),
+                      res.solid_brush.Get());
+    rt->FillRectangle(D2D1::RectF(l - outside, b, r + outside, b + outside),
+                      res.solid_brush.Get());
+    rt->FillRectangle(D2D1::RectF(l - outside, t, l, b), res.solid_brush.Get());
+    rt->FillRectangle(D2D1::RectF(r, t, r + outside, b), res.solid_brush.Get());
 }
 
 // ---------------------------------------------------------------------------
@@ -1020,14 +1037,14 @@ void Draw_vertical_marquee_edge(ID2D1RenderTarget *rt, D2DOverlayResources &res,
     }
 }
 
-void Draw_selected_annotation_marquee(ID2D1RenderTarget *rt, D2DOverlayResources &res,
-                                      core::Annotation const *ann, int32_t phase_px) {
-    if (!ann) {
+void Draw_selected_annotation_marquee(
+    ID2D1RenderTarget *rt, D2DOverlayResources &res,
+    std::optional<core::RectPx> selection_bounds, int32_t phase_px) {
+    if (!selection_bounds.has_value()) {
         return;
     }
 
-    core::RectPx const bounds =
-        core::Annotation_selection_frame_bounds(*ann).Normalized();
+    core::RectPx const bounds = selection_bounds->Normalized();
     if (bounds.Is_empty()) {
         return;
     }
@@ -2189,6 +2206,12 @@ void Draw_live_layer(ID2D1RenderTarget *rt, D2DOverlayResources &res,
                              input.move_dragging || input.modifier_preview;
     core::RectPx const disp_sel = interacting ? input.live_rect : input.final_selection;
     Draw_selection_border(rt, res, disp_sel, /*dashed=*/input.dragging);
+    if (input.annotation_selection_dragging &&
+        !input.annotation_selection_live_rect.Is_empty()) {
+        Draw_selected_annotation_marquee(rt, res,
+                                         input.annotation_selection_live_rect,
+                                         input.selected_annotation_marquee_phase_px);
+    }
 
     // Dimension labels (only while interacting).
     if (interacting && !disp_sel.Is_empty()) {
@@ -2226,10 +2249,12 @@ void Draw_live_layer(ID2D1RenderTarget *rt, D2DOverlayResources &res,
     }
 
     // Selected annotation chrome.
-    if (input.selected_annotation != nullptr) {
-        Draw_selected_annotation_marquee(rt, res, input.selected_annotation,
+    if (input.selected_annotation_bounds.has_value()) {
+        Draw_selected_annotation_marquee(rt, res, input.selected_annotation_bounds,
                                          input.selected_annotation_marquee_phase_px);
-        Draw_annotation_handles(rt, res, input.selected_annotation);
+        if (input.selected_annotation != nullptr) {
+            Draw_annotation_handles(rt, res, input.selected_annotation);
+        }
     }
 
     // Cursor previews (clipped to final selection).

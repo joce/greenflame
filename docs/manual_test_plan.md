@@ -254,6 +254,8 @@ unless a real end-to-end bug escapes into the Win32 shell:
 - Expected:
   - The desktop is dimmed outside the selection.
   - A border and resize handles appear.
+  - After the drag is committed, the stable selection border sits just outside the
+    clipped screenshot region instead of being tucked under the dim edge.
   - The selection border is visually stable with no marching-ants or marquee-style motion.
   - Selection-size labels appear if enabled in config.
 
@@ -271,6 +273,8 @@ unless a real end-to-end bug escapes into the Win32 shell:
   - Corner and side drags resize in the expected directions.
   - Dragging inside the selection moves the selection.
   - The selection stops at the virtual-desktop boundary and never extends beyond it.
+  - The solid selection border remains visibly above the dim outside the clipped
+    screenshot region while moving or resizing.
   - When pressed against a desktop edge, the visible screenshot pixels remain a 1:1 crop with no stretching or smearing.
   - Resize drags show the centered in-selection size label when that label is enabled.
   - Move drags do not show the centered in-selection size label.
@@ -616,6 +620,31 @@ unless a real end-to-end bug escapes into the Win32 shell:
   - The topmost annotation selects first.
   - After it moves away, the underlying annotation becomes selectable.
 
+### GF-MAN-ANN-005A - Multi-Selection Toggle, Marquee, And Group Move
+
+- Priority: `P1`
+- Run on: `ENV-A`
+- Steps:
+  1. Create a region and add at least three annotations with two close enough to share a useful group bounds box.
+  2. In default mode, click one annotation to select it.
+  3. `Ctrl+click` a second annotation to add it to the selection.
+  4. `Ctrl+click` that same second annotation again.
+  5. `Ctrl+drag` a marquee that touches two annotations but fully contains only one of them.
+  6. With two annotations selected, drag from blank space inside the group marquee but not on any annotation pixels.
+  7. With two annotations selected, inspect line, rectangle, ellipse, and obfuscate selections if available.
+- Expected:
+  - `Ctrl+click` toggles the topmost covered annotation in or out of the selection.
+  - `Ctrl+drag` adds every touched annotation; full containment is not required.
+  - The live `Ctrl+drag` rectangle uses the animated black/white selected-annotation marquee rather than the green capture-region selection border.
+  - That live `Ctrl+drag` marquee is already animating before `Ctrl` is released and does not pause while the drag remains active.
+  - The live `Ctrl+drag` marquee can extend outside the captured screenshot region
+    onto the dimmed overlay; it is not clipped to the bright capture area.
+  - When more than one annotation is selected, the marquee encloses the union of the member selection frames.
+  - When more than one annotation is selected, dragging from blank space inside that group marquee moves the whole group.
+  - Group moves preserve relative spacing between the selected annotations.
+  - When more than one annotation is selected, no endpoint or resize handles are shown.
+  - If the group shrinks back to one annotation, that annotation's normal single-selection handles return immediately.
+
 ### GF-MAN-ANN-006 - Delete, Undo, And Redo
 
 - Priority: `P0`
@@ -623,10 +652,12 @@ unless a real end-to-end bug escapes into the Win32 shell:
 - Steps:
   1. Create a region and several annotations.
   2. Select one annotation and press `Delete`.
-  3. Use `Ctrl + Z` repeatedly.
-  4. Use `Ctrl + Shift + Z` repeatedly.
+  3. Recreate or reselect multiple annotations and press `Delete` again.
+  4. Use `Ctrl + Z` repeatedly.
+  5. Use `Ctrl + Shift + Z` repeatedly.
 - Expected:
-  - Delete removes only the selected annotation.
+  - Delete removes the current selected annotation set, whether that set has one item or many.
+  - Multi-selection delete is undone and redone as one step.
   - Undo walks backward through both region and annotation history.
   - Redo restores the undone changes in order.
 

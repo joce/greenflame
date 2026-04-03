@@ -269,9 +269,9 @@ struct BubbleAnnotation final {
 };
 ```
 
-`Annotation_shows_corner_brackets`: return `true` for `AnnotationKind::Bubble`,
-consistent with Freehand and Text. A selected bubble shows corner bracket markers
-around its bounding box.
+Bubble selection uses the shared selected-annotation marquee. A selected bubble
+shows the clockwise marquee around its selection frame bounds and remains movable
+from anywhere inside that box.
 
 ### Variant Updates
 
@@ -478,7 +478,8 @@ Counter behavior:
   outside radius → miss; zero diameter → miss.
 - `Translate_annotation` on a bubble shifts `center` and leaves other fields
   unchanged.
-- `Annotation_shows_corner_brackets` returns `true` for `AnnotationKind::Bubble`.
+- `BubbleAnnotation` uses the shared selected-annotation marquee and does not add
+  resize handles.
 
 **`color_wheel_has_style_hub` flag** (`D2DPaintInput`) is set in `overlay_window.cpp`
 based on the active `AnnotationToolId`. It is not testable from core unit tests and

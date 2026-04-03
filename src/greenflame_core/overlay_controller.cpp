@@ -7,6 +7,7 @@ namespace greenflame::core {
 
 namespace {
 constexpr int32_t kSnapThresholdPx = 10;
+constexpr int32_t kAnnotationSelectionDragThresholdPx = 4;
 
 [[nodiscard]] RectPx Virtual_desktop_bounds_from_monitors(
     std::span<const MonitorWithBounds> monitors) noexcept {
@@ -83,16 +84,21 @@ Resolve_virtual_desktop_client_bounds(RectPx virtual_desktop_bounds,
 
 void OverlaySessionData::Reset_for_session() {
     dragging = false;
+    annotation_selection_pending = false;
+    annotation_selection_dragging = false;
     handle_dragging = false;
     move_dragging = false;
     modifier_preview = false;
     resize_handle = std::nullopt;
+    annotation_selection_toggle_candidate_id = std::nullopt;
     resize_anchor_rect = {};
     move_grab_offset = {};
     move_anchor_rect = {};
     start_px = {};
+    annotation_selection_start_px = {};
     virtual_desktop_client_bounds = {};
     live_rect = {};
+    annotation_selection_live_rect = {};
     final_selection = {};
     selection_source = SaveSelectionSource::Region;
     selection_window = std::nullopt;
@@ -202,6 +208,14 @@ Annotation const *OverlayController::Selected_annotation() const noexcept {
 
 std::optional<RectPx> OverlayController::Selected_annotation_bounds() const noexcept {
     return annotation_controller_.Selected_annotation_bounds();
+}
+
+bool OverlayController::Has_selected_annotations() const noexcept {
+    return annotation_controller_.Has_selected_annotations();
+}
+
+size_t OverlayController::Selected_annotation_count() const noexcept {
+    return annotation_controller_.Selected_annotation_count();
 }
 
 std::optional<AnnotationEditTarget>
@@ -360,7 +374,9 @@ std::optional<int32_t> OverlayController::Adjust_tool_size(int32_t delta_steps) 
 
 bool OverlayController::Should_show_annotation_toolbar() const noexcept {
     return !state_.final_selection.Is_empty() && !state_.dragging &&
-           !state_.handle_dragging && !state_.move_dragging;
+           !state_.annotation_selection_pending &&
+           !state_.annotation_selection_dragging && !state_.handle_dragging &&
+           !state_.move_dragging;
 }
 
 bool OverlayController::Can_interact_with_annotation_toolbar() const noexcept {
@@ -370,7 +386,7 @@ bool OverlayController::Can_interact_with_annotation_toolbar() const noexcept {
 }
 
 bool OverlayController::Should_show_selected_annotation_handles() const noexcept {
-    return annotation_controller_.Selected_annotation() != nullptr;
+    return annotation_controller_.Selected_annotation_count() == 1;
 }
 
 bool OverlayController::Has_active_annotation_gesture() const noexcept {
@@ -455,6 +471,13 @@ OverlayAction OverlayController::On_modifier_changed(
 }
 
 OverlayAction OverlayController::On_cancel() {
+    if (state_.annotation_selection_pending) {
+        state_.annotation_selection_pending = false;
+        state_.annotation_selection_dragging = false;
+        state_.annotation_selection_toggle_candidate_id = std::nullopt;
+        state_.annotation_selection_live_rect = {};
+        return OverlayAction::Repaint;
+    }
     if (state_.move_dragging) {
         state_.final_selection = state_.move_anchor_rect;
         state_.move_dragging = false;
@@ -596,6 +619,17 @@ OverlayAction OverlayController::On_primary_press(
                        : OverlayAction::None;
         }
 
+        if (mods.ctrl) {
+            state_.annotation_selection_pending = true;
+            state_.annotation_selection_dragging = false;
+            state_.annotation_selection_start_px = cursor_client;
+            state_.annotation_selection_live_rect =
+                RectPx::From_points(cursor_client, cursor_client);
+            state_.annotation_selection_toggle_candidate_id =
+                annotation_controller_.Annotation_id_at(cursor_client);
+            return OverlayAction::Repaint;
+        }
+
         if (std::optional<AnnotationEditTarget> const target =
                 annotation_controller_.Annotation_edit_target_at(cursor_client);
             target.has_value()) {
@@ -647,7 +681,26 @@ OverlayAction OverlayController::On_pointer_move(
 
     bool const snap_enabled = !mods.alt;
 
-    if (state_.move_dragging) {
+    if (state_.annotation_selection_pending) {
+        int32_t const dx =
+            std::abs(cursor_client.x - state_.annotation_selection_start_px.x);
+        int32_t const dy =
+            std::abs(cursor_client.y - state_.annotation_selection_start_px.y);
+        if (!state_.annotation_selection_dragging &&
+            (dx >= kAnnotationSelectionDragThresholdPx ||
+             dy >= kAnnotationSelectionDragThresholdPx)) {
+            state_.annotation_selection_dragging = true;
+        }
+
+        if (state_.annotation_selection_dragging) {
+            state_.annotation_selection_live_rect =
+                Clip_selection_rect_to_bounds(
+                    RectPx::From_points(state_.annotation_selection_start_px,
+                                        cursor_client)
+                        .Normalized(),
+                    state_.virtual_desktop_client_bounds);
+        }
+    } else if (state_.move_dragging) {
         int32_t const new_left = cursor_client.x - state_.move_grab_offset.x;
         int32_t const new_top = cursor_client.y - state_.move_grab_offset.y;
         RectPx candidate = RectPx::From_ltrb(
@@ -706,6 +759,28 @@ OverlayAction OverlayController::On_pointer_move(
 OverlayAction OverlayController::On_primary_release(OverlayModifierState mods,
                                                     PointPx cursor_client) {
     bool const snap_enabled = !mods.alt;
+
+    if (state_.annotation_selection_pending) {
+        bool const had_drag_rect = state_.annotation_selection_dragging;
+        bool selection_changed = false;
+        if (state_.annotation_selection_dragging) {
+            AnnotationSelection const touched_ids =
+                annotation_controller_.Annotation_ids_intersecting_selection_rect(
+                    state_.annotation_selection_live_rect);
+            selection_changed =
+                annotation_controller_.Add_selected_annotations(touched_ids);
+        } else if (state_.annotation_selection_toggle_candidate_id.has_value()) {
+            selection_changed = annotation_controller_.Toggle_selected_annotation(
+                *state_.annotation_selection_toggle_candidate_id);
+        }
+
+        state_.annotation_selection_pending = false;
+        state_.annotation_selection_dragging = false;
+        state_.annotation_selection_toggle_candidate_id = std::nullopt;
+        state_.annotation_selection_live_rect = {};
+        return (selection_changed || had_drag_rect) ? OverlayAction::Repaint
+                                                    : OverlayAction::None;
+    }
 
     if (state_.move_dragging) {
         RectPx to_commit = Clamp_moved_selection_to_bounds(

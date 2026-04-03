@@ -39,6 +39,7 @@ struct OverlaySessionData {
     PointPx start_px = {};
     RectPx virtual_desktop_client_bounds = {};
     RectPx live_rect = {};
+    RectPx annotation_selection_live_rect = {};
     RectPx final_selection = {};
     std::vector<SnapEdgeSegmentPx> vertical_edges = {};
     std::vector<SnapEdgeSegmentPx> horizontal_edges = {};
@@ -46,10 +47,14 @@ struct OverlaySessionData {
     std::optional<HWND> selection_window = std::nullopt;
     std::optional<size_t> selection_monitor_index = std::nullopt;
     std::optional<SelectionHandle> resize_handle = std::nullopt;
+    std::optional<uint64_t> annotation_selection_toggle_candidate_id = std::nullopt;
     bool dragging = false;
+    bool annotation_selection_pending = false;
+    bool annotation_selection_dragging = false;
     bool handle_dragging = false;
     bool move_dragging = false;
     bool modifier_preview = false;
+    PointPx annotation_selection_start_px = {};
     SaveSelectionSource selection_source = SaveSelectionSource::Region;
 
     void Reset_for_session();
@@ -127,6 +132,8 @@ class OverlayController final {
     [[nodiscard]] std::optional<StrokeStyle> Draft_freehand_style() const noexcept;
     [[nodiscard]] Annotation const *Selected_annotation() const noexcept;
     [[nodiscard]] std::optional<RectPx> Selected_annotation_bounds() const noexcept;
+    [[nodiscard]] bool Has_selected_annotations() const noexcept;
+    [[nodiscard]] size_t Selected_annotation_count() const noexcept;
     [[nodiscard]] std::optional<AnnotationEditTarget>
     Annotation_edit_target_at(PointPx cursor) const noexcept;
     [[nodiscard]] std::optional<AnnotationToolId>

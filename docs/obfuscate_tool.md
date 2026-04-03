@@ -208,9 +208,9 @@ arm.
 
 ### Selection display
 
-`Annotation_shows_corner_brackets` returns `false` for `AnnotationKind::Obfuscate`.
-The annotation uses eight resize handles using the same bounding-rect layout as
-`RectangleAnnotation` and `EllipseAnnotation`.
+Obfuscate uses the shared selected-annotation marquee plus the same
+bounding-rect resize handles as `RectangleAnnotation` and `EllipseAnnotation`
+when exactly one obfuscate is selected.
 
 ### Resize behavior
 
@@ -272,9 +272,8 @@ items for Obfuscate:
 2. Implement `ObfuscateAnnotationTool : IAnnotationTool`.
 3. Register it in `AnnotationToolRegistry` in toolbar order after the Ellipse tools.
 4. Add `ObfuscateAnnotation` struct, extend the `AnnotationData` variant, add
-   `AnnotationKind::Obfuscate`, update `Annotation::kind()`, and set
-   `Annotation_shows_corner_brackets` to return `false` for the new kind
-   (uses resize handles, not corner brackets).
+   `AnnotationKind::Obfuscate`, update `Annotation::kind()`, and define the
+   selection-frame and single-selection handle behavior for the new kind.
 5. Fix all `std::visit` sites that become compile errors.
 6. Implement `Rasterize_obfuscate(...)` in core (CPU, no Win32 dependencies):
    explicit block-iteration pixelation + double-pass box blur.

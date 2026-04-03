@@ -79,6 +79,17 @@ OverlayAction Release(OverlayController &c, PointPx pt,
     return c.On_primary_release(mods, pt);
 }
 
+void Draw_filled_rectangle(OverlayController &c, PointPx start, PointPx end) {
+    ASSERT_EQ(c.On_primary_press(No_mods(), start, start, std::nullopt, std::nullopt,
+                                 std::nullopt, {}, Make_snap_edges(c), 0, 0),
+              OverlayAction::Repaint);
+    ASSERT_EQ(c.On_pointer_move(No_mods(), end, end, std::nullopt, {}, std::nullopt,
+                                0, 0),
+              OverlayAction::Repaint);
+    ASSERT_EQ(c.On_primary_release(No_mods(), end),
+              OverlayAction::InvalidateFrozenCache);
+}
+
 } // namespace
 
 // ===========================================================================
@@ -1597,6 +1608,136 @@ TEST(overlay_controller, ActiveAnnotationTool_DiscardsSelectedAnnotation) {
     ASSERT_EQ(c.On_annotation_tool_hotkey(L'R'), OverlayAction::Repaint);
     EXPECT_EQ(c.Selected_annotation(), nullptr);
     EXPECT_FALSE(c.Should_show_selected_annotation_handles());
+}
+
+TEST(overlay_controller,
+     MultiSelection_CtrlClickTogglesMembershipAndSuppressesHandles) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {320, 240});
+
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'R', true), OverlayAction::Repaint);
+    Draw_filled_rectangle(c, {120, 120}, {160, 160});
+    Draw_filled_rectangle(c, {200, 120}, {240, 160});
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'R', true), OverlayAction::Repaint);
+
+    ASSERT_EQ(c.On_primary_press(No_mods(), {130, 130}, {130, 130}, std::nullopt,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
+                                 0),
+              OverlayAction::Repaint);
+    ASSERT_EQ(c.On_primary_release(No_mods(), {130, 130}), OverlayAction::None);
+    EXPECT_EQ(c.Selected_annotation_count(), 1u);
+    EXPECT_TRUE(c.Should_show_selected_annotation_handles());
+
+    ASSERT_EQ(c.On_primary_press(Ctrl_only(), {210, 130}, {210, 130}, std::nullopt,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
+                                 0),
+              OverlayAction::Repaint);
+    ASSERT_EQ(c.On_primary_release(Ctrl_only(), {210, 130}), OverlayAction::Repaint);
+    EXPECT_EQ(c.Selected_annotation_count(), 2u);
+    EXPECT_TRUE(c.Has_selected_annotations());
+    EXPECT_EQ(c.Selected_annotation(), nullptr);
+    EXPECT_FALSE(c.Should_show_selected_annotation_handles());
+
+    ASSERT_EQ(c.On_primary_press(Ctrl_only(), {210, 130}, {210, 130}, std::nullopt,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
+                                 0),
+              OverlayAction::Repaint);
+    ASSERT_EQ(c.On_primary_release(Ctrl_only(), {210, 130}), OverlayAction::Repaint);
+    EXPECT_EQ(c.Selected_annotation_count(), 1u);
+    EXPECT_TRUE(c.Should_show_selected_annotation_handles());
+}
+
+TEST(overlay_controller, MultiSelection_CtrlDragAddsTouchedAnnotationsOnTouch) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {360, 260});
+
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'R', true), OverlayAction::Repaint);
+    Draw_filled_rectangle(c, {120, 120}, {160, 160});
+    Draw_filled_rectangle(c, {220, 120}, {260, 160});
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'R', true), OverlayAction::Repaint);
+
+    ASSERT_EQ(c.On_primary_press(No_mods(), {130, 130}, {130, 130}, std::nullopt,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
+                                 0),
+              OverlayAction::Repaint);
+    ASSERT_EQ(c.On_primary_release(No_mods(), {130, 130}), OverlayAction::None);
+    EXPECT_EQ(c.Selected_annotation_count(), 1u);
+
+    ASSERT_EQ(c.On_primary_press(Ctrl_only(), {210, 110}, {210, 110}, std::nullopt,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
+                                 0),
+              OverlayAction::Repaint);
+    ASSERT_EQ(c.On_pointer_move(Ctrl_only(), {245, 150}, {245, 150}, std::nullopt,
+                                {}, std::nullopt, 0, 0),
+              OverlayAction::Repaint);
+    ASSERT_EQ(c.On_primary_release(Ctrl_only(), {245, 150}), OverlayAction::Repaint);
+    EXPECT_EQ(c.Selected_annotation_count(), 2u);
+    EXPECT_FALSE(c.Should_show_selected_annotation_handles());
+}
+
+TEST(overlay_controller,
+     MultiSelection_CtrlDragLiveRectCanExtendOutsideCaptureSelection) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {360, 260});
+
+    ASSERT_EQ(c.On_primary_press(Ctrl_only(), {330, 220}, {330, 220}, std::nullopt,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
+                                 0),
+              OverlayAction::Repaint);
+    ASSERT_EQ(c.On_pointer_move(Ctrl_only(), {420, 320}, {420, 320}, std::nullopt,
+                                {}, std::nullopt, 0, 0),
+              OverlayAction::Repaint);
+
+    EXPECT_TRUE(c.State().annotation_selection_dragging);
+    EXPECT_EQ(c.State().annotation_selection_live_rect,
+              (RectPx::From_ltrb(330, 220, 420, 320)));
+    EXPECT_GT(c.State().annotation_selection_live_rect.right,
+              c.State().final_selection.right);
+    EXPECT_GT(c.State().annotation_selection_live_rect.bottom,
+              c.State().final_selection.bottom);
+}
+
+TEST(overlay_controller, MultiSelection_GroupMoveStartsFromEmptyUnionInterior) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {360, 260});
+
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'R', true), OverlayAction::Repaint);
+    Draw_filled_rectangle(c, {120, 120}, {160, 160});
+    Draw_filled_rectangle(c, {220, 120}, {260, 160});
+    ASSERT_EQ(c.On_annotation_tool_hotkey(L'R', true), OverlayAction::Repaint);
+
+    ASSERT_EQ(c.On_primary_press(No_mods(), {130, 130}, {130, 130}, std::nullopt,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
+                                 0),
+              OverlayAction::Repaint);
+    ASSERT_EQ(c.On_primary_release(No_mods(), {130, 130}), OverlayAction::None);
+    ASSERT_EQ(c.On_primary_press(Ctrl_only(), {230, 130}, {230, 130}, std::nullopt,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
+                                 0),
+              OverlayAction::Repaint);
+    ASSERT_EQ(c.On_primary_release(Ctrl_only(), {230, 130}), OverlayAction::Repaint);
+    ASSERT_EQ(c.Selected_annotation_count(), 2u);
+
+    ASSERT_EQ(c.On_primary_press(No_mods(), {190, 130}, {190, 130}, std::nullopt,
+                                 std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
+                                 0),
+              OverlayAction::Repaint);
+    EXPECT_TRUE(c.Is_annotation_dragging());
+    ASSERT_EQ(c.On_pointer_move(No_mods(), {200, 140}, {200, 140}, std::nullopt,
+                                {}, std::nullopt, 0, 0),
+              OverlayAction::Repaint);
+    ASSERT_EQ(c.On_primary_release(No_mods(), {200, 140}),
+              OverlayAction::InvalidateFrozenCache);
+    EXPECT_FALSE(c.Is_annotation_dragging());
+    ASSERT_EQ(c.Annotations().size(), 2u);
+    EXPECT_EQ(std::get<RectangleAnnotation>(c.Annotations()[0].data).outer_bounds,
+              (RectPx::From_ltrb(130, 130, 171, 171)));
+    EXPECT_EQ(std::get<RectangleAnnotation>(c.Annotations()[1].data).outer_bounds,
+              (RectPx::From_ltrb(230, 130, 271, 171)));
 }
 
 TEST(overlay_controller,

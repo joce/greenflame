@@ -5,7 +5,7 @@ audience: contributors
 status: authoritative
 owners:
   - core-team
-last_updated: 2026-03-26
+last_updated: 2026-04-02
 tags:
   - overlay
   - annotations
@@ -40,11 +40,19 @@ The annotation system applies only to the interactive overlay flow.
 - After a region exists, border/corner drag still resizes the selection.
 - When no annotation tool is selected, the overlay is in its default interaction
   mode:
-  - click and drag an annotation to select it; once selected, dragging anywhere
-    inside its selection box moves it
-  - if the selected annotation is a line, drag either endpoint handle to edit it
+  - click and drag a covered annotation pixel to select it; once selected,
+    dragging anywhere inside its selection box moves it
+  - `Ctrl+click` toggles the topmost covered annotation in or out of the current
+    selection
+  - `Ctrl+drag` draws an additive marquee; any annotation whose selection frame is
+    touched by that marquee is added to the current selection
+  - when multiple annotations are selected, dragging anywhere inside the union
+    selection box moves the whole group
+  - if exactly one selected annotation is a line, drag either endpoint handle to
+    edit it
   - click and drag empty space inside the selection to move the selection
   - clicking empty space outside the selection clears the selected annotation
+    selection
 - When an annotation tool is active, ordinary clicks are routed to that tool instead
   of the default selection/move behavior.
 - If a gesture is already in progress, competing resize, selection-move, and
@@ -139,7 +147,7 @@ The annotation system applies only to the interactive overlay flow.
   `tools.bubble.current_font`, while font family names persist in `tools.font.*`.
 - The size-overlay duration persists in `ui.tool_size_overlay_duration_ms`.
 - Completing an annotation does not change the active tool.
-- Starting a selection move clears the selected annotation.
+- Starting a selection move clears the selected annotation selection.
 
 ### Selection and deletion
 
@@ -147,18 +155,29 @@ The annotation system applies only to the interactive overlay flow.
 - Hit-testing is pixel-accurate against the annotation's rendered coverage.
 - In default mode, clicking a covered pixel both selects the topmost annotation and
   begins moving it immediately.
-- Selected freehand annotations are shown by drawing the corners of their bounding
-  box.
-- Selected line and arrow annotations are shown by drawing 5px hollow endpoint
-  handles with a 1px white inner and outer halo.
-- Selected rectangle annotations are shown by drawing eight resize handles when
-  space permits; corner handles take precedence over side handles when the bounds
-  are too small to show all handles without overlap.
-- Selected ellipse annotations are shown by drawing eight resize handles using the
-  same bounding-rect handle layout as rectangles.
-- Selected obfuscate annotations are shown by drawing eight resize handles using
-  the same bounding-rect handle layout as rectangles.
-- `Delete` removes the selected annotation.
+- `Ctrl+click` toggles membership of the topmost covered annotation.
+- `Ctrl+drag` adds every touched annotation to the current selection.
+- The live `Ctrl+drag` additive marquee uses the same animated selected-annotation
+  marquee styling as committed annotation selection, not the green capture-region
+  border.
+- That live marquee begins animating as soon as the additive drag marquee appears
+  and stays animated while the drag remains active, even if `Ctrl` is still held.
+- The live `Ctrl+drag` marquee is not clipped to the captured screenshot region; it
+  can extend onto the dimmed overlay, limited only by the virtual desktop bounds.
+- Selected annotations show a clockwise animated marquee around the union of their
+  selection frames.
+- Rectangle, ellipse, and obfuscate selection frames sit 1 px outside the visible
+  shape or stamp so the marquee does not cover content pixels.
+- When exactly one annotation is selected:
+  - line and arrow selections show 5 px hollow endpoint handles with a 1 px white
+    inner and outer halo
+  - straight two-point highlighter selections show the same endpoint handles
+  - rectangle, ellipse, and obfuscate selections show eight resize handles when
+    space permits; corner handles take precedence over side handles when the bounds
+    are too small to show all handles without overlap
+- When more than one annotation is selected, no annotation-edit handles are shown
+  and the group is move-only.
+- `Delete` removes the full selected annotation set in one undo step.
 - Deletion is undoable and redoable.
 
 ## Architecture
@@ -182,7 +201,7 @@ The annotation system applies only to the interactive overlay flow.
   - annotation-session state
   - optional active tool
   - ordered annotation list
-  - selected annotation id
+  - selected annotation ids
   - annotation drag state
   - in-progress freehand draft points and style
 
@@ -220,7 +239,7 @@ without pushing per-tool logic into the Win32 layer.
 
 - `AnnotationDocument`
   - ordered `annotations`
-  - `selected_annotation_id`
+  - `selected_annotation_ids`
   - `next_annotation_id`
 
 - `Annotation`
@@ -229,9 +248,8 @@ without pushing per-tool logic into the Win32 layer.
     RectangleAnnotation, EllipseAnnotation, ObfuscateAnnotation,
     TextAnnotation, BubbleAnnotation>`; all dispatch is done with
     `std::visit(Overloaded{...}, annotation.data)`
-  - `AnnotationKind` enum exists separately and is used only by
-    `Annotation_shows_corner_brackets`; `Annotation::kind()` derives it from the
-    active variant alternative
+  - `AnnotationKind` enum exists separately; `Annotation::kind()` derives it from
+    the active variant alternative
   - adding a new alternative to the variant causes every `std::visit` site that
     does not cover it to become a compile error, which is the intended enforcement
     mechanism
@@ -447,8 +465,8 @@ To add a future tool:
    - define the new `XxxAnnotation` struct with its fields and `operator==`
    - add it to the `std::variant` alias `AnnotationData`
    - add it to `AnnotationKind` and add an arm to `Annotation::kind()`
-   - decide whether `Annotation_shows_corner_brackets` should return `true` or
-     `false` for the new kind
+   - decide how that kind participates in selection-frame bounds and whether
+     single-selection handles are needed
    - all `std::visit(Overloaded{...}, annotation.data)` call sites that are missing
      an arm will now fail to compile — fix each one
 5. Add raster/hit-test/composite support in core.

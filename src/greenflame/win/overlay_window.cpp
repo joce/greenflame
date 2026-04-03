@@ -259,6 +259,7 @@ Selection_handle_for_annotation_edit_target(
     case Kind::RectangleLeftHandle:
         return Handle::Left;
     case Kind::Body:
+    case Kind::SelectionBody:
     case Kind::LineStartHandle:
     case Kind::LineEndHandle:
     case Kind::FreehandStrokeStartHandle:
@@ -1581,14 +1582,24 @@ void OverlayWindow::Update_selected_annotation_marquee_timer() noexcept {
         return;
     }
 
-    if (controller_.Should_show_selected_annotation_handles()) {
-        (void)SetTimer(hwnd_, kSelectedAnnotationMarqueeTimerId,
-                       kSelectedAnnotationMarqueeTimerIntervalMs, nullptr);
+    bool const needs_marquee_timer = controller_.Has_selected_annotations() ||
+                                     controller_.State().annotation_selection_dragging;
+    if (needs_marquee_timer) {
+        // Do not re-arm the timer on every input event; that can indefinitely delay
+        // the next tick while the pointer is moving, freezing the marquee during drag.
+        if (!selected_annotation_marquee_timer_running_) {
+            (void)SetTimer(hwnd_, kSelectedAnnotationMarqueeTimerId,
+                           kSelectedAnnotationMarqueeTimerIntervalMs, nullptr);
+            selected_annotation_marquee_timer_running_ = true;
+        }
         return;
     }
 
     selected_annotation_marquee_phase_px_ = 0;
-    (void)KillTimer(hwnd_, kSelectedAnnotationMarqueeTimerId);
+    if (selected_annotation_marquee_timer_running_) {
+        (void)KillTimer(hwnd_, kSelectedAnnotationMarqueeTimerId);
+        selected_annotation_marquee_timer_running_ = false;
+    }
 }
 
 bool OverlayWindow::Can_show_selection_wheel() const noexcept {
@@ -3014,9 +3025,11 @@ LRESULT OverlayWindow::On_timer(WPARAM wparam) {
         return 0;
     }
     if (wparam == kSelectedAnnotationMarqueeTimerId) {
-        if (!controller_.Should_show_selected_annotation_handles()) {
+        if (!controller_.Has_selected_annotations() &&
+            !controller_.State().annotation_selection_dragging) {
             selected_annotation_marquee_phase_px_ = 0;
             (void)KillTimer(hwnd_, kSelectedAnnotationMarqueeTimerId);
+            selected_annotation_marquee_timer_running_ = false;
             return 0;
         }
         selected_annotation_marquee_phase_px_ =
@@ -3556,6 +3569,7 @@ LRESULT OverlayWindow::On_paint() {
             d2d_resources_->obfuscate_bitmaps.clear();
         }
         input.dragging = s.dragging;
+        input.annotation_selection_dragging = s.annotation_selection_dragging;
         input.handle_dragging = s.handle_dragging;
         input.move_dragging = s.move_dragging;
         input.annotation_editing = controller_.Has_active_annotation_edit();
@@ -3567,6 +3581,7 @@ LRESULT OverlayWindow::On_paint() {
                 config_->show_selection_size_center_label;
         }
         input.live_rect = s.live_rect;
+        input.annotation_selection_live_rect = s.annotation_selection_live_rect;
         input.final_selection = s.final_selection;
         input.monitor_rects_client =
             std::span<const core::RectPx>(monitor_client_rects);
@@ -3590,6 +3605,7 @@ LRESULT OverlayWindow::On_paint() {
                 : 1.0f;
         input.selected_annotation_marquee_phase_px =
             selected_annotation_marquee_phase_px_;
+        input.selected_annotation_bounds = controller_.Selected_annotation_bounds();
         if (draft_text_view.has_value()) {
             input.draft_text_annotation = draft_text_view->annotation;
             input.draft_text_selection_rects =
@@ -3758,6 +3774,7 @@ LRESULT OverlayWindow::On_destroy() {
     Clear_transient_center_label(false);
     caret_blink_visible_ = true;
     selected_annotation_marquee_phase_px_ = 0;
+    selected_annotation_marquee_timer_running_ = false;
     (void)KillTimer(hwnd_, kCaretBlinkTimerId);
     (void)KillTimer(hwnd_, kSelectedAnnotationMarqueeTimerId);
     Cancel_highlighter_straighten_pending();

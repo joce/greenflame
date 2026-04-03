@@ -229,6 +229,7 @@ class OverlayWindow final {
     std::wstring transient_center_label_text_ = {};
     bool caret_blink_visible_ = true;
     int32_t selected_annotation_marquee_phase_px_ = 0;
+    bool selected_annotation_marquee_timer_running_ = false;
     bool suppress_next_lbutton_up_ = false;
     std::vector<ToolbarButtonEntry> toolbar_buttons_;
     SelectionWheelState selection_wheel_ = {};

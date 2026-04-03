@@ -46,8 +46,11 @@ With **no annotation tool selected** (the default mode):
 
 - **Click and drag inside the selection** to **move** it (hold **Alt** to disable snapping).
 - **Click and drag an annotation** to **select** it; once selected, drag anywhere inside its selection box to move it.
+- **Ctrl+click** an annotation to add it to or remove it from the current annotation selection.
+- **Ctrl+drag** a marquee to add every touched annotation to the current selection.
+- When **multiple annotations** are selected, drag anywhere inside the group selection box to move the whole group.
 - A **selected line or arrow annotation** shows draggable endpoint handles you can drag to reshape it.
-- **Selected rectangle, ellipse, and obfuscate annotations** show draggable resize handles on the corners and sides.
+- When **exactly one** rectangle, ellipse, or obfuscate annotation is selected, it shows draggable resize handles on the corners and sides.
 
 ---
 
@@ -134,7 +137,7 @@ annotations. It is never selectable or movable.
 | Shortcut | Action |
 |----------|--------|
 | **Ctrl-K** | Show or hide the captured cursor in this screenshot |
-| **Delete** | Remove the selected annotation |
+| **Delete** | Remove the selected annotation or annotation group |
 | **Ctrl-Z** | Undo the last region or annotation change |
 | **Ctrl-Shift-Z** | Redo the last undone region or annotation change |
 | **Escape** | Cancel or go back |

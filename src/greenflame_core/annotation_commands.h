@@ -25,9 +25,8 @@ class CompoundCommand final : public ICommand {
 class AddAnnotationCommand final : public ICommand {
   public:
     AddAnnotationCommand(AnnotationController *controller, size_t index,
-                         Annotation annotation,
-                         std::optional<uint64_t> selection_before,
-                         std::optional<uint64_t> selection_after);
+                         Annotation annotation, AnnotationSelection selection_before,
+                         AnnotationSelection selection_after);
 
     void Undo() override;
     void Redo() override;
@@ -37,16 +36,15 @@ class AddAnnotationCommand final : public ICommand {
     AnnotationController *controller_ = nullptr;
     size_t index_ = 0;
     Annotation annotation_ = {};
-    std::optional<uint64_t> selection_before_ = std::nullopt;
-    std::optional<uint64_t> selection_after_ = std::nullopt;
+    AnnotationSelection selection_before_ = {};
+    AnnotationSelection selection_after_ = {};
 };
 
 class DeleteAnnotationCommand final : public ICommand {
   public:
     DeleteAnnotationCommand(AnnotationController *controller, size_t index,
-                            Annotation annotation,
-                            std::optional<uint64_t> selection_before,
-                            std::optional<uint64_t> selection_after);
+                            Annotation annotation, AnnotationSelection selection_before,
+                            AnnotationSelection selection_after);
 
     void Undo() override;
     void Redo() override;
@@ -56,16 +54,16 @@ class DeleteAnnotationCommand final : public ICommand {
     AnnotationController *controller_ = nullptr;
     size_t index_ = 0;
     Annotation annotation_ = {};
-    std::optional<uint64_t> selection_before_ = std::nullopt;
-    std::optional<uint64_t> selection_after_ = std::nullopt;
+    AnnotationSelection selection_before_ = {};
+    AnnotationSelection selection_after_ = {};
 };
 
 class UpdateAnnotationCommand final : public ICommand {
   public:
     UpdateAnnotationCommand(AnnotationController *controller, size_t index,
                             Annotation annotation_before, Annotation annotation_after,
-                            std::optional<uint64_t> selection_before,
-                            std::optional<uint64_t> selection_after,
+                            AnnotationSelection selection_before,
+                            AnnotationSelection selection_after,
                             std::string_view description);
 
     void Undo() override;
@@ -77,8 +75,8 @@ class UpdateAnnotationCommand final : public ICommand {
     size_t index_ = 0;
     Annotation annotation_before_ = {};
     Annotation annotation_after_ = {};
-    std::optional<uint64_t> selection_before_ = std::nullopt;
-    std::optional<uint64_t> selection_after_ = std::nullopt;
+    AnnotationSelection selection_before_ = {};
+    AnnotationSelection selection_after_ = {};
     std::string_view description_ = {};
 };
 
@@ -86,8 +84,8 @@ class AddBubbleAnnotationCommand final : public ICommand {
   public:
     AddBubbleAnnotationCommand(AnnotationController *controller, size_t index,
                                Annotation annotation,
-                               std::optional<uint64_t> selection_before,
-                               std::optional<uint64_t> selection_after);
+                               AnnotationSelection selection_before,
+                               AnnotationSelection selection_after);
 
     void Undo() override;
     void Redo() override;
@@ -97,8 +95,8 @@ class AddBubbleAnnotationCommand final : public ICommand {
     AnnotationController *controller_ = nullptr;
     size_t index_ = 0;
     Annotation annotation_ = {};
-    std::optional<uint64_t> selection_before_ = std::nullopt;
-    std::optional<uint64_t> selection_after_ = std::nullopt;
+    AnnotationSelection selection_before_ = {};
+    AnnotationSelection selection_after_ = {};
 };
 
 } // namespace greenflame::core

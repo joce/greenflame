@@ -89,7 +89,7 @@ bool AnnotationController::Toggle_tool(AnnotationToolId id) {
         active_tool_.reset();
     } else {
         active_tool_ = id;
-        document_.selected_annotation_id = std::nullopt;
+        document_.selected_annotation_ids.clear();
     }
     return true;
 }
@@ -292,11 +292,11 @@ std::optional<StrokeStyle> AnnotationController::Draft_freehand_style() const no
 }
 
 std::optional<size_t> AnnotationController::Selected_annotation_index() const noexcept {
-    if (!document_.selected_annotation_id.has_value()) {
+    if (document_.selected_annotation_ids.size() != 1) {
         return std::nullopt;
     }
     return Index_of_annotation_id(document_.annotations,
-                                  *document_.selected_annotation_id);
+                                  document_.selected_annotation_ids.front());
 }
 
 Annotation const *AnnotationController::Selected_annotation() const noexcept {
@@ -309,17 +309,15 @@ Annotation const *AnnotationController::Selected_annotation() const noexcept {
 
 std::optional<RectPx>
 AnnotationController::Selected_annotation_bounds() const noexcept {
-    Annotation const *const selected = Selected_annotation();
-    if (selected == nullptr) {
-        return std::nullopt;
-    }
-    return Annotation_visual_bounds(*selected);
+    return Annotation_selection_bounds(document_.annotations,
+                                       document_.selected_annotation_ids);
 }
 
 std::optional<AnnotationEditTarget>
 AnnotationController::Annotation_edit_target_at(PointPx cursor) const noexcept {
-    return Hit_test_annotation_edit_target(Selected_annotation(), document_.annotations,
-                                           cursor);
+    return Hit_test_annotation_edit_target(document_.selected_annotation_ids,
+                                           document_.annotations,
+                                           Selected_annotation_bounds(), cursor);
 }
 
 bool AnnotationController::Has_active_tool_gesture() const noexcept {
@@ -344,29 +342,50 @@ AnnotationController::Active_annotation_edit_preview() const noexcept {
     if (active_edit_interaction_ == nullptr) {
         return std::nullopt;
     }
-    return active_edit_interaction_->Preview();
+    std::vector<AnnotationEditPreview> const previews =
+        active_edit_interaction_->Previews();
+    return previews.size() == 1 ? std::optional<AnnotationEditPreview>{previews.front()}
+                                : std::nullopt;
+}
+
+std::vector<AnnotationEditPreview>
+AnnotationController::Active_annotation_edit_previews() const {
+    return active_edit_interaction_ == nullptr ? std::vector<AnnotationEditPreview>{}
+                                               : active_edit_interaction_->Previews();
 }
 
 std::vector<size_t> AnnotationController::Active_obfuscate_preview_indices() const {
     std::vector<size_t> indices = {};
-    std::optional<AnnotationEditPreview> const preview =
-        Active_annotation_edit_preview();
-    if (!preview.has_value() || preview->index >= document_.annotations.size()) {
+    std::vector<AnnotationEditPreview> const previews =
+        Active_annotation_edit_previews();
+    if (previews.empty()) {
         return indices;
     }
 
-    std::optional<RectPx> const old_bounds =
-        Annotation_bounds(preview->annotation_before);
-    std::optional<RectPx> const new_bounds =
-        Annotation_bounds(preview->annotation_after);
-    for (size_t index = preview->index; index < document_.annotations.size(); ++index) {
+    for (size_t index = 0; index < document_.annotations.size(); ++index) {
         Annotation const &annotation = document_.annotations[index];
         if (!Is_obfuscate_annotation(annotation)) {
             continue;
         }
-        if (index == preview->index ||
-            Bounds_intersect(Annotation_bounds(annotation), old_bounds) ||
-            Bounds_intersect(Annotation_bounds(annotation), new_bounds)) {
+
+        bool include_index = false;
+        for (AnnotationEditPreview const &preview : previews) {
+            if (preview.index >= document_.annotations.size()) {
+                continue;
+            }
+            std::optional<RectPx> const old_bounds =
+                Annotation_bounds(preview.annotation_before);
+            std::optional<RectPx> const new_bounds =
+                Annotation_bounds(preview.annotation_after);
+            if (index == preview.index ||
+                Bounds_intersect(Annotation_bounds(annotation), old_bounds) ||
+                Bounds_intersect(Annotation_bounds(annotation), new_bounds)) {
+                include_index = true;
+                break;
+            }
+        }
+
+        if (include_index) {
             indices.push_back(index);
         }
     }
@@ -405,7 +424,7 @@ void AnnotationController::Begin_text_draft(PointPx origin) {
         return;
     }
 
-    document_.selected_annotation_id = std::nullopt;
+    document_.selected_annotation_ids.clear();
     TextAnnotationBaseStyle const base_style{
         .color = freehand_style_.color,
         .font_choice = Normalize_text_font_choice(text_current_font_),
@@ -516,39 +535,44 @@ bool AnnotationController::On_pointer_move(PointPx cursor, bool primary_down) {
 
 bool AnnotationController::On_primary_release(UndoStack &undo_stack) {
     if (active_edit_interaction_ != nullptr) {
-        std::optional<AnnotationEditCommandData> const command =
-            active_edit_interaction_->Commit();
+        std::vector<Annotation> const annotations_before = document_.annotations;
+        std::vector<AnnotationEditCommandData> commands =
+            active_edit_interaction_->Commit_all();
         active_edit_interaction_.reset();
-        if (!command.has_value()) {
+        if (commands.empty()) {
             return false;
         }
 
-        std::vector<Annotation> const annotations_before = document_.annotations;
-        Annotation primary_after = command->annotation_after;
-        if (std::holds_alternative<ObfuscateAnnotation>(primary_after.data)) {
-            std::optional<Annotation> const rebuilt = Rebuild_obfuscate_annotation(
-                annotations_before, command->index, primary_after);
-            if (!rebuilt.has_value()) {
-                return false;
+        std::vector<std::unique_ptr<ICommand>> primary_commands = {};
+        primary_commands.reserve(commands.size());
+        for (AnnotationEditCommandData &command : commands) {
+            Annotation annotation_after = command.annotation_after;
+            if (std::holds_alternative<ObfuscateAnnotation>(annotation_after.data)) {
+                std::optional<Annotation> const rebuilt = Rebuild_obfuscate_annotation(
+                    annotations_before, command.index, annotation_after);
+                if (!rebuilt.has_value()) {
+                    return false;
+                }
+                annotation_after = *rebuilt;
+                if (command.index < document_.annotations.size()) {
+                    document_.annotations[command.index] = annotation_after;
+                }
+                command.annotation_after = annotation_after;
             }
-            primary_after = *rebuilt;
-            if (command->index < document_.annotations.size()) {
-                document_.annotations[command->index] = primary_after;
-            }
+            primary_commands.push_back(std::make_unique<UpdateAnnotationCommand>(
+                this, command.index, command.annotation_before,
+                command.annotation_after, command.selection_before,
+                command.selection_after, command.description));
         }
 
-        std::optional<uint64_t> const selection = document_.selected_annotation_id;
         std::vector<std::unique_ptr<ICommand>> reactive_commands =
             Build_reactive_obfuscate_update_commands(
-                annotations_before, document_.annotations, command->index,
-                Annotation_bounds(command->annotation_before),
-                Annotation_bounds(primary_after), selection, selection);
-        Push_annotation_command(undo_stack,
-                                std::make_unique<UpdateAnnotationCommand>(
-                                    this, command->index, command->annotation_before,
-                                    primary_after, selection, selection,
-                                    command->description),
-                                std::move(reactive_commands));
+                annotations_before, document_.annotations,
+                document_.selected_annotation_ids, document_.selected_annotation_ids);
+        Push_annotation_commands(undo_stack, std::move(primary_commands),
+                                 std::move(reactive_commands),
+                                 commands.size() > 1 ? "Move annotations"
+                                                     : "Compound annotation change");
         return true;
     }
 
@@ -580,38 +604,48 @@ bool AnnotationController::On_cancel() {
 }
 
 bool AnnotationController::Delete_selected_annotation(UndoStack &undo_stack) {
-    if (Has_active_edit_interaction() ||
-        !document_.selected_annotation_id.has_value()) {
+    if (Has_active_edit_interaction() || document_.selected_annotation_ids.empty()) {
         return false;
     }
-    std::optional<size_t> const index = Selected_annotation_index();
-    if (!index.has_value()) {
-        document_.selected_annotation_id = std::nullopt;
+    AnnotationSelection const selection_before = document_.selected_annotation_ids;
+    std::vector<Annotation> const annotations_before = document_.annotations;
+    std::vector<Annotation> annotations_after = document_.annotations;
+    std::vector<size_t> selected_indices = {};
+    selected_indices.reserve(selection_before.size());
+    for (size_t index = 0; index < annotations_after.size(); ++index) {
+        if (Selection_contains_annotation_id(selection_before,
+                                             annotations_after[index].id)) {
+            selected_indices.push_back(index);
+        }
+    }
+    if (selected_indices.empty()) {
+        document_.selected_annotation_ids.clear();
         return true;
     }
 
-    Annotation const deleted_annotation = document_.annotations[*index];
-    std::vector<Annotation> const annotations_before = document_.annotations;
-    std::vector<Annotation> annotations_after = document_.annotations;
-    annotations_after.erase(annotations_after.begin() +
-                            static_cast<std::ptrdiff_t>(*index));
-    std::vector<std::unique_ptr<ICommand>> reactive_commands =
-        Build_reactive_obfuscate_update_commands(
-            annotations_before, annotations_after, *index,
-            Annotation_bounds(deleted_annotation), std::nullopt,
-            document_.selected_annotation_id, std::nullopt);
+    std::vector<std::unique_ptr<ICommand>> primary_commands = {};
+    primary_commands.reserve(selected_indices.size());
+    for (size_t i = selected_indices.size(); i > 0; --i) {
+        size_t const index = selected_indices[i - 1];
+        Annotation const deleted_annotation = annotations_after[index];
+        annotations_after.erase(annotations_after.begin() +
+                                static_cast<std::ptrdiff_t>(index));
+        primary_commands.push_back(std::make_unique<DeleteAnnotationCommand>(
+            this, index, deleted_annotation, selection_before, AnnotationSelection{}));
+    }
 
-    Push_annotation_command(undo_stack,
-                            std::make_unique<DeleteAnnotationCommand>(
-                                this, *index, deleted_annotation,
-                                document_.selected_annotation_id, std::nullopt),
-                            std::move(reactive_commands));
+    std::vector<std::unique_ptr<ICommand>> reactive_commands =
+        Build_reactive_obfuscate_update_commands(annotations_before, annotations_after,
+                                                 selection_before,
+                                                 AnnotationSelection{});
+    Push_annotation_commands(undo_stack, std::move(primary_commands),
+                             std::move(reactive_commands), "Delete annotations");
     return true;
 }
 
 void AnnotationController::Clear_annotations() noexcept {
     document_.annotations.clear();
-    document_.selected_annotation_id = std::nullopt;
+    document_.selected_annotation_ids.clear();
     active_edit_interaction_.reset();
     text_edit_ctrl_.reset();
     registry_.Reset_all();
@@ -634,18 +668,55 @@ AnnotationController::Annotation_id_at(PointPx cursor) const noexcept {
 
 bool AnnotationController::Set_selected_annotation(
     std::optional<uint64_t> selected_annotation_id) noexcept {
-    if (active_tool_.has_value()) {
-        selected_annotation_id = std::nullopt;
+    if (!selected_annotation_id.has_value()) {
+        return Set_selected_annotations({});
     }
-    if (document_.selected_annotation_id == selected_annotation_id) {
+    std::array<uint64_t, 1> const selection = {*selected_annotation_id};
+    return Set_selected_annotations(selection);
+}
+
+bool AnnotationController::Set_selected_annotations(
+    std::span<const uint64_t> selected_annotation_ids) noexcept {
+    AnnotationSelection selection =
+        active_tool_.has_value() ? AnnotationSelection{}
+                                 : Normalized_selection(selected_annotation_ids);
+    if (document_.selected_annotation_ids == selection) {
         return false;
     }
-    document_.selected_annotation_id = selected_annotation_id;
+    document_.selected_annotation_ids = std::move(selection);
     return true;
+}
+
+bool AnnotationController::Toggle_selected_annotation(uint64_t annotation_id) noexcept {
+    AnnotationSelection selection = document_.selected_annotation_ids;
+    auto const it = std::ranges::find(selection, annotation_id);
+    if (it != selection.end()) {
+        selection.erase(it);
+    } else {
+        selection.push_back(annotation_id);
+    }
+    return Set_selected_annotations(selection);
+}
+
+bool AnnotationController::Add_selected_annotations(
+    std::span<const uint64_t> selected_annotation_ids) noexcept {
+    if (selected_annotation_ids.empty()) {
+        return false;
+    }
+    AnnotationSelection selection = document_.selected_annotation_ids;
+    selection.insert(selection.end(), selected_annotation_ids.begin(),
+                     selected_annotation_ids.end());
+    return Set_selected_annotations(selection);
 }
 
 bool AnnotationController::Select_topmost_annotation(PointPx cursor) {
     return Set_selected_annotation(Annotation_id_at(cursor));
+}
+
+AnnotationSelection AnnotationController::Annotation_ids_intersecting_selection_rect(
+    RectPx selection_rect) const noexcept {
+    return greenflame::core::Annotation_ids_intersecting_selection_rect(
+        document_.annotations, selection_rect);
 }
 
 std::span<const PointPx> AnnotationController::Draft_freehand_points() const noexcept {
@@ -727,7 +798,7 @@ AnnotationController::Build_obfuscate_annotation(RectPx bounds) const {
 void AnnotationController::Commit_new_annotation(UndoStack &undo_stack,
                                                  Annotation annotation) {
     size_t const insert_index = document_.annotations.size();
-    std::optional<uint64_t> const selection = document_.selected_annotation_id;
+    AnnotationSelection const selection = document_.selected_annotation_ids;
     if (annotation.Kind() == AnnotationKind::Bubble) {
         Push_annotation_command(
             undo_stack,
@@ -749,21 +820,35 @@ bool AnnotationController::Begin_annotation_edit(AnnotationEditTarget target,
         Has_active_edit_interaction()) {
         return false;
     }
-    std::optional<size_t> const index =
-        Index_of_annotation_id(document_.annotations, target.annotation_id);
-    if (!index.has_value()) {
-        return false;
+    std::unique_ptr<IAnnotationEditInteraction> interaction = {};
+    if (target.kind == AnnotationEditTargetKind::SelectionBody) {
+        interaction = Create_selection_move_edit_interaction(
+            document_.annotations, document_.selected_annotation_ids, cursor);
+    } else {
+        std::optional<size_t> const index =
+            Index_of_annotation_id(document_.annotations, target.annotation_id);
+        if (!index.has_value()) {
+            return false;
+        }
+        interaction = Create_annotation_edit_interaction(
+            target, *index, document_.annotations[*index], cursor);
     }
-    std::unique_ptr<IAnnotationEditInteraction> interaction =
-        Create_annotation_edit_interaction(target, *index,
-                                           document_.annotations[*index], cursor);
     if (interaction == nullptr) {
         return false;
     }
 
-    document_.selected_annotation_id = target.annotation_id;
+    if (target.kind != AnnotationEditTargetKind::SelectionBody) {
+        AnnotationSelection const selection = {target.annotation_id};
+        document_.selected_annotation_ids = Normalized_selection(selection);
+    }
     active_edit_interaction_ = std::move(interaction);
     return true;
+}
+
+AnnotationSelection AnnotationController::Normalized_selection(
+    std::span<const uint64_t> selected_annotation_ids) const noexcept {
+    return Normalize_annotation_selection(document_.annotations,
+                                          selected_annotation_ids);
 }
 
 std::optional<Annotation> AnnotationController::Rebuild_obfuscate_annotation(
@@ -804,37 +889,11 @@ std::optional<Annotation> AnnotationController::Rebuild_obfuscate_annotation(
 std::vector<std::unique_ptr<ICommand>>
 AnnotationController::Build_reactive_obfuscate_update_commands(
     std::vector<Annotation> const &before_annotations,
-    std::vector<Annotation> after_annotations, size_t changed_index,
-    std::optional<RectPx> old_bounds, std::optional<RectPx> new_bounds,
-    std::optional<uint64_t> selection_before, std::optional<uint64_t> selection_after) {
+    std::vector<Annotation> after_annotations, AnnotationSelection const &selection_before,
+    AnnotationSelection const &selection_after) {
     std::vector<std::unique_ptr<ICommand>> commands = {};
-    size_t const start_index = std::min(changed_index, after_annotations.size());
-    auto const before_index_for_after = [&](size_t after_index) noexcept {
-        if (after_annotations.size() + 1u == before_annotations.size() &&
-            after_index >= changed_index) {
-            return after_index + 1u;
-        }
-        if (after_annotations.size() == before_annotations.size() + 1u &&
-            after_index > changed_index) {
-            return after_index - 1u;
-        }
-        return after_index;
-    };
-
-    for (size_t index = start_index; index < after_annotations.size(); ++index) {
+    for (size_t index = 0; index < after_annotations.size(); ++index) {
         if (!Is_obfuscate_annotation(after_annotations[index])) {
-            continue;
-        }
-
-        size_t const before_index = before_index_for_after(index);
-        if (before_index >= before_annotations.size()) {
-            continue;
-        }
-
-        std::optional<RectPx> const obfuscate_bounds =
-            Annotation_bounds(after_annotations[index]);
-        if (index != changed_index && !Bounds_intersect(obfuscate_bounds, old_bounds) &&
-            !Bounds_intersect(obfuscate_bounds, new_bounds)) {
             continue;
         }
 
@@ -843,13 +902,19 @@ AnnotationController::Build_reactive_obfuscate_update_commands(
         if (!rebuilt.has_value()) {
             continue;
         }
-        if (before_annotations[before_index] == *rebuilt) {
+        std::optional<size_t> const before_index =
+            Index_of_annotation_id(before_annotations, after_annotations[index].id);
+        if (!before_index.has_value()) {
+            after_annotations[index] = *rebuilt;
+            continue;
+        }
+        if (before_annotations[*before_index] == *rebuilt) {
             after_annotations[index] = *rebuilt;
             continue;
         }
 
         commands.push_back(std::make_unique<UpdateAnnotationCommand>(
-            this, index, before_annotations[before_index], *rebuilt, selection_before,
+            this, index, before_annotations[*before_index], *rebuilt, selection_before,
             selection_after, "Recompute obfuscate annotation"));
         after_annotations[index] = *rebuilt;
     }
@@ -864,67 +929,125 @@ void AnnotationController::Push_annotation_command(
         return;
     }
 
-    if (reactive_commands.empty()) {
-        undo_stack.Push(std::move(primary_command));
+    std::vector<std::unique_ptr<ICommand>> primary_commands = {};
+    primary_commands.push_back(std::move(primary_command));
+    Push_annotation_commands(undo_stack, std::move(primary_commands),
+                             std::move(reactive_commands));
+}
+
+void AnnotationController::Push_annotation_commands(
+    UndoStack &undo_stack, std::vector<std::unique_ptr<ICommand>> primary_commands,
+    std::vector<std::unique_ptr<ICommand>> reactive_commands,
+    std::string_view description) const {
+    if (primary_commands.empty()) {
+        return;
+    }
+
+    if (primary_commands.size() == 1 && reactive_commands.empty()) {
+        undo_stack.Push(std::move(primary_commands.front()));
         return;
     }
 
     std::vector<std::unique_ptr<ICommand>> commands = {};
-    commands.reserve(reactive_commands.size() + 1u);
-    commands.push_back(std::move(primary_command));
+    commands.reserve(primary_commands.size() + reactive_commands.size());
+    for (auto &command : primary_commands) {
+        commands.push_back(std::move(command));
+    }
+    if (reactive_commands.empty()) {
+        undo_stack.Push(std::make_unique<CompoundCommand>(std::move(commands),
+                                                          description));
+        return;
+    }
     for (auto &command : reactive_commands) {
         commands.push_back(std::move(command));
     }
-    undo_stack.Push(std::make_unique<CompoundCommand>(std::move(commands)));
+    undo_stack.Push(std::make_unique<CompoundCommand>(std::move(commands),
+                                                      description));
+}
+
+void AnnotationController::Update_annotation_at(
+    size_t index, Annotation annotation,
+    std::span<const uint64_t> selected_annotation_ids) {
+    AnnotationSelection selection = active_tool_.has_value()
+                                        ? AnnotationSelection{}
+                                        : Normalized_selection(selected_annotation_ids);
+    if (index >= document_.annotations.size()) {
+        document_.selected_annotation_ids = std::move(selection);
+        return;
+    }
+    document_.annotations[index] = std::move(annotation);
+    document_.selected_annotation_ids = std::move(selection);
+    document_.next_annotation_id =
+        std::max(document_.next_annotation_id, document_.annotations[index].id + 1);
 }
 
 void AnnotationController::Update_annotation_at(
     size_t index, Annotation annotation,
     std::optional<uint64_t> selected_annotation_id) {
-    if (active_tool_.has_value()) {
-        selected_annotation_id = std::nullopt;
-    }
-    if (index >= document_.annotations.size()) {
-        document_.selected_annotation_id = selected_annotation_id;
+    if (!selected_annotation_id.has_value()) {
+        Update_annotation_at(index, std::move(annotation), std::span<const uint64_t>{});
         return;
     }
-    document_.annotations[index] = std::move(annotation);
-    document_.selected_annotation_id = selected_annotation_id;
-    document_.next_annotation_id =
-        std::max(document_.next_annotation_id, document_.annotations[index].id + 1);
+    std::array<uint64_t, 1> const selection = {*selected_annotation_id};
+    Update_annotation_at(index, std::move(annotation), selection);
 }
 
 void AnnotationController::Insert_annotation_at(
     size_t index, Annotation annotation,
-    std::optional<uint64_t> selected_annotation_id) {
-    if (active_tool_.has_value()) {
-        selected_annotation_id = std::nullopt;
-    }
+    std::span<const uint64_t> selected_annotation_ids) {
+    AnnotationSelection selection =
+        active_tool_.has_value()
+            ? AnnotationSelection{}
+            : AnnotationSelection(selected_annotation_ids.begin(),
+                                  selected_annotation_ids.end());
     if (index > document_.annotations.size()) {
         index = document_.annotations.size();
     }
     document_.annotations.insert(document_.annotations.begin() +
                                      static_cast<std::ptrdiff_t>(index),
                                  std::move(annotation));
-    document_.selected_annotation_id = selected_annotation_id;
+    document_.selected_annotation_ids = Normalized_selection(selection);
     for (Annotation const &entry : document_.annotations) {
         document_.next_annotation_id =
             std::max(document_.next_annotation_id, entry.id + 1);
     }
 }
 
-void AnnotationController::Erase_annotation_at(
-    size_t index, std::optional<uint64_t> selected_annotation_id) {
-    if (active_tool_.has_value()) {
-        selected_annotation_id = std::nullopt;
+void AnnotationController::Insert_annotation_at(
+    size_t index, Annotation annotation,
+    std::optional<uint64_t> selected_annotation_id) {
+    if (!selected_annotation_id.has_value()) {
+        Insert_annotation_at(index, std::move(annotation), std::span<const uint64_t>{});
+        return;
     }
+    std::array<uint64_t, 1> const selection = {*selected_annotation_id};
+    Insert_annotation_at(index, std::move(annotation), selection);
+}
+
+void AnnotationController::Erase_annotation_at(
+    size_t index, std::span<const uint64_t> selected_annotation_ids) {
+    AnnotationSelection selection =
+        active_tool_.has_value()
+            ? AnnotationSelection{}
+            : AnnotationSelection(selected_annotation_ids.begin(),
+                                  selected_annotation_ids.end());
     if (index >= document_.annotations.size()) {
-        document_.selected_annotation_id = selected_annotation_id;
+        document_.selected_annotation_ids = Normalized_selection(selection);
         return;
     }
     document_.annotations.erase(document_.annotations.begin() +
                                 static_cast<std::ptrdiff_t>(index));
-    document_.selected_annotation_id = selected_annotation_id;
+    document_.selected_annotation_ids = Normalized_selection(selection);
+}
+
+void AnnotationController::Erase_annotation_at(
+    size_t index, std::optional<uint64_t> selected_annotation_id) {
+    if (!selected_annotation_id.has_value()) {
+        Erase_annotation_at(index, std::span<const uint64_t>{});
+        return;
+    }
+    std::array<uint64_t, 1> const selection = {*selected_annotation_id};
+    Erase_annotation_at(index, selection);
 }
 
 Annotation const *AnnotationController::Annotation_at(size_t index) const noexcept {

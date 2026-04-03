@@ -97,13 +97,14 @@ class RecordingEditInteractionHost final : public IAnnotationEditInteractionHost
     }
 
     void Update_annotation_at(size_t index, Annotation annotation,
-                              std::optional<uint64_t> selection) override {
+                              std::span<const uint64_t> selection) override {
+        selected_annotation_id =
+            selection.size() == 1 ? std::optional<uint64_t>{selection.front()}
+                                  : std::nullopt;
         if (index >= annotations.size()) {
-            selected_annotation_id = selection;
             return;
         }
         annotations[index] = std::move(annotation);
-        selected_annotation_id = selection;
     }
 
     std::vector<Annotation> annotations = {};
@@ -143,8 +144,8 @@ TEST(annotation_edit_interaction, MoveInteraction_ProducesUndoableCommandData) {
     std::optional<AnnotationEditCommandData> const command = interaction->Commit();
     ASSERT_TRUE(command.has_value());
     EXPECT_EQ(command->description, "Move annotation");
-    EXPECT_EQ(command->selection_before, std::optional<uint64_t>{7});
-    EXPECT_EQ(command->selection_after, std::optional<uint64_t>{7});
+    EXPECT_EQ(command->selection_before, (AnnotationSelection{7}));
+    EXPECT_EQ(command->selection_after, (AnnotationSelection{7}));
     EXPECT_EQ(
         std::get<FreehandStrokeAnnotation>(command->annotation_after.data).points[0],
         (PointPx{60, 60}));
@@ -476,8 +477,8 @@ TEST(annotation_edit_interaction,
     std::optional<AnnotationEditCommandData> const command = interaction->Commit();
     ASSERT_TRUE(command.has_value());
     EXPECT_EQ(command->description, "Edit highlighter annotation");
-    EXPECT_EQ(command->selection_before, std::optional<uint64_t>{13});
-    EXPECT_EQ(command->selection_after, std::optional<uint64_t>{13});
+    EXPECT_EQ(command->selection_before, (AnnotationSelection{13}));
+    EXPECT_EQ(command->selection_after, (AnnotationSelection{13}));
     EXPECT_EQ(
         std::get<FreehandStrokeAnnotation>(command->annotation_before.data).points[0],
         (PointPx{40, 40}));

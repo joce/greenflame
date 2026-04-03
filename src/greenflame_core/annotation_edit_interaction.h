@@ -6,6 +6,7 @@ namespace greenflame::core {
 
 enum class AnnotationEditTargetKind : uint8_t {
     Body,
+    SelectionBody,
     LineStartHandle,
     LineEndHandle,
     FreehandStrokeStartHandle,
@@ -46,8 +47,8 @@ struct AnnotationEditCommandData final {
     size_t index = 0;
     Annotation annotation_before = {};
     Annotation annotation_after = {};
-    std::optional<uint64_t> selection_before = std::nullopt;
-    std::optional<uint64_t> selection_after = std::nullopt;
+    AnnotationSelection selection_before = {};
+    AnnotationSelection selection_after = {};
     std::string_view description = {};
 };
 
@@ -74,7 +75,7 @@ class IAnnotationEditInteractionHost {
     Annotation_at(size_t index) const noexcept = 0;
     virtual void
     Update_annotation_at(size_t index, Annotation annotation,
-                         std::optional<uint64_t> selected_annotation_id) = 0;
+                         std::span<const uint64_t> selected_annotation_ids) = 0;
 };
 
 class IAnnotationEditInteraction {
@@ -90,18 +91,31 @@ class IAnnotationEditInteraction {
                                       PointPx cursor) = 0;
     [[nodiscard]] virtual std::optional<AnnotationEditCommandData>
     Commit() noexcept = 0;
+    [[nodiscard]] virtual std::vector<AnnotationEditCommandData>
+    Commit_all() noexcept {
+        std::optional<AnnotationEditCommandData> const command = Commit();
+        if (!command.has_value()) {
+            return {};
+        }
+        return {*command};
+    }
     [[nodiscard]] virtual bool Cancel(IAnnotationEditInteractionHost &host) = 0;
     [[nodiscard]] virtual bool Is_move_drag() const noexcept { return false; }
     [[nodiscard]] virtual std::optional<AnnotationEditHandleKind>
     Active_handle() const noexcept {
         return std::nullopt;
     }
-    [[nodiscard]] virtual std::optional<AnnotationEditPreview>
-    Preview() const noexcept {
-        return std::nullopt;
+    [[nodiscard]] virtual std::vector<AnnotationEditPreview>
+    Previews() const noexcept {
+        return {};
     }
 };
 
+[[nodiscard]] std::optional<AnnotationEditTarget>
+Hit_test_annotation_edit_target(std::span<const uint64_t> selected_annotation_ids,
+                                std::span<const Annotation> annotations,
+                                std::optional<RectPx> selection_bounds,
+                                PointPx cursor) noexcept;
 [[nodiscard]] std::optional<AnnotationEditTarget>
 Hit_test_annotation_edit_target(Annotation const *selected_annotation,
                                 std::span<const Annotation> annotations,
@@ -110,5 +124,9 @@ Hit_test_annotation_edit_target(Annotation const *selected_annotation,
 [[nodiscard]] std::unique_ptr<IAnnotationEditInteraction>
 Create_annotation_edit_interaction(AnnotationEditTarget target, size_t index,
                                    Annotation annotation_before, PointPx cursor);
+[[nodiscard]] std::unique_ptr<IAnnotationEditInteraction>
+Create_selection_move_edit_interaction(std::span<const Annotation> annotations,
+                                       std::span<const uint64_t> selection_ids,
+                                       PointPx cursor);
 
 } // namespace greenflame::core

@@ -79,6 +79,8 @@ using AnnotationData =
                  EllipseAnnotation, ObfuscateAnnotation, TextAnnotation,
                  BubbleAnnotation>;
 
+using AnnotationSelection = std::vector<uint64_t>;
+
 template <class... Ts> struct Overloaded : Ts... {
     using Ts::operator()...;
     constexpr explicit Overloaded(Ts... ts) : Ts(std::move(ts))... {}
@@ -112,7 +114,7 @@ struct Annotation final {
 
 struct AnnotationDocument final {
     std::vector<Annotation> annotations = {};
-    std::optional<uint64_t> selected_annotation_id = std::nullopt;
+    AnnotationSelection selected_annotation_ids = {};
     uint64_t next_annotation_id = 1;
 
     constexpr bool operator==(AnnotationDocument const &) const noexcept = default;

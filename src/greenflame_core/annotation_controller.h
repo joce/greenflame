@@ -94,7 +94,18 @@ class AnnotationController final : public IAnnotationToolHost,
     [[nodiscard]] std::span<const PointPx> Draft_freehand_points() const noexcept;
     [[nodiscard]] std::optional<StrokeStyle> Draft_freehand_style() const noexcept;
     [[nodiscard]] std::optional<uint64_t> Selected_annotation_id() const noexcept {
-        return document_.selected_annotation_id;
+        return document_.selected_annotation_ids.size() == 1
+                   ? std::optional<uint64_t>{document_.selected_annotation_ids.front()}
+                   : std::nullopt;
+    }
+    [[nodiscard]] std::span<const uint64_t> Selected_annotation_ids() const noexcept {
+        return document_.selected_annotation_ids;
+    }
+    [[nodiscard]] size_t Selected_annotation_count() const noexcept {
+        return document_.selected_annotation_ids.size();
+    }
+    [[nodiscard]] bool Has_selected_annotations() const noexcept {
+        return !document_.selected_annotation_ids.empty();
     }
     [[nodiscard]] Annotation const *Selected_annotation() const noexcept;
     [[nodiscard]] std::optional<RectPx> Selected_annotation_bounds() const noexcept;
@@ -127,6 +138,8 @@ class AnnotationController final : public IAnnotationToolHost,
     Active_annotation_edit_handle() const noexcept;
     [[nodiscard]] std::optional<AnnotationEditPreview>
     Active_annotation_edit_preview() const noexcept;
+    [[nodiscard]] std::vector<AnnotationEditPreview>
+    Active_annotation_edit_previews() const;
     [[nodiscard]] std::vector<size_t> Active_obfuscate_preview_indices() const;
 
     [[nodiscard]] bool Straighten_highlighter_stroke() noexcept;
@@ -144,14 +157,27 @@ class AnnotationController final : public IAnnotationToolHost,
     Annotation_id_at(PointPx cursor) const noexcept;
     [[nodiscard]] bool
     Set_selected_annotation(std::optional<uint64_t> selected_annotation_id) noexcept;
+    [[nodiscard]] bool
+    Set_selected_annotations(std::span<const uint64_t> selected_annotation_ids) noexcept;
+    [[nodiscard]] bool Toggle_selected_annotation(uint64_t annotation_id) noexcept;
+    [[nodiscard]] bool
+    Add_selected_annotations(std::span<const uint64_t> selected_annotation_ids) noexcept;
     [[nodiscard]] bool Select_topmost_annotation(PointPx cursor);
     [[nodiscard]] bool Begin_annotation_edit(AnnotationEditTarget target,
                                              PointPx cursor);
+    [[nodiscard]] AnnotationSelection
+    Annotation_ids_intersecting_selection_rect(RectPx selection_rect) const noexcept;
 
     void Update_annotation_at(size_t index, Annotation annotation,
-                              std::optional<uint64_t> selected_annotation_id) override;
+                              std::span<const uint64_t> selected_annotation_ids) override;
+    void Update_annotation_at(size_t index, Annotation annotation,
+                              std::optional<uint64_t> selected_annotation_id);
+    void Insert_annotation_at(size_t index, Annotation annotation,
+                              std::span<const uint64_t> selected_annotation_ids);
     void Insert_annotation_at(size_t index, Annotation annotation,
                               std::optional<uint64_t> selected_annotation_id);
+    void Erase_annotation_at(size_t index,
+                             std::span<const uint64_t> selected_annotation_ids);
     void Erase_annotation_at(size_t index,
                              std::optional<uint64_t> selected_annotation_id);
 
@@ -182,19 +208,24 @@ class AnnotationController final : public IAnnotationToolHost,
     [[nodiscard]] IAnnotationTool *Active_tool_impl() noexcept;
     [[nodiscard]] IAnnotationTool const *Active_tool_impl() const noexcept;
     [[nodiscard]] std::optional<size_t> Selected_annotation_index() const noexcept;
+    [[nodiscard]] AnnotationSelection
+    Normalized_selection(std::span<const uint64_t> selected_annotation_ids) const noexcept;
     [[nodiscard]] std::optional<Annotation>
     Rebuild_obfuscate_annotation(std::span<const Annotation> annotations, size_t index,
                                  Annotation annotation) const;
     [[nodiscard]] std::vector<std::unique_ptr<ICommand>>
     Build_reactive_obfuscate_update_commands(
         std::vector<Annotation> const &before_annotations,
-        std::vector<Annotation> after_annotations, size_t changed_index,
-        std::optional<RectPx> old_bounds, std::optional<RectPx> new_bounds,
-        std::optional<uint64_t> selection_before,
-        std::optional<uint64_t> selection_after);
+        std::vector<Annotation> after_annotations,
+        AnnotationSelection const &selection_before,
+        AnnotationSelection const &selection_after);
     void Push_annotation_command(
         UndoStack &undo_stack, std::unique_ptr<ICommand> primary_command,
         std::vector<std::unique_ptr<ICommand>> reactive_commands) const;
+    void Push_annotation_commands(
+        UndoStack &undo_stack, std::vector<std::unique_ptr<ICommand>> primary_commands,
+        std::vector<std::unique_ptr<ICommand>> reactive_commands,
+        std::string_view description = "Compound annotation change") const;
 
     AnnotationDocument document_ = {};
     AnnotationToolRegistry registry_ = {};

@@ -624,6 +624,60 @@ RectPx Annotation_selection_frame_bounds(Annotation const &annotation) noexcept 
     return bounds;
 }
 
+AnnotationSelection
+Normalize_annotation_selection(std::span<const Annotation> annotations,
+                               std::span<const uint64_t> selection_ids) noexcept {
+    AnnotationSelection normalized = {};
+    normalized.reserve(selection_ids.size());
+    for (Annotation const &annotation : annotations) {
+        if (!Selection_contains_annotation_id(selection_ids, annotation.id) ||
+            Selection_contains_annotation_id(normalized, annotation.id)) {
+            continue;
+        }
+        normalized.push_back(annotation.id);
+    }
+    return normalized;
+}
+
+bool Selection_contains_annotation_id(std::span<const uint64_t> selection_ids,
+                                      uint64_t annotation_id) noexcept {
+    return std::ranges::find(selection_ids, annotation_id) != selection_ids.end();
+}
+
+std::optional<RectPx>
+Annotation_selection_bounds(std::span<const Annotation> annotations,
+                            std::span<const uint64_t> selection_ids) noexcept {
+    std::optional<RectPx> bounds = std::nullopt;
+    for (Annotation const &annotation : annotations) {
+        if (!Selection_contains_annotation_id(selection_ids, annotation.id)) {
+            continue;
+        }
+        RectPx const frame_bounds = Annotation_selection_frame_bounds(annotation);
+        bounds = bounds.has_value() ? RectPx::Union(*bounds, frame_bounds) : frame_bounds;
+    }
+    return bounds;
+}
+
+AnnotationSelection
+Annotation_ids_intersecting_selection_rect(std::span<const Annotation> annotations,
+                                           RectPx selection_rect) noexcept {
+    AnnotationSelection selection = {};
+    RectPx const normalized_rect = selection_rect.Normalized();
+    if (normalized_rect.Is_empty()) {
+        return selection;
+    }
+
+    selection.reserve(annotations.size());
+    for (Annotation const &annotation : annotations) {
+        if (RectPx::Intersect(Annotation_selection_frame_bounds(annotation),
+                              normalized_rect)
+                .has_value()) {
+            selection.push_back(annotation.id);
+        }
+    }
+    return selection;
+}
+
 bool Annotation_hits_point(Annotation const &annotation, PointPx point) noexcept {
     return std::visit(
         Overloaded{

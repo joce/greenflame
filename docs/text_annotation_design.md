@@ -610,7 +610,7 @@ selection, and output all use the same committed coverage.
 Committed text should behave like a freehand annotation in default mode:
 
 - topmost covered pixel wins selection
-- selected text shows L-bracket corner markers around `visual_bounds`
+- selected text shows the shared clockwise marquee around `visual_bounds`
 - no resize handles in V1
 - body drag moves the entire annotation
 

@@ -22,10 +22,11 @@ void CompoundCommand::Redo() {
 
 AddAnnotationCommand::AddAnnotationCommand(AnnotationController *controller,
                                            size_t index, Annotation annotation,
-                                           std::optional<uint64_t> selection_before,
-                                           std::optional<uint64_t> selection_after)
+                                           AnnotationSelection selection_before,
+                                           AnnotationSelection selection_after)
     : controller_(controller), index_(index), annotation_(std::move(annotation)),
-      selection_before_(selection_before), selection_after_(selection_after) {}
+      selection_before_(std::move(selection_before)),
+      selection_after_(std::move(selection_after)) {}
 
 void AddAnnotationCommand::Undo() {
     if (controller_ != nullptr) {
@@ -41,9 +42,10 @@ void AddAnnotationCommand::Redo() {
 
 DeleteAnnotationCommand::DeleteAnnotationCommand(
     AnnotationController *controller, size_t index, Annotation annotation,
-    std::optional<uint64_t> selection_before, std::optional<uint64_t> selection_after)
+    AnnotationSelection selection_before, AnnotationSelection selection_after)
     : controller_(controller), index_(index), annotation_(std::move(annotation)),
-      selection_before_(selection_before), selection_after_(selection_after) {}
+      selection_before_(std::move(selection_before)),
+      selection_after_(std::move(selection_after)) {}
 
 void DeleteAnnotationCommand::Undo() {
     if (controller_ != nullptr) {
@@ -59,12 +61,13 @@ void DeleteAnnotationCommand::Redo() {
 
 UpdateAnnotationCommand::UpdateAnnotationCommand(
     AnnotationController *controller, size_t index, Annotation annotation_before,
-    Annotation annotation_after, std::optional<uint64_t> selection_before,
-    std::optional<uint64_t> selection_after, std::string_view description)
+    Annotation annotation_after, AnnotationSelection selection_before,
+    AnnotationSelection selection_after, std::string_view description)
     : controller_(controller), index_(index),
       annotation_before_(std::move(annotation_before)),
       annotation_after_(std::move(annotation_after)),
-      selection_before_(selection_before), selection_after_(selection_after),
+      selection_before_(std::move(selection_before)),
+      selection_after_(std::move(selection_after)),
       description_(description) {}
 
 void UpdateAnnotationCommand::Undo() {
@@ -82,9 +85,10 @@ void UpdateAnnotationCommand::Redo() {
 
 AddBubbleAnnotationCommand::AddBubbleAnnotationCommand(
     AnnotationController *controller, size_t index, Annotation annotation,
-    std::optional<uint64_t> selection_before, std::optional<uint64_t> selection_after)
+    AnnotationSelection selection_before, AnnotationSelection selection_after)
     : controller_(controller), index_(index), annotation_(std::move(annotation)),
-      selection_before_(selection_before), selection_after_(selection_after) {}
+      selection_before_(std::move(selection_before)),
+      selection_after_(std::move(selection_after)) {}
 
 void AddBubbleAnnotationCommand::Undo() {
     if (controller_ != nullptr) {

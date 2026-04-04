@@ -54,7 +54,7 @@
       "additionalProperties": false,
       "properties": {
         "brush": {
-          "$ref": "#/$defs/sizedTool",
+          "$ref": "#/$defs/freehandTool",
           "description": "Brush tool settings."
         },
         "line": {
@@ -127,6 +127,10 @@
               "minimum": 0,
               "maximum": 100,
               "default": 35
+            },
+            "smoothing_mode": {
+              "$ref": "#/$defs/freehandSmoothingMode",
+              "default": "smooth"
             },
             "pause_straighten_ms": {
               "$ref": "#/$defs/nonNegativeInteger",
@@ -246,6 +250,26 @@
       "properties": {
         "size": {
           "$ref": "#/$defs/toolSize"
+        }
+      }
+    },
+    "freehandSmoothingMode": {
+      "type": "string",
+      "enum": [
+        "off",
+        "smooth"
+      ]
+    },
+    "freehandTool": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "size": {
+          "$ref": "#/$defs/toolSize"
+        },
+        "smoothing_mode": {
+          "$ref": "#/$defs/freehandSmoothingMode",
+          "default": "smooth"
         }
       }
     },

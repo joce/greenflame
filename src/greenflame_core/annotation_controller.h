@@ -3,6 +3,7 @@
 #include "greenflame_core/annotation_edit_interaction.h"
 #include "greenflame_core/annotation_tool_registry.h"
 #include "greenflame_core/command.h"
+#include "greenflame_core/freehand_smoothing.h"
 #include "greenflame_core/obfuscate_raster.h"
 #include "greenflame_core/text_edit_controller.h"
 
@@ -22,24 +23,6 @@ class IObfuscateSourceProvider {
     [[nodiscard]] virtual std::optional<BgraBitmap>
     Build_composited_source(RectPx bounds,
                             std::span<const Annotation> lower_annotations) = 0;
-};
-
-class IStrokeSmoother {
-  public:
-    IStrokeSmoother() = default;
-    IStrokeSmoother(IStrokeSmoother const &) = default;
-    IStrokeSmoother &operator=(IStrokeSmoother const &) = default;
-    IStrokeSmoother(IStrokeSmoother &&) = default;
-    IStrokeSmoother &operator=(IStrokeSmoother &&) = default;
-    virtual ~IStrokeSmoother() = default;
-    [[nodiscard]] virtual std::vector<PointPx>
-    Smooth(std::span<const PointPx> points) const = 0;
-};
-
-class PassthroughStrokeSmoother final : public IStrokeSmoother {
-  public:
-    [[nodiscard]] std::vector<PointPx>
-    Smooth(std::span<const PointPx> points) const override;
 };
 
 class AnnotationController final : public IAnnotationToolHost,
@@ -77,10 +60,19 @@ class AnnotationController final : public IAnnotationToolHost,
         return freehand_style_.color;
     }
     [[nodiscard]] bool Set_brush_annotation_color(COLORREF color) noexcept;
+    [[nodiscard]] FreehandSmoothingMode Brush_smoothing_mode() const noexcept {
+        return freehand_smoothing_mode_;
+    }
+    [[nodiscard]] bool Set_brush_smoothing_mode(FreehandSmoothingMode mode) noexcept;
     [[nodiscard]] COLORREF Highlighter_color() const noexcept {
         return highlighter_style_.color;
     }
     [[nodiscard]] bool Set_highlighter_color(COLORREF color) noexcept;
+    [[nodiscard]] FreehandSmoothingMode Highlighter_smoothing_mode() const noexcept {
+        return highlighter_smoothing_mode_;
+    }
+    [[nodiscard]] bool
+    Set_highlighter_smoothing_mode(FreehandSmoothingMode mode) noexcept;
     [[nodiscard]] int32_t Highlighter_opacity_percent() const noexcept {
         return highlighter_style_.opacity_percent;
     }
@@ -93,6 +85,7 @@ class AnnotationController final : public IAnnotationToolHost,
     [[nodiscard]] Annotation const *Draft_annotation() const noexcept;
     [[nodiscard]] std::span<const PointPx> Draft_freehand_points() const noexcept;
     [[nodiscard]] std::optional<StrokeStyle> Draft_freehand_style() const noexcept;
+    [[nodiscard]] FreehandSmoothingMode Draft_freehand_smoothing_mode() const noexcept;
     [[nodiscard]] std::optional<uint64_t> Selected_annotation_id() const noexcept {
         return document_.selected_annotation_ids.size() == 1
                    ? std::optional<uint64_t>{document_.selected_annotation_ids.front()}
@@ -214,6 +207,8 @@ class AnnotationController final : public IAnnotationToolHost,
     [[nodiscard]] std::optional<Annotation>
     Rebuild_obfuscate_annotation(std::span<const Annotation> annotations, size_t index,
                                  Annotation annotation) const;
+    [[nodiscard]] FreehandSmoothingMode
+    Current_freehand_smoothing_mode() const noexcept;
     [[nodiscard]] std::vector<std::unique_ptr<ICommand>>
     Build_reactive_obfuscate_update_commands(
         std::vector<Annotation> const &before_annotations,
@@ -230,7 +225,8 @@ class AnnotationController final : public IAnnotationToolHost,
 
     AnnotationDocument document_ = {};
     AnnotationToolRegistry registry_ = {};
-    PassthroughStrokeSmoother smoother_ = {};
+    FreehandSmoothingMode freehand_smoothing_mode_ = FreehandSmoothingMode::Smooth;
+    FreehandSmoothingMode highlighter_smoothing_mode_ = FreehandSmoothingMode::Smooth;
     std::optional<AnnotationToolId> active_tool_ = std::nullopt;
     StrokeStyle freehand_style_ = {};
     StrokeStyle line_style_ = {};

@@ -152,6 +152,41 @@ TEST(cli_annotation_import,
     EXPECT_EQ(second_obfuscate.block_size, 1);
 }
 
+TEST(cli_annotation_import, parse_smooths_brush_point_lists_when_enabled) {
+    AppConfig config = Make_config();
+    config.brush_smoothing_mode = FreehandSmoothingMode::Smooth;
+
+    CliAnnotationParseResult const result = Parse_cli_annotations_json(
+        R"({"annotations":[{"type":"brush","size":6,"points":[{"x":0,"y":0},{"x":10,"y":0},{"x":20,"y":10},{"x":30,"y":10}]}]})",
+        Make_context(config));
+    ASSERT_TRUE(result.ok);
+    ASSERT_EQ(result.annotations.size(), 1u);
+
+    FreehandStrokeAnnotation const &brush =
+        std::get<FreehandStrokeAnnotation>(result.annotations[0].data);
+    ASSERT_GT(brush.points.size(), 4u);
+    EXPECT_EQ(brush.points.front(), (PointPx{100, 200}));
+    EXPECT_EQ(brush.points.back(), (PointPx{130, 210}));
+}
+
+TEST(cli_annotation_import,
+     parse_keeps_two_point_highlighter_segments_unsmoothed_when_enabled) {
+    AppConfig config = Make_config();
+    config.highlighter_smoothing_mode = FreehandSmoothingMode::Smooth;
+
+    CliAnnotationParseResult const result = Parse_cli_annotations_json(
+        R"({"annotations":[{"type":"highlighter","start":{"x":5,"y":6},"end":{"x":40,"y":20},"size":7}]})",
+        Make_context(config));
+    ASSERT_TRUE(result.ok);
+    ASSERT_EQ(result.annotations.size(), 1u);
+
+    FreehandStrokeAnnotation const &highlighter =
+        std::get<FreehandStrokeAnnotation>(result.annotations[0].data);
+    ASSERT_EQ(highlighter.points.size(), 2u);
+    EXPECT_EQ(highlighter.points[0], (PointPx{105, 206}));
+    EXPECT_EQ(highlighter.points[1], (PointPx{140, 220}));
+}
+
 TEST(cli_annotation_import, parse_applies_document_text_defaults_and_merges_spans) {
     AppConfig const config = Make_config();
     CliAnnotationParseResult const result = Parse_cli_annotations_json(

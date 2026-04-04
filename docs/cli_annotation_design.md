@@ -65,7 +65,8 @@ padding behavior described in
 - Manual-test JSON fixtures should live under
   `schemas/examples/cli_annotations/`
 - Strict schema is recommended: unknown keys and invalid combinations are fatal
-- Brush/freehand smoothing should remain the current pass-through behavior in V1
+- Brush and freehand Highlighter smoothing should follow the shared freehand
+  smoothing path used by interactive commit
 - Recommended new exit code: `14` for annotation-input load/validation failure
 
 ## Goals
@@ -216,18 +217,18 @@ Reason:
 - it matches the user's requirement that numbering increases "as they go"
 - it does not require a separate bubble id field in the schema
 
-### Brush smoothing remains pass-through in V1
+### Brush and point-list Highlighter smoothing stays shared
 
-Greenflame already has an `IStrokeSmoother` abstraction, but the current shipped
-implementation is `PassthroughStrokeSmoother`. CLI brush and point-list
-highlighter annotations should use the same pass-through behavior in V1.
+Greenflame routes freehand smoothing through the shared interactive path. CLI
+brush and point-list highlighter annotations should keep using that same shared
+behavior rather than introducing a CLI-only smoother.
 
 Reason:
 
-- the user explicitly raised this as a possible gap
-- the current codebase does not implement general freehand smoothing yet
-- changing smoothing should be its own feature and should update the shared
-  smoother abstraction, not only the CLI path
+- the user explicitly raised consistency between interactive and CLI behavior
+- freehand smoothing is now implemented once in shared core code
+- changing smoothing should continue to update the shared freehand path, not only
+  the CLI path
 
 ### Unknown keys are errors
 
@@ -649,7 +650,7 @@ Fields:
 Semantics:
 
 - translates to the current round-tip freehand annotation
-- uses the current pass-through smoother in V1
+- uses the shared freehand smoothing mode configured for Brush
 - one-point brush input is valid and produces a point-like brush mark
 
 ### Highlighter
@@ -1245,15 +1246,12 @@ Reason:
 
 Do not invent a CLI-only smoothing path.
 
-Recommended V1 behavior:
+Current behavior:
 
-- brush points pass through `IStrokeSmoother`
-- current smoother implementation remains `PassthroughStrokeSmoother`
-- highlighter point-list input also passes through unchanged
+- brush point lists use the shared Brush freehand smoothing mode
+- point-list highlighters use the shared Highlighter freehand smoothing mode
 - highlighter segment input becomes a two-point square-tip stroke
-
-If future smoothing is added, it should be added once to the shared smoother
-abstraction and then reused by both interactive and CLI paths.
+- straightened or explicit segment highlighters bypass freehand smoothing
 
 ## Error Handling And Exit Codes
 

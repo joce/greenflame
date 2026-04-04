@@ -204,6 +204,8 @@ add_library(greenflame_core STATIC
     src/greenflame_core/bubble_annotation_tool.h
     src/greenflame_core/freehand_annotation_tool.cpp
     src/greenflame_core/freehand_annotation_tool.h
+    src/greenflame_core/freehand_smoothing.cpp
+    src/greenflame_core/freehand_smoothing.h
     src/greenflame_core/line_annotation_tool.cpp
     src/greenflame_core/line_annotation_tool.h
     src/greenflame_core/obfuscate_annotation_tool.cpp

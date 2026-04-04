@@ -572,6 +572,7 @@ TEST(annotation_controller, SetSelectedAnnotation_ClearsSelection) {
 TEST(annotation_controller, FreehandRelease_AddsAnnotationAndKeepsSelectionEmpty) {
     AnnotationController controller;
     UndoStack undo_stack;
+    EXPECT_TRUE(controller.Set_brush_smoothing_mode(FreehandSmoothingMode::Off));
     EXPECT_TRUE(controller.Toggle_tool(AnnotationToolId::Freehand));
 
     EXPECT_TRUE(controller.On_primary_press({10, 10}));
@@ -590,6 +591,50 @@ TEST(annotation_controller, FreehandRelease_AddsAnnotationAndKeepsSelectionEmpty
         EXPECT_EQ(fh.points[0], (PointPx{10, 10}));
         EXPECT_EQ(fh.points[2], (PointPx{14, 12}));
     }
+}
+
+TEST(annotation_controller, FreehandRelease_SmoothsBrushWhenEnabled) {
+    AnnotationController controller;
+    UndoStack undo_stack;
+    EXPECT_TRUE(controller.Set_brush_smoothing_mode(FreehandSmoothingMode::Off));
+    EXPECT_TRUE(controller.Set_brush_smoothing_mode(FreehandSmoothingMode::Smooth));
+    EXPECT_TRUE(controller.Toggle_tool(AnnotationToolId::Freehand));
+
+    EXPECT_TRUE(controller.On_primary_press({10, 10}));
+    EXPECT_TRUE(controller.On_pointer_move({20, 10}));
+    EXPECT_TRUE(controller.On_pointer_move({30, 20}));
+    EXPECT_TRUE(controller.On_pointer_move({40, 20}));
+    EXPECT_TRUE(controller.On_primary_release(undo_stack));
+
+    ASSERT_EQ(controller.Annotations().size(), 1u);
+    FreehandStrokeAnnotation const &fh =
+        std::get<FreehandStrokeAnnotation>(controller.Annotations()[0].data);
+    ASSERT_GT(fh.points.size(), 4u);
+    EXPECT_EQ(fh.points.front(), (PointPx{10, 10}));
+    EXPECT_EQ(fh.points.back(), (PointPx{40, 20}));
+}
+
+TEST(annotation_controller, HighlighterStraighten_BypassesEnabledSmoothing) {
+    AnnotationController controller;
+    UndoStack undo_stack;
+    EXPECT_TRUE(controller.Set_highlighter_smoothing_mode(FreehandSmoothingMode::Off));
+    EXPECT_TRUE(
+        controller.Set_highlighter_smoothing_mode(FreehandSmoothingMode::Smooth));
+    EXPECT_TRUE(controller.Toggle_tool(AnnotationToolId::Highlighter));
+
+    EXPECT_TRUE(controller.On_primary_press({10, 10}));
+    EXPECT_TRUE(controller.On_pointer_move({20, 12}));
+    EXPECT_TRUE(controller.On_pointer_move({30, 16}));
+    EXPECT_TRUE(controller.Straighten_highlighter_stroke());
+    EXPECT_TRUE(controller.On_pointer_move({45, 22}));
+    EXPECT_TRUE(controller.On_primary_release(undo_stack));
+
+    ASSERT_EQ(controller.Annotations().size(), 1u);
+    FreehandStrokeAnnotation const &fh =
+        std::get<FreehandStrokeAnnotation>(controller.Annotations()[0].data);
+    ASSERT_EQ(fh.points.size(), 2u);
+    EXPECT_EQ(fh.points[0], (PointPx{10, 10}));
+    EXPECT_EQ(fh.points[1], (PointPx{45, 22}));
 }
 
 TEST(annotation_controller, FreehandToolSelectionClearsSelectedAnnotation) {

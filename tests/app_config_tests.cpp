@@ -76,6 +76,13 @@ TEST(app_config, Defaults_UseBlackFirstPaletteEntryAndCurrentSlotZero) {
     EXPECT_EQ(config.padding_color, Make_colorref(0x00, 0x00, 0x00));
 }
 
+TEST(app_config, Defaults_UseFreehandSmoothingSmooth) {
+    AppConfig const config{};
+
+    EXPECT_EQ(config.brush_smoothing_mode, FreehandSmoothingMode::Smooth);
+    EXPECT_EQ(config.highlighter_smoothing_mode, FreehandSmoothingMode::Smooth);
+}
+
 TEST(app_config, Normalize_ClampsTextSizeStep) {
     AppConfig config{};
     config.text_size = 0;
@@ -196,12 +203,13 @@ TEST(app_config_json, Parse_AcceptsSchemaPropertyAndValidValues) {
   "$schema": "https://example.com/greenflame.config.schema.json",
   "capture": { "include_cursor": true },
   "tools": {
-    "brush": { "size": 5 },
+    "brush": { "size": 5, "smoothing_mode": "off" },
     "colors": { "4": "#ff00ff" },
     "font": { "sans": "Arial" },
     "highlighter": {
       "current_color": 5,
-      "opacity_percent": 90
+      "opacity_percent": 90,
+      "smoothing_mode": "smooth"
     },
     "obfuscate": { "block_size": 13, "risk_acknowledged": true },
     "text": { "current_font": "mono" }
@@ -216,10 +224,12 @@ TEST(app_config_json, Parse_AcceptsSchemaPropertyAndValidValues) {
     ASSERT_TRUE(config.has_value());
     EXPECT_TRUE(config->include_cursor);
     EXPECT_EQ(config->brush_size, 5);
+    EXPECT_EQ(config->brush_smoothing_mode, FreehandSmoothingMode::Off);
     EXPECT_EQ(config->annotation_colors[4], Make_colorref(0xFF, 0x00, 0xFF));
     EXPECT_EQ(config->text_font_sans, L"Arial");
     EXPECT_EQ(config->current_highlighter_color_index, 5);
     EXPECT_EQ(config->highlighter_opacity_percent, 90);
+    EXPECT_EQ(config->highlighter_smoothing_mode, FreehandSmoothingMode::Smooth);
     EXPECT_EQ(config->obfuscate_block_size, 13);
     EXPECT_TRUE(config->obfuscate_risk_acknowledged);
     EXPECT_EQ(config->text_current_font, TextFontChoice::Mono);
@@ -306,6 +316,20 @@ TEST(app_config_json, Serialize_WritesObfuscateBlockSizeWhenNonDefault) {
     EXPECT_EQ(round_tripped->obfuscate_block_size, 17);
 }
 
+TEST(app_config_json, Serialize_WritesFreehandSmoothingModesWhenNonDefault) {
+    AppConfig config{};
+    config.brush_smoothing_mode = FreehandSmoothingMode::Off;
+    config.highlighter_smoothing_mode = FreehandSmoothingMode::Off;
+
+    std::string const serialized = Serialize_app_config_json(config);
+    std::optional<AppConfig> const round_tripped = Parse_app_config_json(serialized);
+
+    EXPECT_NE(serialized.find(R"json("smoothing_mode")json"), std::string::npos);
+    ASSERT_TRUE(round_tripped.has_value());
+    EXPECT_EQ(round_tripped->brush_smoothing_mode, FreehandSmoothingMode::Off);
+    EXPECT_EQ(round_tripped->highlighter_smoothing_mode, FreehandSmoothingMode::Off);
+}
+
 TEST(app_config_json, Serialize_WritesObfuscateRiskAcknowledgedWhenTrue) {
     AppConfig config{};
     config.obfuscate_risk_acknowledged = true;
@@ -351,6 +375,12 @@ TEST(app_config_json, Parse_RejectsStringToolSize) {
 
 TEST(app_config_json, Parse_RejectsFloatingToolSize) {
     EXPECT_FALSE(Parse_app_config_json(R"json({"tools":{"brush":{"size":5.0}}})json")
+                     .has_value());
+}
+
+TEST(app_config_json, Parse_RejectsUnknownFreehandSmoothingMode) {
+    EXPECT_FALSE(Parse_app_config_json(
+                     R"json({"tools":{"brush":{"smoothing_mode":"arcane"}}})json")
                      .has_value());
 }
 

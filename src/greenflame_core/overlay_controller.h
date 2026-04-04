@@ -134,6 +134,7 @@ class OverlayController final {
     [[nodiscard]] Annotation const *Draft_annotation() const noexcept;
     [[nodiscard]] std::span<const PointPx> Draft_freehand_points() const noexcept;
     [[nodiscard]] std::optional<StrokeStyle> Draft_freehand_style() const noexcept;
+    [[nodiscard]] FreehandSmoothingMode Draft_freehand_smoothing_mode() const noexcept;
     [[nodiscard]] Annotation const *Selected_annotation() const noexcept;
     [[nodiscard]] std::optional<RectPx> Selected_annotation_bounds() const noexcept;
     [[nodiscard]] bool Has_selected_annotations() const noexcept;
@@ -165,7 +166,9 @@ class OverlayController final {
     [[nodiscard]] int32_t Tool_physical_size(AnnotationToolId tool) const noexcept;
     void Set_annotation_color(COLORREF color) noexcept;
     void Set_brush_annotation_color(COLORREF color) noexcept;
+    void Set_brush_smoothing_mode(FreehandSmoothingMode mode) noexcept;
     void Set_highlighter_color(COLORREF color) noexcept;
+    void Set_highlighter_smoothing_mode(FreehandSmoothingMode mode) noexcept;
     void Set_highlighter_opacity_percent(int32_t opacity_percent) noexcept;
     [[nodiscard]] std::optional<int32_t> Adjust_tool_size(int32_t delta_steps);
     [[nodiscard]] bool Should_show_annotation_toolbar() const noexcept;

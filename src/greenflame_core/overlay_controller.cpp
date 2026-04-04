@@ -202,6 +202,11 @@ std::optional<StrokeStyle> OverlayController::Draft_freehand_style() const noexc
     return annotation_controller_.Draft_freehand_style();
 }
 
+FreehandSmoothingMode
+OverlayController::Draft_freehand_smoothing_mode() const noexcept {
+    return annotation_controller_.Draft_freehand_smoothing_mode();
+}
+
 Annotation const *OverlayController::Selected_annotation() const noexcept {
     return annotation_controller_.Selected_annotation();
 }
@@ -329,8 +334,17 @@ void OverlayController::Set_brush_annotation_color(COLORREF color) noexcept {
     (void)annotation_controller_.Set_brush_annotation_color(color);
 }
 
+void OverlayController::Set_brush_smoothing_mode(FreehandSmoothingMode mode) noexcept {
+    (void)annotation_controller_.Set_brush_smoothing_mode(mode);
+}
+
 void OverlayController::Set_highlighter_color(COLORREF color) noexcept {
     (void)annotation_controller_.Set_highlighter_color(color);
+}
+
+void OverlayController::Set_highlighter_smoothing_mode(
+    FreehandSmoothingMode mode) noexcept {
+    (void)annotation_controller_.Set_highlighter_smoothing_mode(mode);
 }
 
 void OverlayController::Set_highlighter_opacity_percent(

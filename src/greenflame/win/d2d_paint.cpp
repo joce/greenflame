@@ -2014,133 +2014,212 @@ void Draw_selection_wheel(ID2D1RenderTarget *rt, D2DOverlayResources &res,
 }
 
 // ---------------------------------------------------------------------------
-// Draft stroke bitmap (incremental freehand accumulator)
+// Draft stroke bitmap
 // ---------------------------------------------------------------------------
 
-void Clear_draft_stroke_surface(D2DOverlayResources &res) {
-    if (res.draft_stroke_point_count == 0 && !res.draft_stroke_bitmap) {
+void Clear_bitmap_target(ID2D1BitmapRenderTarget *render_target) {
+    if (render_target == nullptr) {
         return;
     }
 
+    render_target->BeginDraw();
+    render_target->Clear(D2D1::ColorF(0.f, 0.f, 0.f, 0.f));
+    (void)render_target->EndDraw();
+}
+
+void Reset_draft_stroke_metadata(D2DOverlayResources &res) {
     res.draft_stroke_point_count = 0;
     res.draft_stroke_last_point = {};
-    res.draft_stroke_bitmap.Reset();
-    if (!res.draft_stroke_rt) {
+    res.draft_stroke_stable_tail_start_index = 0;
+    res.draft_stroke_style.reset();
+    res.draft_stroke_tip_shape = core::FreehandTipShape::Round;
+    res.draft_stroke_smoothing_mode = core::FreehandSmoothingMode::Off;
+}
+
+void Clear_draft_stroke_surface(D2DOverlayResources &res) {
+    if (!res.draft_stroke_bitmap && !res.draft_stroke_body_bitmap &&
+        res.draft_stroke_point_count == 0) {
         return;
+    }
+
+    Reset_draft_stroke_metadata(res);
+    res.draft_stroke_bitmap.Reset();
+    res.draft_stroke_body_bitmap.Reset();
+    Clear_bitmap_target(res.draft_stroke_rt.Get());
+    Clear_bitmap_target(res.draft_stroke_body_rt.Get());
+}
+
+void Draw_preview_segments(ID2D1RenderTarget *render_target, D2DOverlayResources &res,
+                           std::span<const core::PointPx> points,
+                           core::StrokeStyle style, core::FreehandTipShape tip_shape) {
+    if (points.empty()) {
+        return;
+    }
+    Draw_freehand_points(render_target, res, points, style, tip_shape);
+}
+
+[[nodiscard]] bool Has_matching_cached_draft_input(
+    D2DOverlayResources const &res, std::span<const core::PointPx> points,
+    std::optional<core::StrokeStyle> const &style, core::FreehandTipShape tip_shape,
+    core::FreehandSmoothingMode smoothing_mode) noexcept {
+    return res.draft_stroke_bitmap && res.draft_stroke_point_count == points.size() &&
+           !points.empty() && res.draft_stroke_last_point == points.back() &&
+           res.draft_stroke_style == style && res.draft_stroke_tip_shape == tip_shape &&
+           res.draft_stroke_smoothing_mode == smoothing_mode;
+}
+
+void Store_draft_stroke_metadata(D2DOverlayResources &res,
+                                 std::span<const core::PointPx> points,
+                                 core::StrokeStyle style,
+                                 core::FreehandTipShape tip_shape,
+                                 core::FreehandSmoothingMode smoothing_mode) {
+    res.draft_stroke_point_count = points.size();
+    res.draft_stroke_last_point = points.back();
+    res.draft_stroke_style = style;
+    res.draft_stroke_tip_shape = tip_shape;
+    res.draft_stroke_smoothing_mode = smoothing_mode;
+}
+
+[[nodiscard]] bool
+Can_reuse_draft_stroke_body(D2DOverlayResources const &res, core::StrokeStyle style,
+                            core::FreehandTipShape tip_shape,
+                            core::FreehandSmoothingMode smoothing_mode,
+                            core::FreehandPreviewPlan const &plan) noexcept {
+    return res.draft_stroke_body_bitmap && plan.stable_raw_point_count != 0 &&
+           res.draft_stroke_stable_tail_start_index == plan.tail_start_index &&
+           res.draft_stroke_style == std::optional<core::StrokeStyle>(style) &&
+           res.draft_stroke_tip_shape == tip_shape &&
+           res.draft_stroke_smoothing_mode == smoothing_mode;
+}
+
+[[nodiscard]] bool Rebuild_draft_stroke_body_bitmap(
+    D2DOverlayResources &res, std::span<const core::PointPx> stable_points,
+    core::StrokeStyle style, core::FreehandTipShape tip_shape,
+    size_t tail_start_index) {
+    if (!res.draft_stroke_body_rt) {
+        return false;
+    }
+
+    res.draft_stroke_body_rt->BeginDraw();
+    res.draft_stroke_body_rt->Clear(D2D1::ColorF(0.f, 0.f, 0.f, 0.f));
+    Draw_preview_segments(res.draft_stroke_body_rt.Get(), res, stable_points, style,
+                          tip_shape);
+    HRESULT const hr = res.draft_stroke_body_rt->EndDraw();
+    if (FAILED(hr)) {
+        res.draft_stroke_body_bitmap.Reset();
+        res.draft_stroke_stable_tail_start_index = 0;
+        return false;
+    }
+
+    (void)res.draft_stroke_body_rt->GetBitmap(
+        res.draft_stroke_body_bitmap.ReleaseAndGetAddressOf());
+    res.draft_stroke_stable_tail_start_index = tail_start_index;
+    return res.draft_stroke_body_bitmap != nullptr;
+}
+
+[[nodiscard]] bool Rebuild_draft_stroke_bitmap_from_cached_body(
+    D2DOverlayResources &res, std::span<const core::PointPx> points,
+    core::StrokeStyle style, core::FreehandTipShape tip_shape,
+    core::FreehandSmoothingMode smoothing_mode, core::FreehandPreviewPlan const &plan) {
+    if (!res.draft_stroke_rt || !res.draft_stroke_body_bitmap) {
+        return false;
     }
 
     res.draft_stroke_rt->BeginDraw();
     res.draft_stroke_rt->Clear(D2D1::ColorF(0.f, 0.f, 0.f, 0.f));
-    (void)res.draft_stroke_rt->EndDraw();
+    res.draft_stroke_rt->DrawBitmap(res.draft_stroke_body_bitmap.Get());
+    Draw_preview_segments(res.draft_stroke_rt.Get(), res, plan.tail_points, style,
+                          tip_shape);
+
+    HRESULT const hr = res.draft_stroke_rt->EndDraw();
+    if (FAILED(hr)) {
+        res.draft_stroke_bitmap.Reset();
+        return false;
+    }
+
+    (void)res.draft_stroke_rt->GetBitmap(
+        res.draft_stroke_bitmap.ReleaseAndGetAddressOf());
+    Store_draft_stroke_metadata(res, points, style, tip_shape, smoothing_mode);
+    return res.draft_stroke_bitmap != nullptr;
 }
 
-// Appends any new freehand segments to draft_stroke_rt since the last call.
-// Round-tip: drawn with round cap stroke at configured opacity.
-// Square-tip: drawn as convex hull fills at full opacity; opacity applied at blit time.
-// When points is empty, the cached draft surface is cleared so the next gesture
-// cannot resurrect stale pixels.
+// Rebuilds the current freehand draft bitmap from the full live stroke each frame.
+// The stable body may be smoothed while the newest tail stays raw so the cursor tip
+// remains visually attached during live drawing.
 // Must be called BEFORE hwnd_rt->BeginDraw.
 void Update_draft_stroke_bitmap(D2DOverlayResources &res,
                                 std::span<const core::PointPx> points,
                                 std::optional<core::StrokeStyle> const &style,
-                                core::FreehandTipShape tip_shape) {
+                                core::FreehandTipShape tip_shape,
+                                core::FreehandSmoothingMode smoothing_mode) {
     if (points.empty() || !style.has_value()) {
         Clear_draft_stroke_surface(res);
+        return;
+    }
+    if (Has_matching_cached_draft_input(res, points, style, tip_shape,
+                                        smoothing_mode)) {
         return;
     }
     if (!res.draft_stroke_rt) {
         return;
     }
-    // Points shrank (e.g. after Straighten): reset so the surface is cleared and
-    // redrawn from scratch on this call.
-    if (points.size() < res.draft_stroke_point_count) {
-        res.draft_stroke_point_count = 0;
-    }
-    // Same count: only skip if the endpoint hasn't moved (e.g. endpoint tracking
-    // after Straighten changes points[1] without changing points.size()).
-    if (points.size() == res.draft_stroke_point_count) {
-        if (res.draft_stroke_point_count == 0 ||
-            points.back() == res.draft_stroke_last_point) {
+
+    bool const uses_smoothed_preview =
+        smoothing_mode != core::FreehandSmoothingMode::Off && points.size() > 2;
+    std::optional<core::FreehandPreviewPlan> preview_plan = std::nullopt;
+    if (uses_smoothed_preview) {
+        preview_plan.emplace(
+            core::Build_freehand_preview_plan(points, smoothing_mode, style->width_px));
+        bool drew_from_cached_body = false;
+        if (preview_plan->stable_raw_point_count != 0) {
+            bool const reused_body = Can_reuse_draft_stroke_body(
+                res, *style, tip_shape, smoothing_mode, *preview_plan);
+            if (reused_body ||
+                Rebuild_draft_stroke_body_bitmap(
+                    res,
+                    core::Smooth_freehand_points(
+                        points.first(preview_plan->stable_raw_point_count),
+                        smoothing_mode, style->width_px),
+                    *style, tip_shape, preview_plan->tail_start_index)) {
+                drew_from_cached_body = Rebuild_draft_stroke_bitmap_from_cached_body(
+                    res, points, *style, tip_shape, smoothing_mode, *preview_plan);
+            }
+        }
+
+        if (drew_from_cached_body) {
             return;
         }
-        res.draft_stroke_point_count = 0; // force full clear + redraw
-    }
-    // Need at least 2 points to form a segment.
-    if (points.size() < 2) {
-        res.draft_stroke_point_count = points.size();
-        return;
+
+        if (preview_plan->stable_raw_point_count == 0) {
+            res.draft_stroke_body_bitmap.Reset();
+            res.draft_stroke_stable_tail_start_index = 0;
+        }
+    } else {
+        res.draft_stroke_body_bitmap.Reset();
+        res.draft_stroke_stable_tail_start_index = 0;
     }
 
     res.draft_stroke_rt->BeginDraw();
+    res.draft_stroke_rt->Clear(D2D1::ColorF(0.f, 0.f, 0.f, 0.f));
 
-    if (res.draft_stroke_point_count == 0) {
-        // New gesture: clear the surface before drawing.
-        res.draft_stroke_rt->Clear(D2D1::ColorF(0.f, 0.f, 0.f, 0.f));
-    }
-
-    // Draw only the segments that are new since the last update.
-    size_t const from =
-        res.draft_stroke_point_count > 0 ? res.draft_stroke_point_count - 1 : 0;
-
-    if (tip_shape == core::FreehandTipShape::Round) {
-        res.solid_brush->SetColor(Colorref_to_d2d(
-            style->color, Alpha_from_opacity_percent(style->opacity_percent)));
-        float const stroke_w = static_cast<float>(style->width_px);
-        for (size_t i = from; i + 1 < points.size(); ++i) {
-            res.draft_stroke_rt->DrawLine(Pt(points[i]), Pt(points[i + 1]),
-                                          res.solid_brush.Get(), stroke_w,
-                                          res.round_cap_style.Get());
-        }
+    if (!preview_plan.has_value() || preview_plan->stable_raw_point_count == 0) {
+        Draw_preview_segments(res.draft_stroke_rt.Get(), res, points, *style,
+                              tip_shape);
     } else {
-        // Square tip: draw segment hulls at full opacity. Opacity is applied at blit
-        // time so each covered pixel is blended exactly once.
-        Microsoft::WRL::ComPtr<ID2D1PathGeometry> path;
-        Microsoft::WRL::ComPtr<ID2D1GeometrySink> sink;
-        if (res.factory &&
-            SUCCEEDED(res.factory->CreatePathGeometry(path.GetAddressOf())) &&
-            SUCCEEDED(path->Open(sink.GetAddressOf()))) {
-            sink->SetFillMode(D2D1_FILL_MODE_WINDING);
-            float const half_extent =
-                static_cast<float>(std::max<int32_t>(core::StrokeStyle::kMinWidthPx,
-                                                     style->width_px)) /
-                2.f;
-            for (size_t i = from; i + 1 < points.size(); ++i) {
-                float const ax = static_cast<float>(points[i].x);
-                float const ay = static_cast<float>(points[i].y);
-                float const bx = static_cast<float>(points[i + 1].x);
-                float const by = static_cast<float>(points[i + 1].y);
-                std::array<D2D1_POINT_2F, 8> const corners = {
-                    D2D1::Point2F(ax - half_extent, ay - half_extent),
-                    D2D1::Point2F(ax + half_extent, ay - half_extent),
-                    D2D1::Point2F(ax + half_extent, ay + half_extent),
-                    D2D1::Point2F(ax - half_extent, ay + half_extent),
-                    D2D1::Point2F(bx - half_extent, by - half_extent),
-                    D2D1::Point2F(bx + half_extent, by - half_extent),
-                    D2D1::Point2F(bx + half_extent, by + half_extent),
-                    D2D1::Point2F(bx - half_extent, by + half_extent),
-                };
-                HullResult const hull = Build_convex_hull(corners);
-                if (hull.count < 3) {
-                    continue;
-                }
-                sink->BeginFigure(hull.points[0], D2D1_FIGURE_BEGIN_FILLED);
-                for (size_t hi = 1; hi < hull.count; ++hi) {
-                    sink->AddLine(hull.points[hi]);
-                }
-                sink->EndFigure(D2D1_FIGURE_END_CLOSED);
-            }
-            sink->Close();
-            res.solid_brush->SetColor(Colorref_to_d2d(style->color, 1.0f));
-            res.draft_stroke_rt->FillGeometry(path.Get(), res.solid_brush.Get());
-        }
+        Draw_preview_segments(res.draft_stroke_rt.Get(), res,
+                              core::Smooth_freehand_points(
+                                  points.first(preview_plan->stable_raw_point_count),
+                                  smoothing_mode, style->width_px),
+                              *style, tip_shape);
+        Draw_preview_segments(res.draft_stroke_rt.Get(), res, preview_plan->tail_points,
+                              *style, tip_shape);
     }
 
     HRESULT const hr = res.draft_stroke_rt->EndDraw();
     if (SUCCEEDED(hr)) {
-        res.draft_stroke_point_count = points.size();
-        res.draft_stroke_last_point = points.back();
         (void)res.draft_stroke_rt->GetBitmap(
             res.draft_stroke_bitmap.ReleaseAndGetAddressOf());
+        Store_draft_stroke_metadata(res, points, *style, tip_shape, smoothing_mode);
     }
 }
 
@@ -2376,14 +2455,12 @@ void Draw_annotations_to_rt(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         }
     }
 
-    // If draft_stroke_rt was used as scratch, reset the incremental draw state and
-    // clear the surface so the next gesture does not inherit stale pixels.
+    // If draft_stroke_rt was used as scratch, clear only the composed draft bitmap so
+    // the next live frame can recombine it from any still-valid cached body/tail input.
     if (can_multiply) {
         res.draft_stroke_point_count = 0;
         res.draft_stroke_bitmap.Reset();
-        res.draft_stroke_rt->BeginDraw();
-        res.draft_stroke_rt->Clear(D2D1::ColorF(0.f, 0.f, 0.f, 0.f));
-        (void)res.draft_stroke_rt->EndDraw();
+        Clear_bitmap_target(res.draft_stroke_rt.Get());
     }
 }
 
@@ -2455,9 +2532,9 @@ bool Paint_d2d_frame(D2DOverlayResources &res, D2DPaintInput const &input, int v
         return true;
     }
 
-    Update_draft_stroke_bitmap(res, input.draft_freehand_points,
-                               input.draft_freehand_style,
-                               input.draft_freehand_tip_shape);
+    Update_draft_stroke_bitmap(
+        res, input.draft_freehand_points, input.draft_freehand_style,
+        input.draft_freehand_tip_shape, input.draft_freehand_smoothing_mode);
 
     // When an annotation edit interaction is active, the annotation under the cursor
     // changes every frame. Rebuild annotations_bitmap with the live state now, before

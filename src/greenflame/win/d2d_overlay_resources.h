@@ -2,6 +2,8 @@
 
 #include "greenflame/win/gdi_capture.h"
 #include "greenflame/win/overlay_button.h"
+#include "greenflame_core/annotation_types.h"
+#include "greenflame_core/freehand_smoothing.h"
 #include "greenflame_core/text_annotation_types.h"
 
 namespace greenflame {
@@ -13,7 +15,8 @@ namespace greenflame {
 //   screenshot    — uploaded once at capture time, never redrawn
 //   annotations   — rebuilt on annotation commit/undo/redo/delete
 //   frozen        — rebuilt when selection or annotations change
-//   draft_stroke  — incrementally updated during freehand gesture (O(1) per frame)
+//   draft_stroke  — rebuilt during freehand gesture from raw or split-tail preview
+//                   segments, depending on the active smoothing mode
 //   live layer    — drawn every frame (draft blit, selection border, handles, UI)
 struct D2DOverlayResources final {
     static constexpr float kDefaultTargetDpi = 96.f;
@@ -30,12 +33,19 @@ struct D2DOverlayResources final {
     Microsoft::WRL::ComPtr<ID2D1BitmapRenderTarget> annotations_rt;
     Microsoft::WRL::ComPtr<ID2D1BitmapRenderTarget> frozen_rt;
     Microsoft::WRL::ComPtr<ID2D1BitmapRenderTarget> draft_stroke_rt;
+    Microsoft::WRL::ComPtr<ID2D1BitmapRenderTarget> draft_stroke_body_rt;
     Microsoft::WRL::ComPtr<ID2D1Bitmap> annotations_bitmap;
     Microsoft::WRL::ComPtr<ID2D1Bitmap> frozen_bitmap;
     Microsoft::WRL::ComPtr<ID2D1Bitmap> draft_stroke_bitmap;
+    Microsoft::WRL::ComPtr<ID2D1Bitmap> draft_stroke_body_bitmap;
     size_t draft_stroke_point_count = 0; // points rendered into draft_stroke_rt
     core::PointPx draft_stroke_last_point =
         {}; // last point rendered into draft_stroke_rt
+    size_t draft_stroke_stable_tail_start_index = 0;
+    std::optional<core::StrokeStyle> draft_stroke_style = std::nullopt;
+    core::FreehandTipShape draft_stroke_tip_shape = core::FreehandTipShape::Round;
+    core::FreehandSmoothingMode draft_stroke_smoothing_mode =
+        core::FreehandSmoothingMode::Off;
 
     // Reusable shared resources (recreated on device loss)
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> solid_brush;

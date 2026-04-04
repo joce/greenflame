@@ -1016,6 +1016,8 @@ void Apply_font_override(BubbleAnnotation &bubble,
         Resolve_color(L"brush", annotation_color, state.defaults, *state.config);
     stroke.style.opacity_percent = StrokeStyle::kDefaultOpacityPercent;
     stroke.freehand_tip_shape = FreehandTipShape::Round;
+    stroke.points = Smooth_freehand_points(
+        stroke.points, state.config->brush_smoothing_mode, stroke.style.width_px);
     out.data = std::move(stroke);
     return true;
 }
@@ -1079,6 +1081,11 @@ void Apply_font_override(BubbleAnnotation &bubble,
     stroke.style.opacity_percent =
         Resolve_highlighter_opacity(opacity_percent, state.defaults, *state.config);
     stroke.freehand_tip_shape = FreehandTipShape::Square;
+    if (has_points) {
+        stroke.points = Smooth_freehand_points(stroke.points,
+                                               state.config->highlighter_smoothing_mode,
+                                               stroke.style.width_px);
+    }
     out.data = std::move(stroke);
     return true;
 }

@@ -51,11 +51,6 @@ constexpr int32_t kBubbleDiameterStepOffsetPx = 20;
 
 } // namespace
 
-std::vector<PointPx>
-PassthroughStrokeSmoother::Smooth(std::span<const PointPx> points) const {
-    return {points.begin(), points.end()};
-}
-
 AnnotationController::AnnotationController()
     : highlighter_style_(Default_highlighter_style()) {}
 
@@ -63,11 +58,13 @@ void AnnotationController::Reset_for_session() {
     document_ = {};
     active_tool_.reset();
     freehand_style_ = {};
+    freehand_smoothing_mode_ = FreehandSmoothingMode::Smooth;
     line_style_ = {};
     arrow_style_ = {};
     rect_style_ = {};
     ellipse_style_ = {};
     highlighter_style_ = Default_highlighter_style();
+    highlighter_smoothing_mode_ = FreehandSmoothingMode::Smooth;
     bubble_size_step_ = 10;
     text_size_step_ = 10;
     obfuscate_block_size_ = kObfuscateDefaultBlockSize;
@@ -258,12 +255,30 @@ bool AnnotationController::Set_brush_annotation_color(COLORREF color) noexcept {
     return true;
 }
 
+bool AnnotationController::Set_brush_smoothing_mode(
+    FreehandSmoothingMode mode) noexcept {
+    if (freehand_smoothing_mode_ == mode) {
+        return false;
+    }
+    freehand_smoothing_mode_ = mode;
+    return true;
+}
+
 bool AnnotationController::Set_highlighter_color(COLORREF color) noexcept {
     if (highlighter_style_.color == color) {
         return false;
     }
     highlighter_style_.color = color;
     registry_.On_stroke_style_changed();
+    return true;
+}
+
+bool AnnotationController::Set_highlighter_smoothing_mode(
+    FreehandSmoothingMode mode) noexcept {
+    if (highlighter_smoothing_mode_ == mode) {
+        return false;
+    }
+    highlighter_smoothing_mode_ = mode;
     return true;
 }
 
@@ -289,6 +304,15 @@ std::optional<StrokeStyle> AnnotationController::Draft_freehand_style() const no
         return std::nullopt;
     }
     return tool->Draft_freehand_style(*this);
+}
+
+FreehandSmoothingMode
+AnnotationController::Draft_freehand_smoothing_mode() const noexcept {
+    IAnnotationTool const *const tool = Active_tool_impl();
+    if (tool == nullptr || tool->Draft_freehand_points().empty()) {
+        return FreehandSmoothingMode::Off;
+    }
+    return Current_freehand_smoothing_mode();
 }
 
 std::optional<size_t> AnnotationController::Selected_annotation_index() const noexcept {
@@ -749,13 +773,38 @@ StrokeStyle AnnotationController::Current_stroke_style() const noexcept {
     return freehand_style_;
 }
 
+FreehandSmoothingMode
+AnnotationController::Current_freehand_smoothing_mode() const noexcept {
+    switch (active_tool_.value_or(AnnotationToolId::Freehand)) {
+    case AnnotationToolId::Highlighter:
+        return highlighter_smoothing_mode_;
+    case AnnotationToolId::Freehand:
+        return freehand_smoothing_mode_;
+    case AnnotationToolId::Line:
+    case AnnotationToolId::Arrow:
+    case AnnotationToolId::Rectangle:
+    case AnnotationToolId::FilledRectangle:
+    case AnnotationToolId::Ellipse:
+    case AnnotationToolId::FilledEllipse:
+    case AnnotationToolId::Obfuscate:
+    case AnnotationToolId::Bubble:
+    case AnnotationToolId::Text:
+        return FreehandSmoothingMode::Off;
+    }
+    return FreehandSmoothingMode::Off;
+}
+
 uint64_t AnnotationController::Next_annotation_id() const noexcept {
     return document_.next_annotation_id;
 }
 
 std::vector<PointPx>
 AnnotationController::Smooth_points(std::span<const PointPx> points) const {
-    return smoother_.Smooth(points);
+    FreehandSmoothingMode const mode = Current_freehand_smoothing_mode();
+    if (mode == FreehandSmoothingMode::Off) {
+        return {points.begin(), points.end()};
+    }
+    return Smooth_freehand_points(points, mode, Current_stroke_style().width_px);
 }
 
 int32_t AnnotationController::Current_obfuscate_block_size() const noexcept {

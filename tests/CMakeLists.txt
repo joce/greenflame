@@ -33,6 +33,7 @@ add_executable(greenflame_tests
     annotation_hit_test_tests.cpp
     obfuscate_raster_tests.cpp
     bubble_annotation_tests.cpp
+    freehand_smoothing_tests.cpp
     annotation_tool_tests.cpp
     annotation_edit_interaction_tests.cpp
     annotation_controller_tests.cpp

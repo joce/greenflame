@@ -1,5 +1,6 @@
 #pragma once
 
+#include "greenflame_core/freehand_smoothing.h"
 #include "greenflame_core/selection_wheel.h"
 #include "greenflame_core/text_annotation_types.h"
 
@@ -17,6 +18,10 @@ struct AppConfig final {
     static constexpr int32_t kDefaultTextSize = 10;
     static constexpr int32_t kDefaultToolSizeOverlayDurationMs = 800;
     static constexpr int32_t kDefaultHighlighterPauseStraightenMs = 800;
+    static constexpr FreehandSmoothingMode kDefaultBrushSmoothingMode =
+        FreehandSmoothingMode::Smooth;
+    static constexpr FreehandSmoothingMode kDefaultHighlighterSmoothingMode =
+        FreehandSmoothingMode::Smooth;
 
     std::wstring default_save_dir = {};
     std::wstring last_save_as_dir = {};
@@ -28,11 +33,13 @@ struct AppConfig final {
     COLORREF padding_color = Make_colorref(0x00, 0x00, 0x00);
     bool include_cursor = false;
     int32_t brush_size = kDefaultBrushSize;
+    FreehandSmoothingMode brush_smoothing_mode = kDefaultBrushSmoothingMode;
     int32_t line_size = kDefaultLineSize;
     int32_t arrow_size = kDefaultArrowSize;
     int32_t rect_size = kDefaultRectSize;
     int32_t ellipse_size = kDefaultEllipseSize;
     int32_t highlighter_size = kDefaultHighlighterSize;
+    FreehandSmoothingMode highlighter_smoothing_mode = kDefaultHighlighterSmoothingMode;
     int32_t bubble_size = kDefaultBubbleSize;
     int32_t obfuscate_block_size = kDefaultObfuscateBlockSize;
     bool obfuscate_risk_acknowledged = false;

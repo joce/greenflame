@@ -150,6 +150,8 @@ The annotation system applies only to the interactive overlay flow.
 - The currently selected Highlighter slot persists in
   `tools.highlighter.current_color`.
 - Highlighter opacity persists in `tools.highlighter.opacity_percent`.
+- Brush smoothing persists in `tools.brush.smoothing_mode`.
+- Highlighter freehand smoothing persists in `tools.highlighter.smoothing_mode`.
 - Text and Bubble font selections persist in `tools.text.current_font` and
   `tools.bubble.current_font`, while font family names persist in `tools.font.*`.
 - The size-overlay duration persists in `ui.tool_size_overlay_duration_ms`.
@@ -340,11 +342,21 @@ path for selection, output compositing, and committed annotation paint.
 The in-progress Brush and Highlighter strokes are intentionally different from
 committed annotations:
 
-- live preview is rendered from raw draft points in the Win32 paint layer
-- the preview uses a lightweight polyline path for responsiveness during long
-  strokes
+- raw draft points remain the controller's source of truth during the gesture
+- when freehand smoothing is `off`, the Win32 paint layer draws the full raw draft
+  polyline
+- when freehand smoothing is `smooth`, the Win32 paint layer uses a
+  split-tail preview:
+  - the older stable prefix is smoothed with the same core mode used on commit
+  - the newest tail near the cursor stays raw so the tip remains attached to the
+    pointer without visible lag
+  - the smoothed stable body is cached separately so frames that only change the
+    tail do not need to re-smooth the whole stroke
 - the preview still respects the active stroke style, including round vs square tip
   shape and opacity
+- for square-tip highlighter preview, the smoothed body and raw tail are first drawn
+  into one temporary stroke bitmap and then multiply-blended once, which avoids a
+  dark seam at the join
 - the stroke is rasterized in core only on commit (`mouse-up`)
 - hit-testing and save/copy never use the draft preview path
 
@@ -395,14 +407,28 @@ composited image underneath the obfuscate bounds rather than a geometric shape:
 
 Smoothing is intentionally abstracted.
 
-- `IStrokeSmoother`
-- `PassthroughStrokeSmoother`
+- Brush and Highlighter each expose a config-backed `smoothing_mode`.
+- Accepted values are `off` and `smooth`.
+- Defaults are `smooth` for both tools.
+- Smoothing is shared across interactive commit and CLI point-list import so both
+  paths produce the same committed geometry for the same tool config.
 
-Current behavior is a pass-through. Future smoothing work should change the
-smoother implementation, not the tool contract.
+Current modes:
 
-For freehand specifically, smoothing is applied when the stroke is committed. The
-live preview currently follows the unsmoothed raw draft points.
+- `off`
+  - exact pass-through of the collected points
+- `smooth`
+  - duplicate-point removal
+  - corner-aware distance decimation
+  - centripetal Catmull-Rom resampling between preserved anchors
+
+Commit-time behavior:
+
+- freehand Brush strokes are smoothed according to `tools.brush.smoothing_mode`
+- freehand Highlighter strokes are smoothed according to
+  `tools.highlighter.smoothing_mode`
+- straightened highlighter bars bypass freehand smoothing and keep the existing
+  start/end path
 
 ## Undo and redo
 
@@ -433,7 +459,9 @@ The overlay paint path draws in this order:
 2. capture-region dim/border chrome
 3. committed annotations
 4. in-progress annotation preview
-   - freehand preview is drawn directly from draft points for responsiveness
+   - freehand preview is drawn from raw draft points when smoothing is `off`
+   - with `smooth`, freehand preview uses a smoothed stable body plus a
+     raw tail near the cursor
    - line and arrow previews are composited from the draft core raster
    - rectangle and filled-rectangle previews are composited from the draft core
      raster

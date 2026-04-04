@@ -3,6 +3,7 @@
 // Direct2D overlay paint pipeline.
 
 #include "greenflame_core/annotation_hit_test.h"
+#include "greenflame_core/freehand_smoothing.h"
 #include "greenflame_core/rect_px.h"
 #include "greenflame_core/selection_handles.h"
 #include "greenflame_core/selection_wheel.h"
@@ -64,6 +65,8 @@ struct D2DPaintInput {
     core::RectPx final_selection = {};
     core::RectPx draft_text_caret_rect = {};
     std::optional<core::StrokeStyle> draft_freehand_style = std::nullopt;
+    core::FreehandSmoothingMode draft_freehand_smoothing_mode =
+        core::FreehandSmoothingMode::Off;
     std::optional<core::RectPx> hovered_toolbar_bounds = std::nullopt;
     bool draft_text_insert_mode = true;
     bool draft_text_blink_visible = true;

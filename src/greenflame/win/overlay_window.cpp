@@ -1203,12 +1203,18 @@ bool OverlayWindow::Create_and_show(HINSTANCE hinstance) {
                                      config_->current_annotation_color_index))]
                            : core::kDefaultAnnotationColorPalette[static_cast<size_t>(
                                  core::kDefaultAnnotationColorIndex)]);
+    controller_.Set_brush_smoothing_mode(
+        config_ != nullptr ? config_->brush_smoothing_mode
+                           : core::AppConfig::kDefaultBrushSmoothingMode);
     controller_.Set_highlighter_color(
         config_ != nullptr ? config_->highlighter_colors[static_cast<size_t>(
                                  core::Clamp_highlighter_color_index(
                                      config_->current_highlighter_color_index))]
                            : core::kDefaultHighlighterColorPalette[static_cast<size_t>(
                                  core::kDefaultHighlighterColorIndex)]);
+    controller_.Set_highlighter_smoothing_mode(
+        config_ != nullptr ? config_->highlighter_smoothing_mode
+                           : core::AppConfig::kDefaultHighlighterSmoothingMode);
     controller_.Set_highlighter_opacity_percent(
         config_ != nullptr ? config_->highlighter_opacity_percent
                            : core::kDefaultHighlighterOpacityPercent);
@@ -3622,6 +3628,8 @@ LRESULT OverlayWindow::On_paint() {
         input.annotation_patches = patches;
         input.draft_freehand_points = controller_.Draft_freehand_points();
         input.draft_freehand_style = controller_.Draft_freehand_style();
+        input.draft_freehand_smoothing_mode =
+            controller_.Draft_freehand_smoothing_mode();
         input.draft_freehand_tip_shape =
             controller_.Active_annotation_tool() == core::AnnotationToolId::Highlighter
                 ? core::FreehandTipShape::Square

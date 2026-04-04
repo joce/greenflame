@@ -359,6 +359,7 @@ Greenflame reads `~/.config/greenflame/greenflame.json` (i.e. `%USERPROFILE%\.co
 | Key | Default | Meaning |
 |---|---|---|
 | `tools.brush.size` | `2` | Brush tool size step (1–50). |
+| `tools.brush.smoothing_mode` | `smooth` | Freehand Brush smoothing mode. Accepted values: `off`, `smooth`. `smooth` affects both committed strokes and the live split-tail preview. |
 | `tools.line.size` | `2` | Line tool size step (1–50). |
 | `tools.arrow.size` | `2` | Arrow tool size step (1–50). |
 | `tools.rect.size` | `2` | Rectangle tool size step (1–50). |
@@ -373,6 +374,7 @@ Greenflame reads `~/.config/greenflame/greenflame.json` (i.e. `%USERPROFILE%\.co
 | `tools.highlighter.colors` | Object with slot index keys (e.g. `{"2": "#ffb44d"}`) | Highlighter selection wheel slots (indices 0–5). Only non-default slots are written. Values use `#rrggbb`. |
 | `tools.highlighter.current_color` | `0` | Current Highlighter color slot index, clamped to `0..5`. |
 | `tools.highlighter.opacity_percent` | `35` | Default Highlighter opacity for live preview, save output, and clipboard output. Values are clamped to `0..100`. |
+| `tools.highlighter.smoothing_mode` | `smooth` | Freehand Highlighter smoothing mode. Accepted values: `off`, `smooth`. Straightened highlighter bars bypass this setting and stay explicit `start`/`end` segments. |
 | `tools.highlighter.pause_straighten_ms` | `800` | After the mouse is still for this many milliseconds during a highlighter stroke, the stroke snaps to a straight bar (start to cursor). `0` means always straight. |
 | `tools.highlighter.pause_straighten_deadzone_px` | `0` | Mouse must move more than this many physical pixels from the last timer-reset position before the pause timer resets. `0` means any movement resets the timer. |
 | `tools.text.size` | `10` | Text tool size step (1–50). |
@@ -417,10 +419,15 @@ Greenflame reads `~/.config/greenflame/greenflame.json` (i.e. `%USERPROFILE%\.co
     },
     "colors": { "4": "#ff00ff" },
     "current_color": 0,
+    "brush": {
+      "size": 2,
+      "smoothing_mode": "off"
+    },
     "highlighter": {
       "colors": { "2": "#ffb44d" },
       "current_color": 0,
       "opacity_percent": 35,
+      "smoothing_mode": "off",
       "pause_straighten_ms": 800,
       "pause_straighten_deadzone_px": 0
     },

@@ -178,8 +178,16 @@ Rules:
 - `size` is valid only for annotations that support sizing.
 - Filled shapes do not accept `size`.
 - Obfuscate does not accept `color`, `font`, or highlighter opacity settings.
-- Brush and point-list highlighter rendering uses the current pass-through
-  stroke behavior. No extra smoothing is applied.
+- Brush point lists use the same shared freehand smoothing path as interactive
+  Brush commit, controlled by `tools.brush.smoothing_mode`.
+- Point-list Highlighter annotations use the same shared freehand smoothing path as
+  interactive freehand Highlighter commit, controlled by
+  `tools.highlighter.smoothing_mode`.
+- `start`/`end` Highlighter segments keep their explicit straight-bar geometry and
+  bypass freehand smoothing.
+- The default config keeps both freehand smoothing modes at `smooth`, so CLI brush
+  and point-list highlighter input now follow the same smoothed commit path as the
+  interactive tools unless the user explicitly switches them to `off`.
 - Bubble numbering is assigned automatically by bubble order only:
   first bubble is `1`, second is `2`, and so on.
 

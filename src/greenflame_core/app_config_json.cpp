@@ -1,5 +1,6 @@
 #include "greenflame_core/app_config_json.h"
 #include "greenflame_core/annotation_types.h"
+#include "greenflame_core/freehand_smoothing.h"
 #include "greenflame_core/selection_wheel.h"
 #include "greenflame_core/text_annotation_types.h"
 
@@ -39,15 +40,17 @@ constexpr std::array<std::string_view, 12> kToolsKeys = {
      "highlighter", "text", "bubble", "obfuscate"}};
 constexpr std::array<std::string_view, 4> kFontKeys = {
     {"sans", "serif", "mono", "art"}};
-constexpr std::array<std::string_view, 6> kHighlighterKeys = {
+constexpr std::array<std::string_view, 2> kFreehandToolKeys = {
+    {"size", "smoothing_mode"}};
+constexpr std::array<std::string_view, 1> kSizeOnlyKeys = {{"size"}};
+constexpr std::array<std::string_view, 7> kHighlighterKeys = {
     {"size", "colors", "current_color", "opacity_percent", "pause_straighten_ms",
-     "pause_straighten_deadzone_px"}};
+     "pause_straighten_deadzone_px", "smoothing_mode"}};
 constexpr std::array<std::string_view, 2> kTextToolKeys = {{"size", "current_font"}};
 constexpr std::array<std::string_view, 8> kSaveKeys = {
     {"default_save_dir", "last_save_as_dir", "default_save_format", "padding_color",
      "filename_pattern_region", "filename_pattern_desktop", "filename_pattern_monitor",
      "filename_pattern_window"}};
-constexpr std::array<std::string_view, 1> kSizeOnlyKeys = {{"size"}};
 constexpr std::array<std::string_view, 2> kObfuscateKeys = {
     {"block_size", "risk_acknowledged"}};
 
@@ -193,6 +196,10 @@ constexpr std::array<std::string_view, 2> kObfuscateKeys = {
         return "art";
     }
     return "sans";
+}
+
+[[nodiscard]] std::wstring Freehand_smoothing_mode_message() {
+    return L"Must be one of: off, smooth.";
 }
 
 [[nodiscard]] std::string To_hex_color(COLORREF color) {
@@ -717,6 +724,27 @@ void Apply_font_choice_property(Json const &object, char const *key,
                             L"Must be one of: sans, serif, mono, art.");
 }
 
+void Apply_smoothing_mode_property(Json const &object, char const *key,
+                                   std::wstring_view path,
+                                   FreehandSmoothingMode &target, ParseContext &ctx) {
+    if (!object.has_key(key)) {
+        return;
+    }
+    if (object[key].JSON_type() != JsonClass::String) {
+        ctx.Report_schema_error(Join_path(path, key), L"Must be a string.");
+        return;
+    }
+
+    std::optional<FreehandSmoothingMode> const mode =
+        Freehand_smoothing_mode_from_token(Get_json_string(object[key]));
+    if (!mode.has_value()) {
+        ctx.Report_schema_error(Join_path(path, key),
+                                Freehand_smoothing_mode_message());
+        return;
+    }
+    target = *mode;
+}
+
 template <size_t SlotCount>
 void Apply_color_map_property(Json const &object, char const *key,
                               std::wstring_view path,
@@ -756,6 +784,20 @@ void Apply_color_map_property(Json const &object, char const *key,
 
         target[static_cast<size_t>(slot_key[0] - '0')] = parsed;
     }
+}
+
+void Apply_freehand_tool_object(Json const &object, std::wstring_view path,
+                                int32_t &size_target,
+                                FreehandSmoothingMode &mode_target, ParseContext &ctx) {
+    if (object.JSON_type() != JsonClass::Object) {
+        ctx.Report_schema_error(path, L"Must be an object.");
+        return;
+    }
+
+    Report_unknown_keys(object, kFreehandToolKeys, path, ctx);
+    Apply_integer_property(object, "size", path, kMinToolSize, kMaxToolSize,
+                           size_target, ctx);
+    Apply_smoothing_mode_property(object, "smoothing_mode", path, mode_target, ctx);
 }
 
 void Apply_size_only_object(Json const &object, std::wstring_view path, int32_t &target,
@@ -848,6 +890,8 @@ void Apply_highlighter_object(Json const &object, ParseContext &ctx) {
     Report_unknown_keys(object, kHighlighterKeys, k_path, ctx);
     Apply_integer_property(object, "size", k_path, kMinToolSize, kMaxToolSize,
                            ctx.result.config.highlighter_size, ctx);
+    Apply_smoothing_mode_property(object, "smoothing_mode", k_path,
+                                  ctx.result.config.highlighter_smoothing_mode, ctx);
     Apply_color_map_property(object, "colors", k_path,
                              ctx.result.config.highlighter_colors, ctx);
     Apply_integer_property(object, "current_color", k_path, kMinColorIndex,
@@ -891,8 +935,9 @@ void Apply_tools_object(Json const &object, ParseContext &ctx) {
     Report_unknown_keys(object, kToolsKeys, k_path, ctx);
 
     if (object.has_key("brush")) {
-        Apply_size_only_object(object["brush"], L"tools.brush",
-                               ctx.result.config.brush_size, ctx);
+        Apply_freehand_tool_object(object["brush"], L"tools.brush",
+                                   ctx.result.config.brush_size,
+                                   ctx.result.config.brush_smoothing_mode, ctx);
     }
     if (object.has_key("line")) {
         Apply_size_only_object(object["line"], L"tools.line",
@@ -1091,6 +1136,7 @@ std::string Serialize_app_config_json(AppConfig const &config) {
 
     bool const wrote_tools =
         config.brush_size != defaults.brush_size ||
+        config.brush_smoothing_mode != defaults.brush_smoothing_mode ||
         config.line_size != defaults.line_size ||
         config.arrow_size != defaults.arrow_size ||
         config.rect_size != defaults.rect_size ||
@@ -1105,6 +1151,7 @@ std::string Serialize_app_config_json(AppConfig const &config) {
         config.annotation_colors != defaults.annotation_colors ||
         config.current_highlighter_color_index !=
             defaults.current_highlighter_color_index ||
+        config.highlighter_smoothing_mode != defaults.highlighter_smoothing_mode ||
         config.highlighter_opacity_percent != defaults.highlighter_opacity_percent ||
         config.highlighter_pause_straighten_ms !=
             defaults.highlighter_pause_straighten_ms ||
@@ -1120,8 +1167,16 @@ std::string Serialize_app_config_json(AppConfig const &config) {
 
     if (wrote_tools) {
         root["tools"] = easyjson::object();
-        if (config.brush_size != defaults.brush_size) {
-            root["tools"]["brush"]["size"] = config.brush_size;
+        if (config.brush_size != defaults.brush_size ||
+            config.brush_smoothing_mode != defaults.brush_smoothing_mode) {
+            root["tools"]["brush"] = easyjson::object();
+            if (config.brush_size != defaults.brush_size) {
+                root["tools"]["brush"]["size"] = config.brush_size;
+            }
+            if (config.brush_smoothing_mode != defaults.brush_smoothing_mode) {
+                root["tools"]["brush"]["smoothing_mode"] = std::string(
+                    Freehand_smoothing_mode_token(config.brush_smoothing_mode));
+            }
         }
         if (config.line_size != defaults.line_size) {
             root["tools"]["line"]["size"] = config.line_size;
@@ -1163,6 +1218,7 @@ std::string Serialize_app_config_json(AppConfig const &config) {
             config.highlighter_colors != defaults.highlighter_colors ||
             config.current_highlighter_color_index !=
                 defaults.current_highlighter_color_index ||
+            config.highlighter_smoothing_mode != defaults.highlighter_smoothing_mode ||
             config.highlighter_opacity_percent !=
                 defaults.highlighter_opacity_percent ||
             config.highlighter_pause_straighten_ms !=
@@ -1172,6 +1228,11 @@ std::string Serialize_app_config_json(AppConfig const &config) {
             root["tools"]["highlighter"] = easyjson::object();
             if (config.highlighter_size != defaults.highlighter_size) {
                 root["tools"]["highlighter"]["size"] = config.highlighter_size;
+            }
+            if (config.highlighter_smoothing_mode !=
+                defaults.highlighter_smoothing_mode) {
+                root["tools"]["highlighter"]["smoothing_mode"] = std::string(
+                    Freehand_smoothing_mode_token(config.highlighter_smoothing_mode));
             }
             if (config.highlighter_colors != defaults.highlighter_colors) {
                 easyjson::JSON highlighter_colors = easyjson::object();

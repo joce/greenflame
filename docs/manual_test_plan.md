@@ -1408,6 +1408,34 @@ unless a real end-to-end bug escapes into the Win32 shell:
   - With a non-zero value, a continuously moving stroke remains freehand until the pause threshold is met.
   - After the pause threshold is met, the stroke snaps to a straight bar and continues tracking the cursor endpoint until release.
 
+### GF-MAN-CFG-007A - Freehand Smoothing Config Behavior
+
+- Priority: `P1`
+- Run on: `ENV-A`
+- Steps:
+  1. Set `tools.brush.smoothing_mode="off"` and
+     `tools.highlighter.smoothing_mode="off"`, then relaunch Greenflame.
+  2. Start a capture and draw one deliberately jagged brush stroke and one
+     deliberately jagged freehand highlighter stroke.
+  3. Set `tools.brush.smoothing_mode="smooth"` and
+     `tools.highlighter.smoothing_mode="smooth"`, then relaunch Greenflame.
+  4. Draw comparable brush and freehand highlighter strokes over detailed content.
+  5. While drawing with smoothing enabled, watch the live stroke tip near the
+     cursor.
+  6. With `tools.highlighter.pause_straighten_ms` left enabled, draw another
+     highlighter stroke that pauses long enough to straighten.
+- Expected:
+  - With both smoothing modes set to `off`, both committed strokes preserve the
+    current raw freehand path shape.
+  - With Brush smoothing set to `smooth`, the committed brush stroke looks visibly
+    cleaner while still following the intended path endpoints.
+  - With Highlighter smoothing set to `smooth`, the committed freehand highlighter
+    stroke looks cleaner without obvious relocation or multiply-dark seams.
+  - During the live smoothed preview, the stroke body looks cleaned up while the tip
+    stays attached to the cursor instead of lagging behind it.
+  - A straightened highlighter stroke still commits as the same explicit straight bar
+    shape rather than being reinterpreted as a smoothed freehand path.
+
 ### GF-MAN-CFG-008 - Text Size Step Persistence
 
 - Priority: `P1`

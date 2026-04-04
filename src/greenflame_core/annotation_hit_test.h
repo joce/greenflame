@@ -11,8 +11,9 @@ Annotation_selection_frame_bounds(Annotation const &annotation) noexcept;
 [[nodiscard]] AnnotationSelection
 Normalize_annotation_selection(std::span<const Annotation> annotations,
                                std::span<const uint64_t> selection_ids) noexcept;
-[[nodiscard]] bool Selection_contains_annotation_id(
-    std::span<const uint64_t> selection_ids, uint64_t annotation_id) noexcept;
+[[nodiscard]] bool
+Selection_contains_annotation_id(std::span<const uint64_t> selection_ids,
+                                 uint64_t annotation_id) noexcept;
 [[nodiscard]] std::optional<RectPx>
 Annotation_selection_bounds(std::span<const Annotation> annotations,
                             std::span<const uint64_t> selection_ids) noexcept;

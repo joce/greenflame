@@ -24,6 +24,8 @@ class IOverlayEvents {
     virtual void On_overlay_closed() = 0;
     virtual void On_selection_copied_to_clipboard(core::RectPx screen_rect,
                                                   std::optional<HWND> window) = 0;
+    virtual bool On_selection_pinned_to_desktop(core::RectPx screen_rect,
+                                                GdiCaptureResult &capture) = 0;
     virtual void On_selection_saved_to_file(core::RectPx screen_rect,
                                             std::optional<HWND> window,
                                             HBITMAP thumbnail,
@@ -52,6 +54,7 @@ class OverlayWindow final {
     enum class ToolbarButtonAction : uint8_t {
         SelectAnnotationTool,
         ToggleCapturedCursor,
+        PinToDesktop,
         ShowHelp,
     };
 
@@ -94,12 +97,13 @@ class OverlayWindow final {
     void Build_default_save_name(std::wstring_view save_dir_for_num_scan,
                                  std::span<wchar_t> out) const;
     [[nodiscard]] std::wstring Resolve_default_save_directory() const;
-    [[nodiscard]] std::wstring Resolve_save_as_initial_directory() const;
     [[nodiscard]] core::RectPx Selection_screen_rect() const;
     void Save_directly_and_close(bool copy_saved_file_to_clipboard);
     void Save_as_and_close(bool copy_saved_file_to_clipboard);
     void Copy_to_clipboard_and_close();
+    void Pin_to_desktop_and_close();
     [[nodiscard]] bool Build_selection_capture(GdiCaptureResult &out) const;
+    [[nodiscard]] bool Build_rendered_selection_capture(GdiCaptureResult &out) const;
     void Notify_save_and_close(GdiCaptureResult &cropped, std::wstring_view saved_path,
                                bool file_copied_to_clipboard);
 
@@ -161,6 +165,7 @@ class OverlayWindow final {
     [[nodiscard]] bool Is_captured_cursor_visible() const noexcept;
     [[nodiscard]] bool Current_capture_has_captured_cursor() const noexcept;
     [[nodiscard]] std::wstring Build_captured_cursor_tooltip() const;
+    [[nodiscard]] std::wstring Build_pin_tooltip() const;
     [[nodiscard]] bool Rebuild_display_capture();
     [[nodiscard]] bool Maybe_show_obfuscate_warning();
     [[nodiscard]] IOverlayTopLayer *Active_top_layer() noexcept;

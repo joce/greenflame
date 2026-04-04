@@ -540,6 +540,13 @@ OverlayAction OverlayController::On_copy_to_clipboard_requested() {
     return OverlayAction::CopyToClipboard;
 }
 
+OverlayAction OverlayController::On_pin_requested() {
+    if (state_.final_selection.Is_empty()) {
+        return OverlayAction::None;
+    }
+    return OverlayAction::PinToDesktop;
+}
+
 OverlayAction OverlayController::On_primary_press(
     OverlayModifierState mods, PointPx cursor_client, PointPx /*cursor_screen*/,
     std::optional<HWND> window_under_cursor,
@@ -693,12 +700,10 @@ OverlayAction OverlayController::On_pointer_move(
         }
 
         if (state_.annotation_selection_dragging) {
-            state_.annotation_selection_live_rect =
-                Clip_selection_rect_to_bounds(
-                    RectPx::From_points(state_.annotation_selection_start_px,
-                                        cursor_client)
-                        .Normalized(),
-                    state_.virtual_desktop_client_bounds);
+            state_.annotation_selection_live_rect = Clip_selection_rect_to_bounds(
+                RectPx::From_points(state_.annotation_selection_start_px, cursor_client)
+                    .Normalized(),
+                state_.virtual_desktop_client_bounds);
         }
     } else if (state_.move_dragging) {
         int32_t const new_left = cursor_client.x - state_.move_grab_offset.x;

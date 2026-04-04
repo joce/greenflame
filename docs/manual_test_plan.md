@@ -7,7 +7,7 @@ audience:
 status: reference
 owners:
   - core-team
-last_updated: 2026-03-29
+last_updated: 2026-04-03
 tags:
   - testing
   - manual
@@ -339,6 +339,7 @@ unless a real end-to-end bug escapes into the Win32 shell:
   - A help overlay opens near the cursor.
   - It shows the current shortcut reference.
   - The shortcut list includes `Ctrl + K` for the captured-cursor toggle.
+  - The shortcut list includes `Ctrl + P` for pinning the current selection to the desktop.
   - All listed shortcuts remain readable without clipping, and the `Annotation Tools` section stays in the second column.
   - The final `Annotation Tools` rows, including the mouse-wheel size shortcuts, remain fully visible on a 1920x1080 display.
   - The toolbar `Help` button opens help on button release and does not toggle an
@@ -358,13 +359,14 @@ unless a real end-to-end bug escapes into the Win32 shell:
   3. Toggle a few tools on and off.
 - Expected:
   - The toolbar stays attached to the selection and remains visible on-screen.
-  - The toolbar layout is `[annotation tools][spacer][cursor][spacer][help]`.
+  - The toolbar layout is `[annotation tools][spacer][cursor][pin][spacer][help]`.
   - The `Help` button stays last on the right.
   - Hovering shows an opaque tooltip for each button.
   - Tool button tooltips include the tool name followed by its hotkey in
     parentheses, such as `Brush (B)`.
   - The captured-cursor button uses a stable cursor glyph in both states, with
     tooltip text that reflects the action (`Show...` or `Hide...`).
+  - The pin button uses a stable pin glyph with tooltip text `Pin to desktop (Ctrl+P)`.
   - The help button tooltip includes the help hotkey in parentheses.
   - Hovering any visible toolbar button shows the standard pointer cursor.
   - Button state tracks the active tool correctly.
@@ -461,6 +463,91 @@ unless a real end-to-end bug escapes into the Win32 shell:
   - Fully out-of-bounds cursors are omitted from the output.
   - Placement stays stable across cursor types, including I-beam.
   - Record any hotspot offset regression immediately, especially for I-beam placement.
+
+## Pinned Images
+
+### GF-MAN-PIN-001 - Create Pin From Rendered Selection
+
+- Priority: `P1`
+- Run on: `ENV-A`
+- Steps:
+  1. Start interactive capture and create a stable selection.
+  2. Turn on the captured-cursor toggle and place the captured cursor somewhere obvious inside the selection.
+  3. Add at least one visible annotation to the selection.
+  4. Press `Ctrl + P`.
+  5. Compare the pinned image against the just-selected on-screen content.
+- Expected:
+  - The overlay closes only after the pin is created successfully.
+  - A new always-on-top pinned-image window appears at the selection's screen location at 100% scale.
+  - The newly created pin is active immediately and uses the stronger green halo treatment.
+  - The pinned bitmap matches the rendered overlay export exactly: committed annotations are included, the captured cursor is included only when toggled on, and no overlay chrome is baked into the bitmap.
+  - The visible green halo surrounds the pin window but is not part of the bitmap content itself.
+
+### GF-MAN-PIN-002 - Halo State, Drag, And Zoom
+
+- Priority: `P1`
+- Run on: `ENV-A`, `ENV-B`
+- Steps:
+  1. Create one pinned image.
+  2. Click another app, then click the pin again.
+  3. Drag the pin to a new position.
+  4. Use the mouse wheel to zoom in and out.
+  5. Use `Ctrl + =` and `Ctrl + -` to zoom in and out again.
+- Expected:
+  - The halo remains visible even when the pin is inactive.
+  - The active pin uses a stronger, less transparent green halo than the idle pin.
+  - Dragging moves the pin cleanly with no border-resize affordance or resize-handle behavior.
+  - Wheel zoom and keyboard zoom both resize the displayed image around its center.
+  - Pointer hit-testing remains aligned with the visible pin while dragging or zooming.
+
+### GF-MAN-PIN-003 - Context Menu, Shortcuts, Rotation, And Opacity
+
+- Priority: `P1`
+- Run on: `ENV-A`
+- Steps:
+  1. Create one pinned image and right-click it.
+  2. Verify the context-menu item order and visible accelerators.
+  3. Use the menu to rotate right once and decrease opacity once.
+  4. Use `Ctrl + Left`, `Ctrl + Right`, `Ctrl + Up`, and `Ctrl + Down`.
+  5. Hold `Ctrl + Up` and `Ctrl + Down` long enough to trigger key repeat.
+  6. With the pin still rotated and partially transparent, copy it to Paint and save it to a file.
+- Expected:
+  - Right-click activates the pin and keeps its stronger halo state while the menu is open.
+  - The menu contains `Copy to clipboard`, `Save to file`, `Rotate Right`, `Rotate Left`, `Increase Opacity`, `Decrease Opacity`, and `Close` in that grouped order.
+  - The menu shows the expected keyboard shortcuts for those actions.
+  - Rotation changes the displayed orientation in 90-degree increments.
+  - Opacity changes affect only the on-screen bitmap, not the halo strength.
+  - Holding `Ctrl + Up` or `Ctrl + Down` continuously steps the opacity until the configured clamp is reached; repeated keydown events do not require individual key presses.
+  - Copied and saved output reflects the current rotation but remains fully opaque even if the on-screen pin opacity was reduced.
+
+### GF-MAN-PIN-004 - Multiple Pins And Independent Lifetime
+
+- Priority: `P1`
+- Run on: `ENV-A`
+- Steps:
+  1. Create one pinned image from a first selection.
+  2. Start a second capture and create a different pinned image.
+  3. Move, rotate, or change opacity on only one of the pins.
+  4. Close one pin with `Esc`.
+  5. Exit Greenflame from the tray.
+- Expected:
+  - Multiple pinned images can coexist at once.
+  - Each pin keeps its own position, scale, rotation, and opacity.
+  - Closing one pin does not affect the others.
+  - Exiting the app closes all remaining pins.
+
+### GF-MAN-PIN-005 - Cross-Monitor Placement And Capture Exclusion
+
+- Priority: `P2`
+- Run on: `ENV-B`
+- Steps:
+  1. Create a pinned image on a non-primary monitor, including a case with negative virtual-desktop coordinates if available.
+  2. Move or zoom that pin near or across a monitor boundary.
+  3. Start a new interactive capture and direct clipboard capture that would otherwise include the pin's on-screen area.
+- Expected:
+  - Initial pin placement matches the original selection position on the correct monitor.
+  - Moving and zooming the pin across monitor boundaries does not introduce DPI jumps, seams, or pointer offset.
+  - Later captures do not include the pinned-image window itself.
 
 ## Annotations
 
@@ -1394,8 +1481,10 @@ unless a real end-to-end bug escapes into the Win32 shell:
   2. Move the cursor slowly across the overlay.
   3. Create, move, and resize selections.
   4. Draw annotations and hover resize handles.
+  5. Create a pinned image and move or zoom it across the same mixed-DPI boundary.
 - Expected:
   - Crosshair, handles, toolbar hit-testing, cursor previews, and selection wheel stay under the pointer.
+  - Pinned-image dragging, zooming, and context-menu activation stay under the pointer.
   - No visual offset appears when crossing monitors with different DPI.
 
 ### GF-MAN-DPI-002 - Cross-Monitor Selection And Save

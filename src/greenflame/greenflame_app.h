@@ -5,6 +5,7 @@
 #include "greenflame_core/cli_options.h"
 #include "greenflame_core/process_exit_code.h"
 #include "win/overlay_window.h"
+#include "win/pinned_image_manager.h"
 #include "win/tray_window.h"
 #include "win/win32_services.h"
 #include "win/window_query.h"
@@ -38,6 +39,8 @@ class GreenflameApp final : public ITrayEvents, public IOverlayEvents {
     void On_overlay_closed() override;
     void On_selection_copied_to_clipboard(core::RectPx screen_rect,
                                           std::optional<HWND> window) override;
+    bool On_selection_pinned_to_desktop(core::RectPx screen_rect,
+                                        GdiCaptureResult &capture) override;
     void On_selection_saved_to_file(core::RectPx screen_rect,
                                     std::optional<HWND> window, HBITMAP thumbnail,
                                     std::wstring_view saved_path,
@@ -55,6 +58,7 @@ class GreenflameApp final : public ITrayEvents, public IOverlayEvents {
     Win32AnnotationPreparationService annotation_preparation_service_;
     Win32FileSystemService file_system_service_;
     AppController app_controller_;
+    PinnedImageManager pinned_image_manager_;
     core::CliOptions cli_options_ = {};
     core::AppConfig config_ = {};
 };

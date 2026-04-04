@@ -83,9 +83,9 @@ void Draw_filled_rectangle(OverlayController &c, PointPx start, PointPx end) {
     ASSERT_EQ(c.On_primary_press(No_mods(), start, start, std::nullopt, std::nullopt,
                                  std::nullopt, {}, Make_snap_edges(c), 0, 0),
               OverlayAction::Repaint);
-    ASSERT_EQ(c.On_pointer_move(No_mods(), end, end, std::nullopt, {}, std::nullopt,
-                                0, 0),
-              OverlayAction::Repaint);
+    ASSERT_EQ(
+        c.On_pointer_move(No_mods(), end, end, std::nullopt, {}, std::nullopt, 0, 0),
+        OverlayAction::Repaint);
     ASSERT_EQ(c.On_primary_release(No_mods(), end),
               OverlayAction::InvalidateFrozenCache);
 }
@@ -859,6 +859,13 @@ TEST(overlay_controller, H_Copy_WithSelection) {
     EXPECT_EQ(c.On_copy_to_clipboard_requested(), OverlayAction::CopyToClipboard);
 }
 
+TEST(overlay_controller, H_Pin_WithSelection) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+    EXPECT_EQ(c.On_pin_requested(), OverlayAction::PinToDesktop);
+}
+
 TEST(overlay_controller, H_Save_EmptySelection_ReturnsNone) {
     auto c = Make_controller();
     EXPECT_EQ(c.On_save_requested(false, false), OverlayAction::None);
@@ -868,6 +875,11 @@ TEST(overlay_controller, H_Save_EmptySelection_ReturnsNone) {
 TEST(overlay_controller, H_Copy_EmptySelection_ReturnsNone) {
     auto c = Make_controller();
     EXPECT_EQ(c.On_copy_to_clipboard_requested(), OverlayAction::None);
+}
+
+TEST(overlay_controller, H_Pin_EmptySelection_ReturnsNone) {
+    auto c = Make_controller();
+    EXPECT_EQ(c.On_pin_requested(), OverlayAction::None);
 }
 
 // ===========================================================================
@@ -1669,8 +1681,8 @@ TEST(overlay_controller, MultiSelection_CtrlDragAddsTouchedAnnotationsOnTouch) {
                                  std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
                                  0),
               OverlayAction::Repaint);
-    ASSERT_EQ(c.On_pointer_move(Ctrl_only(), {245, 150}, {245, 150}, std::nullopt,
-                                {}, std::nullopt, 0, 0),
+    ASSERT_EQ(c.On_pointer_move(Ctrl_only(), {245, 150}, {245, 150}, std::nullopt, {},
+                                std::nullopt, 0, 0),
               OverlayAction::Repaint);
     ASSERT_EQ(c.On_primary_release(Ctrl_only(), {245, 150}), OverlayAction::Repaint);
     EXPECT_EQ(c.Selected_annotation_count(), 2u);
@@ -1687,8 +1699,8 @@ TEST(overlay_controller,
                                  std::nullopt, std::nullopt, {}, Make_snap_edges(c), 0,
                                  0),
               OverlayAction::Repaint);
-    ASSERT_EQ(c.On_pointer_move(Ctrl_only(), {420, 320}, {420, 320}, std::nullopt,
-                                {}, std::nullopt, 0, 0),
+    ASSERT_EQ(c.On_pointer_move(Ctrl_only(), {420, 320}, {420, 320}, std::nullopt, {},
+                                std::nullopt, 0, 0),
               OverlayAction::Repaint);
 
     EXPECT_TRUE(c.State().annotation_selection_dragging);
@@ -1727,8 +1739,8 @@ TEST(overlay_controller, MultiSelection_GroupMoveStartsFromEmptyUnionInterior) {
                                  0),
               OverlayAction::Repaint);
     EXPECT_TRUE(c.Is_annotation_dragging());
-    ASSERT_EQ(c.On_pointer_move(No_mods(), {200, 140}, {200, 140}, std::nullopt,
-                                {}, std::nullopt, 0, 0),
+    ASSERT_EQ(c.On_pointer_move(No_mods(), {200, 140}, {200, 140}, std::nullopt, {},
+                                std::nullopt, 0, 0),
               OverlayAction::Repaint);
     ASSERT_EQ(c.On_primary_release(No_mods(), {200, 140}),
               OverlayAction::InvalidateFrozenCache);

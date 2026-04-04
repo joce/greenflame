@@ -397,11 +397,10 @@ class SelectionMoveEditInteraction final : public IAnnotationEditInteraction {
             if (!Selection_contains_annotation_id(selection_ids_, annotation.id)) {
                 continue;
             }
-            entries_.push_back(
-                Entry{.annotation_id = annotation.id,
-                      .index = index,
-                      .annotation_before = annotation,
-                      .annotation_after = annotation});
+            entries_.push_back(Entry{.annotation_id = annotation.id,
+                                     .index = index,
+                                     .annotation_before = annotation,
+                                     .annotation_after = annotation});
         }
     }
 
@@ -532,8 +531,8 @@ Hit_test_annotation_edit_target(std::span<const uint64_t> selected_annotation_id
         }
     }
 
-    if (selected_annotation_ids.size() > 1 &&
-        selection_bounds.has_value() && selection_bounds->Contains(cursor)) {
+    if (selected_annotation_ids.size() > 1 && selection_bounds.has_value() &&
+        selection_bounds->Contains(cursor)) {
         return AnnotationEditTarget{0, AnnotationEditTargetKind::SelectionBody};
     }
 

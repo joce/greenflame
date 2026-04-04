@@ -6,6 +6,7 @@
 
 namespace greenflame::core {
 enum class ImageSaveFormat : uint8_t;
+struct AppConfig;
 } // namespace greenflame::core
 
 namespace greenflame {
@@ -27,5 +28,11 @@ Reserve_unique_file_path(std::wstring_view desired_path) noexcept;
 
 // Returns the filenames (not full paths) of all non-directory entries in dir.
 [[nodiscard]] std::vector<std::wstring> List_directory_filenames(std::wstring_view dir);
+
+// Returns the best initial directory for a Save As dialog.
+// Prefers last_save_as_dir, then default_save_dir, then the greenflame subfolder
+// of the user's Pictures folder (creating it if necessary).
+[[nodiscard]] std::wstring
+Resolve_initial_save_directory(core::AppConfig const *config);
 
 } // namespace greenflame

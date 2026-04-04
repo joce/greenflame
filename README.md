@@ -41,6 +41,9 @@ Once a region is selected:
 - Use the **captured cursor** button on the toolbar, or press **Ctrl+K**, to show or
   hide the cursor that was sampled from the captured screen image. This affects the
   frozen screenshot only, not the live editing pointer.
+- Use the **pin** button on the toolbar, or press **Ctrl+P**, to create an
+  always-on-top pinned image from the current rendered selection. On success, the
+  overlay closes and the pin stays on screen.
 
 With **no annotation tool selected** (the default mode):
 
@@ -117,7 +120,7 @@ Clicking outside a draft commits it if it has text, otherwise discards it. Click
 
 Committed text annotations can be selected, moved, and deleted, but are not re-editable as live text.
 
-### Saving and copying
+### Saving, copying, and pinning
 
 | Shortcut | Action |
 |----------|--------|
@@ -126,11 +129,38 @@ Committed text annotations can be selected, moved, and deleted, but are not re-e
 | **Ctrl-Alt-S** | Save directly in the configured format, copy the saved file to the clipboard, then close |
 | **Ctrl-Shift-Alt-S** | Open **Save As** dialog, save, copy the saved file to the clipboard, then close |
 | **Ctrl-C** | Copy the selection to the clipboard, then close |
+| **Ctrl-P** | Pin the rendered selection to the desktop, then close |
 
 **Save As** supports **PNG**, **JPEG**, and **BMP**.
 
 When the captured cursor is shown, it is composited into the screenshot below all
 annotations. It is never selectable or movable.
+
+### Pinned images
+
+Pinned images are frameless, always-on-top reference windows with an always-visible
+green halo. The halo gets stronger when the pin is active. Multiple pins can stay
+open at once.
+
+- **Drag anywhere on the pin** to move it.
+- Use the **mouse wheel** or **Ctrl+= / Ctrl+-** to zoom in or out.
+- Pin zoom is clamped to **25% .. 800%**.
+- **Right-click** the pin to open its context menu.
+- Pins resize by zoom only; there are no border or corner resize handles.
+- Copy/save actions include the current **rotation**, but on-screen **opacity** and
+  the green halo are display-only and are not baked into the exported image.
+
+Pin-window shortcuts:
+
+| Shortcut | Action |
+|----------|--------|
+| **Ctrl-C** | Copy the active pinned image to the clipboard |
+| **Ctrl-S** | Save the active pinned image to a file |
+| **Ctrl-Right** | Rotate the active pin right |
+| **Ctrl-Left** | Rotate the active pin left |
+| **Ctrl+= / Ctrl+-** | Zoom the active pin in or out |
+| **Ctrl-Up / Ctrl-Down** | Increase or decrease the active pin opacity; holding the keys repeats |
+| **Escape** | Close the active pin |
 
 ### Other shortcuts
 

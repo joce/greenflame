@@ -2,6 +2,8 @@
 
 namespace greenflame::core {
 
+struct AppConfig;
+
 enum class CliOutputFormat : uint8_t;
 
 enum class SaveSelectionSource : uint8_t {
@@ -69,6 +71,9 @@ enum class ImageSaveFormat : uint8_t {
     Jpeg = 1,
     Bmp = 2,
 };
+
+[[nodiscard]] ImageSaveFormat
+Image_save_format_from_config(AppConfig const &config) noexcept;
 
 [[nodiscard]] ImageSaveFormat
 Image_save_format_from_cli_format(CliOutputFormat format) noexcept;

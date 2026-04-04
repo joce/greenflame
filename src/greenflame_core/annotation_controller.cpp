@@ -569,10 +569,9 @@ bool AnnotationController::On_primary_release(UndoStack &undo_stack) {
             Build_reactive_obfuscate_update_commands(
                 annotations_before, document_.annotations,
                 document_.selected_annotation_ids, document_.selected_annotation_ids);
-        Push_annotation_commands(undo_stack, std::move(primary_commands),
-                                 std::move(reactive_commands),
-                                 commands.size() > 1 ? "Move annotations"
-                                                     : "Compound annotation change");
+        Push_annotation_commands(
+            undo_stack, std::move(primary_commands), std::move(reactive_commands),
+            commands.size() > 1 ? "Move annotations" : "Compound annotation change");
         return true;
     }
 
@@ -677,9 +676,9 @@ bool AnnotationController::Set_selected_annotation(
 
 bool AnnotationController::Set_selected_annotations(
     std::span<const uint64_t> selected_annotation_ids) noexcept {
-    AnnotationSelection selection =
-        active_tool_.has_value() ? AnnotationSelection{}
-                                 : Normalized_selection(selected_annotation_ids);
+    AnnotationSelection selection = active_tool_.has_value()
+                                        ? AnnotationSelection{}
+                                        : Normalized_selection(selected_annotation_ids);
     if (document_.selected_annotation_ids == selection) {
         return false;
     }
@@ -889,7 +888,8 @@ std::optional<Annotation> AnnotationController::Rebuild_obfuscate_annotation(
 std::vector<std::unique_ptr<ICommand>>
 AnnotationController::Build_reactive_obfuscate_update_commands(
     std::vector<Annotation> const &before_annotations,
-    std::vector<Annotation> after_annotations, AnnotationSelection const &selection_before,
+    std::vector<Annotation> after_annotations,
+    AnnotationSelection const &selection_before,
     AnnotationSelection const &selection_after) {
     std::vector<std::unique_ptr<ICommand>> commands = {};
     for (size_t index = 0; index < after_annotations.size(); ++index) {
@@ -954,15 +954,15 @@ void AnnotationController::Push_annotation_commands(
         commands.push_back(std::move(command));
     }
     if (reactive_commands.empty()) {
-        undo_stack.Push(std::make_unique<CompoundCommand>(std::move(commands),
-                                                          description));
+        undo_stack.Push(
+            std::make_unique<CompoundCommand>(std::move(commands), description));
         return;
     }
     for (auto &command : reactive_commands) {
         commands.push_back(std::move(command));
     }
-    undo_stack.Push(std::make_unique<CompoundCommand>(std::move(commands),
-                                                      description));
+    undo_stack.Push(
+        std::make_unique<CompoundCommand>(std::move(commands), description));
 }
 
 void AnnotationController::Update_annotation_at(
@@ -996,10 +996,9 @@ void AnnotationController::Insert_annotation_at(
     size_t index, Annotation annotation,
     std::span<const uint64_t> selected_annotation_ids) {
     AnnotationSelection selection =
-        active_tool_.has_value()
-            ? AnnotationSelection{}
-            : AnnotationSelection(selected_annotation_ids.begin(),
-                                  selected_annotation_ids.end());
+        active_tool_.has_value() ? AnnotationSelection{}
+                                 : AnnotationSelection(selected_annotation_ids.begin(),
+                                                       selected_annotation_ids.end());
     if (index > document_.annotations.size()) {
         index = document_.annotations.size();
     }
@@ -1027,10 +1026,9 @@ void AnnotationController::Insert_annotation_at(
 void AnnotationController::Erase_annotation_at(
     size_t index, std::span<const uint64_t> selected_annotation_ids) {
     AnnotationSelection selection =
-        active_tool_.has_value()
-            ? AnnotationSelection{}
-            : AnnotationSelection(selected_annotation_ids.begin(),
-                                  selected_annotation_ids.end());
+        active_tool_.has_value() ? AnnotationSelection{}
+                                 : AnnotationSelection(selected_annotation_ids.begin(),
+                                                       selected_annotation_ids.end());
     if (index >= document_.annotations.size()) {
         document_.selected_annotation_ids = Normalized_selection(selection);
         return;

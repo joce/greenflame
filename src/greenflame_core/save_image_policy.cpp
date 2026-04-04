@@ -1,5 +1,6 @@
 #include "greenflame_core/save_image_policy.h"
 
+#include "greenflame_core/app_config.h"
 #include "greenflame_core/cli_options.h"
 #include "greenflame_core/string_utils.h"
 
@@ -189,6 +190,16 @@ std::wstring Ensure_image_save_extension(std::wstring_view path,
         out += L".png";
     }
     return out;
+}
+
+ImageSaveFormat Image_save_format_from_config(AppConfig const &config) noexcept {
+    if (config.default_save_format == L"jpg" || config.default_save_format == L"jpeg") {
+        return ImageSaveFormat::Jpeg;
+    }
+    if (config.default_save_format == L"bmp") {
+        return ImageSaveFormat::Bmp;
+    }
+    return ImageSaveFormat::Png;
 }
 
 ImageSaveFormat Image_save_format_from_cli_format(CliOutputFormat format) noexcept {

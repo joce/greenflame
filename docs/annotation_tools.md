@@ -5,7 +5,7 @@ audience: contributors
 status: authoritative
 owners:
   - core-team
-last_updated: 2026-04-02
+last_updated: 2026-04-03
 tags:
   - overlay
   - annotations
@@ -74,11 +74,18 @@ The annotation system applies only to the interactive overlay flow.
   - `Text tool` hotkey `T`
   - `Bubble tool` hotkey `N`
 - The toolbar is anchored to the current selection border.
+- The stable-selection toolbar layout is
+  `[annotation tools][spacer][cursor][pin][spacer][help]`.
 - Toolbar buttons display a tool glyph when one is available.
 - Hovering a toolbar button shows an opaque tooltip with the tool or help name and
   its associated hotkey in parentheses.
+- The captured-cursor button sits in the trailing utility cluster, followed
+  immediately by the pin button, with `Help` staying last on the right.
 - The last toolbar button on the right opens the keyboard-shortcuts help overlay on
   button release and does not toggle any tool state.
+- Pressing `Ctrl+P` or clicking the pin button creates a pinned-image window from
+  the current rendered selection and closes the overlay on success.
+- The pin button tooltip is `Pin to desktop (Ctrl+P)`.
 - Pressing `B` or clicking the `Brush tool` toolbar button toggles that tool on or
   off.
 - Pressing `H` or clicking the `Highlighter tool` toolbar button toggles that tool on
@@ -187,7 +194,7 @@ The annotation system applies only to the interactive overlay flow.
 - `greenflame::OverlayWindow`
   - Win32 shell
   - collects mouse/keyboard input
-  - owns capture bitmap and output save/copy plumbing
+  - owns capture bitmap and output save/copy/pin plumbing
   - owns toolbar UI objects
   - delegates behavior to `greenflame::core::OverlayController`
 
@@ -443,15 +450,19 @@ The overlay paint path draws in this order:
 7. toolbar buttons and tooltip
 8. selection wheel, when visible
 
-### Saved/copied image
+### Saved/copied/pinned image
 
 The output pipeline is:
 
 1. crop the original desktop capture to the selected region
 2. composite committed annotations whose bounds intersect that region
-3. encode or copy the composited bitmap
+3. either encode, copy, or pin the composited bitmap
 
 The overlay UI chrome itself is not included in output.
+
+Pinning reuses this same rendered output bitmap. The pinned-image window adds its
+own always-visible halo chrome around that bitmap, but the halo is not part of the
+exported pixels.
 
 ## Adding a new tool
 

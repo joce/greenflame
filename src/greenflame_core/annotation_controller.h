@@ -157,19 +157,20 @@ class AnnotationController final : public IAnnotationToolHost,
     Annotation_id_at(PointPx cursor) const noexcept;
     [[nodiscard]] bool
     Set_selected_annotation(std::optional<uint64_t> selected_annotation_id) noexcept;
-    [[nodiscard]] bool
-    Set_selected_annotations(std::span<const uint64_t> selected_annotation_ids) noexcept;
+    [[nodiscard]] bool Set_selected_annotations(
+        std::span<const uint64_t> selected_annotation_ids) noexcept;
     [[nodiscard]] bool Toggle_selected_annotation(uint64_t annotation_id) noexcept;
-    [[nodiscard]] bool
-    Add_selected_annotations(std::span<const uint64_t> selected_annotation_ids) noexcept;
+    [[nodiscard]] bool Add_selected_annotations(
+        std::span<const uint64_t> selected_annotation_ids) noexcept;
     [[nodiscard]] bool Select_topmost_annotation(PointPx cursor);
     [[nodiscard]] bool Begin_annotation_edit(AnnotationEditTarget target,
                                              PointPx cursor);
     [[nodiscard]] AnnotationSelection
     Annotation_ids_intersecting_selection_rect(RectPx selection_rect) const noexcept;
 
-    void Update_annotation_at(size_t index, Annotation annotation,
-                              std::span<const uint64_t> selected_annotation_ids) override;
+    void
+    Update_annotation_at(size_t index, Annotation annotation,
+                         std::span<const uint64_t> selected_annotation_ids) override;
     void Update_annotation_at(size_t index, Annotation annotation,
                               std::optional<uint64_t> selected_annotation_id);
     void Insert_annotation_at(size_t index, Annotation annotation,
@@ -208,8 +209,8 @@ class AnnotationController final : public IAnnotationToolHost,
     [[nodiscard]] IAnnotationTool *Active_tool_impl() noexcept;
     [[nodiscard]] IAnnotationTool const *Active_tool_impl() const noexcept;
     [[nodiscard]] std::optional<size_t> Selected_annotation_index() const noexcept;
-    [[nodiscard]] AnnotationSelection
-    Normalized_selection(std::span<const uint64_t> selected_annotation_ids) const noexcept;
+    [[nodiscard]] AnnotationSelection Normalized_selection(
+        std::span<const uint64_t> selected_annotation_ids) const noexcept;
     [[nodiscard]] std::optional<Annotation>
     Rebuild_obfuscate_annotation(std::span<const Annotation> annotations, size_t index,
                                  Annotation annotation) const;

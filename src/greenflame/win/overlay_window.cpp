@@ -43,12 +43,15 @@ constexpr int kHelpToolGlyphResourceId = 112;
 constexpr int kTextToolGlyphResourceId = 113;
 constexpr int kBubbleToolGlyphResourceId = 114;
 constexpr int kCursorToolGlyphResourceId = 115;
+constexpr int kPinToolGlyphResourceId = 116;
 constexpr UINT_PTR kBrushSizeOverlayTimerId = 1;
 constexpr UINT_PTR kCaretBlinkTimerId = 2;
 constexpr UINT_PTR kHighlighterStraightenTimerId = 3;
 constexpr UINT_PTR kSelectedAnnotationMarqueeTimerId = 4;
 constexpr UINT kSelectedAnnotationMarqueeTimerIntervalMs = 60;
 constexpr int32_t kSelectedAnnotationMarqueePhaseStepPx = 1;
+constexpr wchar_t kPinToDesktopFailedMessage[] =
+    L"Failed to pin the selection to the desktop.";
 
 constexpr int kThumbnailMaxWidth = 320;
 constexpr int kThumbnailMaxHeight = 120;
@@ -101,7 +104,7 @@ struct ToolbarGlyphResourceSpec final {
     int resource_id = 0;
 };
 
-constexpr std::array<ToolbarGlyphResourceSpec, 13> kToolbarGlyphResourceSpecs = {{
+constexpr std::array<ToolbarGlyphResourceSpec, 14> kToolbarGlyphResourceSpecs = {{
     {greenflame::OverlayToolbarGlyphId::Brush, kBrushToolGlyphResourceId},
     {greenflame::OverlayToolbarGlyphId::Highlighter, kHighlighterToolGlyphResourceId},
     {greenflame::OverlayToolbarGlyphId::Line, kLineToolGlyphResourceId},
@@ -116,6 +119,7 @@ constexpr std::array<ToolbarGlyphResourceSpec, 13> kToolbarGlyphResourceSpecs = 
     {greenflame::OverlayToolbarGlyphId::Text, kTextToolGlyphResourceId},
     {greenflame::OverlayToolbarGlyphId::Bubble, kBubbleToolGlyphResourceId},
     {greenflame::OverlayToolbarGlyphId::Cursor, kCursorToolGlyphResourceId},
+    {greenflame::OverlayToolbarGlyphId::Pin, kPinToolGlyphResourceId},
     {greenflame::OverlayToolbarGlyphId::Help, kHelpToolGlyphResourceId},
 }};
 
@@ -742,6 +746,10 @@ std::wstring OverlayWindow::Build_captured_cursor_tooltip() const {
     return tooltip;
 }
 
+std::wstring OverlayWindow::Build_pin_tooltip() const {
+    return L"Pin to desktop (Ctrl+P)";
+}
+
 bool OverlayWindow::Rebuild_display_capture() {
     if (resources_ == nullptr || !resources_->base_capture.Is_valid()) {
         return false;
@@ -1005,7 +1013,7 @@ void OverlayWindow::Rebuild_toolbar_buttons() {
     };
 
     size_t const spacer_count = views.empty() ? 1u : 2u;
-    size_t const trailing_button_count = 2u;
+    size_t const trailing_button_count = 3u;
     std::vector<ToolbarLayoutItem> layout_items;
     layout_items.reserve(views.size() + spacer_count + trailing_button_count);
     for (auto const &view : views) {
@@ -1031,6 +1039,15 @@ void OverlayWindow::Rebuild_toolbar_buttons() {
         cursor_model.active = Is_captured_cursor_visible();
         layout_items.push_back(
             ToolbarLayoutItem{ToolbarLayoutItemKind::Button, std::move(cursor_model)});
+    }
+    {
+        ToolbarButtonModel pin_model{};
+        pin_model.action = ToolbarButtonAction::PinToDesktop;
+        pin_model.glyph = OverlayToolbarGlyphId::Pin;
+        pin_model.tooltip = Build_pin_tooltip();
+        pin_model.label = L"P";
+        layout_items.push_back(
+            ToolbarLayoutItem{ToolbarLayoutItemKind::Button, std::move(pin_model)});
     }
     layout_items.push_back(ToolbarLayoutItem{ToolbarLayoutItemKind::Spacer});
     {
@@ -2126,6 +2143,9 @@ void OverlayWindow::Apply_action(core::OverlayAction action) {
     case core::OverlayAction::CopyToClipboard:
         Copy_to_clipboard_and_close();
         break;
+    case core::OverlayAction::PinToDesktop:
+        Pin_to_desktop_and_close();
+        break;
     case core::OverlayAction::None:
         break;
     }
@@ -2370,6 +2390,12 @@ LRESULT OverlayWindow::On_key_down(WPARAM wparam, LPARAM lparam) {
         return 0;
     }
     if (hotkey_help_overlay_.Is_visible()) {
+        return 0;
+    }
+    if (eff_ctrl && wparam == L'P') {
+        if (!is_repeat) {
+            Apply_action(controller_.On_pin_requested());
+        }
         return 0;
     }
     if (eff_ctrl && wparam == L'K') {
@@ -2915,6 +2941,9 @@ LRESULT OverlayWindow::On_l_button_up() {
                 } else if (btn.action == ToolbarButtonAction::ToggleCapturedCursor) {
                     Toggle_captured_cursor_visibility();
                     return 0;
+                } else if (btn.action == ToolbarButtonAction::PinToDesktop) {
+                    Apply_action(controller_.On_pin_requested());
+                    return 0;
                 } else if (btn.action == ToolbarButtonAction::ShowHelp) {
                     Show_help_overlay_at_cursor();
                 }
@@ -3116,22 +3145,6 @@ std::wstring OverlayWindow::Resolve_default_save_directory() const {
     return dir;
 }
 
-std::wstring OverlayWindow::Resolve_save_as_initial_directory() const {
-    std::wstring dir;
-    if (config_ && !config_->last_save_as_dir.empty()) {
-        dir = config_->last_save_as_dir;
-    } else if (config_ && !config_->default_save_dir.empty()) {
-        dir = config_->default_save_dir;
-    } else {
-        wchar_t pictures_dir[MAX_PATH] = {};
-        SHGetFolderPathW(nullptr, CSIDL_MYPICTURES, nullptr, 0, pictures_dir);
-        dir = pictures_dir;
-        dir += L"\\greenflame";
-    }
-    CreateDirectoryW(dir.c_str(), nullptr);
-    return dir;
-}
-
 void OverlayWindow::Build_default_save_name(std::wstring_view save_dir_for_num_scan,
                                             std::span<wchar_t> out) const {
     if (out.empty()) {
@@ -3211,13 +3224,7 @@ void OverlayWindow::Save_directly_and_close(bool copy_saved_file_to_clipboard) {
     }
 
     GdiCaptureResult cropped{};
-    if (!Build_selection_capture(cropped)) {
-        Destroy();
-        return;
-    }
-    if (!Render_annotations_into_capture(cropped, controller_.Annotations(),
-                                         selection)) {
-        cropped.Free();
+    if (!Build_rendered_selection_capture(cropped)) {
         Destroy();
         return;
     }
@@ -3227,15 +3234,9 @@ void OverlayWindow::Save_directly_and_close(bool copy_saved_file_to_clipboard) {
     wchar_t default_name[256] = {};
     Build_default_save_name(save_dir, default_name);
 
-    // Determine format from config.
-    core::ImageSaveFormat format = core::ImageSaveFormat::Png;
-    if (config_) {
-        if (config_->default_save_format == L"jpg") {
-            format = core::ImageSaveFormat::Jpeg;
-        } else if (config_->default_save_format == L"bmp") {
-            format = core::ImageSaveFormat::Bmp;
-        }
-    }
+    core::ImageSaveFormat const format =
+        config_ ? core::Image_save_format_from_config(*config_)
+                : core::ImageSaveFormat::Png;
 
     std::wstring full_path = save_dir;
     if (!full_path.empty() && full_path.back() != L'\\') {
@@ -3278,17 +3279,12 @@ void OverlayWindow::Save_as_and_close(bool copy_saved_file_to_clipboard) {
     }
 
     GdiCaptureResult cropped{};
-    if (!Build_selection_capture(cropped)) {
+    if (!Build_rendered_selection_capture(cropped)) {
         Destroy();
         return;
     }
-    if (!Render_annotations_into_capture(cropped, controller_.Annotations(),
-                                         selection)) {
-        cropped.Free();
-        return;
-    }
 
-    std::wstring const initial_dir = Resolve_save_as_initial_directory();
+    std::wstring const initial_dir = Resolve_initial_save_directory(config_);
 
     wchar_t default_name[256] = {};
     Build_default_save_name(initial_dir, default_name);
@@ -3395,6 +3391,21 @@ bool OverlayWindow::Build_selection_capture(GdiCaptureResult &out) const {
     return true;
 }
 
+bool OverlayWindow::Build_rendered_selection_capture(GdiCaptureResult &out) const {
+    out.Free();
+    if (!Build_selection_capture(out)) {
+        return false;
+    }
+
+    core::RectPx const &selection = controller_.State().final_selection;
+    if (!Render_annotations_into_capture(out, controller_.Annotations(), selection)) {
+        out.Free();
+        return false;
+    }
+
+    return true;
+}
+
 void OverlayWindow::Copy_to_clipboard_and_close() {
     if (resources_ == nullptr || !resources_->base_capture.Is_valid()) {
         return;
@@ -3405,13 +3416,7 @@ void OverlayWindow::Copy_to_clipboard_and_close() {
     }
 
     GdiCaptureResult cropped{};
-    if (!Build_selection_capture(cropped)) {
-        Destroy();
-        return;
-    }
-    if (!Render_annotations_into_capture(cropped, controller_.Annotations(),
-                                         selection)) {
-        cropped.Free();
+    if (!Build_rendered_selection_capture(cropped)) {
         Destroy();
         return;
     }
@@ -3423,6 +3428,33 @@ void OverlayWindow::Copy_to_clipboard_and_close() {
                                                   controller_.State().selection_window);
     }
     Destroy();
+}
+
+void OverlayWindow::Pin_to_desktop_and_close() {
+    if (resources_ == nullptr || !resources_->base_capture.Is_valid()) {
+        return;
+    }
+    if (controller_.State().final_selection.Is_empty()) {
+        return;
+    }
+
+    GdiCaptureResult cropped{};
+    if (!Build_rendered_selection_capture(cropped)) {
+        MessageBoxW(hwnd_, kPinToDesktopFailedMessage, L"Greenflame",
+                    MB_OK | MB_ICONWARNING);
+        return;
+    }
+
+    bool const pinned = events_ != nullptr && events_->On_selection_pinned_to_desktop(
+                                                  Selection_screen_rect(), cropped);
+    if (pinned) {
+        Destroy();
+        return;
+    }
+
+    cropped.Free();
+    MessageBoxW(hwnd_, kPinToDesktopFailedMessage, L"Greenflame",
+                MB_OK | MB_ICONWARNING);
 }
 
 // ---------------------------------------------------------------------------

@@ -4,6 +4,7 @@
 #include "greenflame_core/cli_annotation_import.h"
 #include "greenflame_core/obfuscate_risk_warning.h"
 #include "greenflame_core/output_path.h"
+#include "greenflame_core/save_image_policy.h"
 #include "greenflame_core/string_utils.h"
 #include "greenflame_core/window_filter.h"
 
@@ -33,17 +34,6 @@ Pattern_for_source(greenflame::core::AppConfig const &config,
         return config.filename_pattern_desktop;
     }
     return {};
-}
-
-[[nodiscard]] greenflame::core::ImageSaveFormat Default_image_save_format_from_config(
-    greenflame::core::AppConfig const &config) noexcept {
-    if (config.default_save_format == L"jpg" || config.default_save_format == L"jpeg") {
-        return greenflame::core::ImageSaveFormat::Jpeg;
-    }
-    if (config.default_save_format == L"bmp") {
-        return greenflame::core::ImageSaveFormat::Bmp;
-    }
-    return greenflame::core::ImageSaveFormat::Png;
 }
 
 [[nodiscard]] COLORREF
@@ -472,6 +462,7 @@ core::OverlayHelpContent AppController::Build_overlay_help_content() const {
     copy_and_save.title = L"Copy and Save";
     copy_and_save.entries = {
         {L"Ctrl + C", L"Copy selection to clipboard"},
+        {L"Ctrl + P", L"Pin selection to desktop"},
         {L"Ctrl + S", L"Save selection to default location"},
         {L"Ctrl + Alt + S", L"Save selection and copy saved file path"},
         {L"Ctrl + Shift + S", L"Save selection as..."},
@@ -706,7 +697,7 @@ CliResult AppController::Run_cli_capture_mode(core::CliOptions const &cli_option
         core::ImageSaveFormat const default_format =
             cli_options.output_format.has_value()
                 ? core::Image_save_format_from_cli_format(*cli_options.output_format)
-                : Default_image_save_format_from_config(config_);
+                : core::Image_save_format_from_config(config_);
         output_format = default_format;
 
         bool const has_explicit_output_path = !cli_options.output_path.empty();

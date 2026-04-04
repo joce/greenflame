@@ -98,9 +98,9 @@ class RecordingEditInteractionHost final : public IAnnotationEditInteractionHost
 
     void Update_annotation_at(size_t index, Annotation annotation,
                               std::span<const uint64_t> selection) override {
-        selected_annotation_id =
-            selection.size() == 1 ? std::optional<uint64_t>{selection.front()}
-                                  : std::nullopt;
+        selected_annotation_id = selection.size() == 1
+                                     ? std::optional<uint64_t>{selection.front()}
+                                     : std::nullopt;
         if (index >= annotations.size()) {
             return;
         }

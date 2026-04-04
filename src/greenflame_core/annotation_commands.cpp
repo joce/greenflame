@@ -40,9 +40,10 @@ void AddAnnotationCommand::Redo() {
     }
 }
 
-DeleteAnnotationCommand::DeleteAnnotationCommand(
-    AnnotationController *controller, size_t index, Annotation annotation,
-    AnnotationSelection selection_before, AnnotationSelection selection_after)
+DeleteAnnotationCommand::DeleteAnnotationCommand(AnnotationController *controller,
+                                                 size_t index, Annotation annotation,
+                                                 AnnotationSelection selection_before,
+                                                 AnnotationSelection selection_after)
     : controller_(controller), index_(index), annotation_(std::move(annotation)),
       selection_before_(std::move(selection_before)),
       selection_after_(std::move(selection_after)) {}
@@ -67,8 +68,7 @@ UpdateAnnotationCommand::UpdateAnnotationCommand(
       annotation_before_(std::move(annotation_before)),
       annotation_after_(std::move(annotation_after)),
       selection_before_(std::move(selection_before)),
-      selection_after_(std::move(selection_after)),
-      description_(description) {}
+      selection_after_(std::move(selection_after)), description_(description) {}
 
 void UpdateAnnotationCommand::Undo() {
     if (controller_ != nullptr) {

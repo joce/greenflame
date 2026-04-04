@@ -114,6 +114,11 @@ set(GREENFLAME_CURSOR_TOOL_GLYPH_PATH
 )
 file(TO_CMAKE_PATH "${GREENFLAME_CURSOR_TOOL_GLYPH_PATH}"
      GREENFLAME_CURSOR_TOOL_GLYPH_PATH)
+set(GREENFLAME_PIN_TOOL_GLYPH_PATH
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/pin-mask.png"
+)
+file(TO_CMAKE_PATH "${GREENFLAME_PIN_TOOL_GLYPH_PATH}"
+     GREENFLAME_PIN_TOOL_GLYPH_PATH)
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/app.manifest.in"
     "${CMAKE_CURRENT_BINARY_DIR}/app.manifest"
@@ -330,6 +335,10 @@ add_executable(greenflame WIN32
     src/greenflame/win/overlay_warning_dialog.h
     src/greenflame/win/overlay_window.cpp
     src/greenflame/win/overlay_window.h
+    src/greenflame/win/pinned_image_window.cpp
+    src/greenflame/win/pinned_image_window.h
+    src/greenflame/win/pinned_image_manager.cpp
+    src/greenflame/win/pinned_image_manager.h
     src/greenflame/win/about_dialog.cpp
     src/greenflame/win/about_dialog.h
     src/greenflame/win/startup_launch.cpp

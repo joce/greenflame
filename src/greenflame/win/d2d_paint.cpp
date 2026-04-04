@@ -1037,9 +1037,9 @@ void Draw_vertical_marquee_edge(ID2D1RenderTarget *rt, D2DOverlayResources &res,
     }
 }
 
-void Draw_selected_annotation_marquee(
-    ID2D1RenderTarget *rt, D2DOverlayResources &res,
-    std::optional<core::RectPx> selection_bounds, int32_t phase_px) {
+void Draw_selected_annotation_marquee(ID2D1RenderTarget *rt, D2DOverlayResources &res,
+                                      std::optional<core::RectPx> selection_bounds,
+                                      int32_t phase_px) {
     if (!selection_bounds.has_value()) {
         return;
     }
@@ -2208,8 +2208,7 @@ void Draw_live_layer(ID2D1RenderTarget *rt, D2DOverlayResources &res,
     Draw_selection_border(rt, res, disp_sel, /*dashed=*/input.dragging);
     if (input.annotation_selection_dragging &&
         !input.annotation_selection_live_rect.Is_empty()) {
-        Draw_selected_annotation_marquee(rt, res,
-                                         input.annotation_selection_live_rect,
+        Draw_selected_annotation_marquee(rt, res, input.annotation_selection_live_rect,
                                          input.selected_annotation_marquee_phase_px);
     }
 

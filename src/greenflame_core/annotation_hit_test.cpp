@@ -653,7 +653,8 @@ Annotation_selection_bounds(std::span<const Annotation> annotations,
             continue;
         }
         RectPx const frame_bounds = Annotation_selection_frame_bounds(annotation);
-        bounds = bounds.has_value() ? RectPx::Union(*bounds, frame_bounds) : frame_bounds;
+        bounds =
+            bounds.has_value() ? RectPx::Union(*bounds, frame_bounds) : frame_bounds;
     }
     return bounds;
 }

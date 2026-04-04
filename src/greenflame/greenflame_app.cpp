@@ -151,7 +151,8 @@ uint8_t GreenflameApp::Run() {
     }
 
     if (!OverlayWindow::Register_window_class(hinstance_) ||
-        !TrayWindow::Register_window_class(hinstance_)) {
+        !TrayWindow::Register_window_class(hinstance_) ||
+        !PinnedImageWindow::Register_window_class(hinstance_)) {
         return To_exit_code(ProcessExitCode::WindowClassRegistrationFailed);
     }
 
@@ -314,6 +315,7 @@ bool GreenflameApp::On_set_start_with_windows_enabled(bool enabled) {
 
 void GreenflameApp::On_exit_requested() {
     overlay_window_.Destroy();
+    pinned_image_manager_.Close_all();
     tray_window_.Destroy();
 }
 
@@ -329,6 +331,11 @@ void GreenflameApp::On_selection_copied_to_clipboard(core::RectPx screen_rect,
         tray_window_.Show_balloon(TrayBalloonIcon::Info, result.balloon_message.c_str(),
                                   Create_thumbnail_from_clipboard());
     }
+}
+
+bool GreenflameApp::On_selection_pinned_to_desktop(core::RectPx screen_rect,
+                                                   GdiCaptureResult &capture) {
+    return pinned_image_manager_.Add_pin(hinstance_, capture, screen_rect, &config_);
 }
 
 void GreenflameApp::On_selection_saved_to_file(core::RectPx screen_rect,

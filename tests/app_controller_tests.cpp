@@ -373,6 +373,25 @@ TEST(app_controller, on_selection_saved_builds_balloon_message_and_stores_state)
     EXPECT_TRUE(copied.success);
 }
 
+TEST(app_controller, overlay_help_content_includes_pin_shortcut) {
+    ControllerFixture fixture;
+
+    OverlayHelpContent const content = fixture.controller.Build_overlay_help_content();
+
+    ASSERT_FALSE(content.sections.empty());
+    bool found_pin_shortcut = false;
+    for (OverlayHelpSection const &section : content.sections) {
+        for (OverlayHelpEntry const &entry : section.entries) {
+            if (entry.shortcut == L"Ctrl + P" &&
+                entry.description == L"Pin selection to desktop") {
+                found_pin_shortcut = true;
+            }
+        }
+    }
+
+    EXPECT_TRUE(found_pin_shortcut);
+}
+
 TEST(app_controller, cli_capture_uses_config_cursor_setting_by_default) {
     ControllerFixture fixture;
     fixture.config.include_cursor = true;

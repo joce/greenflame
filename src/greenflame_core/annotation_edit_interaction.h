@@ -91,8 +91,7 @@ class IAnnotationEditInteraction {
                                       PointPx cursor) = 0;
     [[nodiscard]] virtual std::optional<AnnotationEditCommandData>
     Commit() noexcept = 0;
-    [[nodiscard]] virtual std::vector<AnnotationEditCommandData>
-    Commit_all() noexcept {
+    [[nodiscard]] virtual std::vector<AnnotationEditCommandData> Commit_all() noexcept {
         std::optional<AnnotationEditCommandData> const command = Commit();
         if (!command.has_value()) {
             return {};
@@ -105,8 +104,7 @@ class IAnnotationEditInteraction {
     Active_handle() const noexcept {
         return std::nullopt;
     }
-    [[nodiscard]] virtual std::vector<AnnotationEditPreview>
-    Previews() const noexcept {
+    [[nodiscard]] virtual std::vector<AnnotationEditPreview> Previews() const noexcept {
         return {};
     }
 };

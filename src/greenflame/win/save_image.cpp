@@ -2,6 +2,7 @@
 
 #include "win/save_image.h"
 
+#include "greenflame_core/app_config.h"
 #include "greenflame_core/save_image_policy.h"
 
 #pragma comment(lib, "Windowscodecs.lib")
@@ -209,6 +210,22 @@ std::vector<std::wstring> List_directory_filenames(std::wstring_view dir) {
     } while (FindNextFileW(h, &fd));
     FindClose(h);
     return result;
+}
+
+std::wstring Resolve_initial_save_directory(core::AppConfig const *config) {
+    if (config != nullptr && !config->last_save_as_dir.empty()) {
+        return config->last_save_as_dir;
+    }
+    if (config != nullptr && !config->default_save_dir.empty()) {
+        return config->default_save_dir;
+    }
+
+    wchar_t pictures_dir[MAX_PATH] = {};
+    SHGetFolderPathW(nullptr, CSIDL_MYPICTURES, nullptr, 0, pictures_dir);
+    std::wstring dir = pictures_dir;
+    dir += L"\\greenflame";
+    CreateDirectoryW(dir.c_str(), nullptr);
+    return dir;
 }
 
 } // namespace greenflame

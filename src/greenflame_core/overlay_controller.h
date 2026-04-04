@@ -30,6 +30,7 @@ enum class OverlayAction : uint8_t {
     SaveAs,                // Ctrl+Shift+S
     SaveAsAndCopyFile,     // Ctrl+Shift+Alt+S
     CopyToClipboard,       // Ctrl+C
+    PinToDesktop,          // Ctrl+P
 };
 
 struct OverlaySessionData {
@@ -101,6 +102,9 @@ class OverlayController final {
 
     // Ctrl+C; returns None if selection is empty.
     [[nodiscard]] OverlayAction On_copy_to_clipboard_requested();
+
+    // Ctrl+P; returns None if selection is empty.
+    [[nodiscard]] OverlayAction On_pin_requested();
 
     // Shift/Ctrl/Alt key-down or key-up.
     // new_mods = full resolved modifier state after the event.

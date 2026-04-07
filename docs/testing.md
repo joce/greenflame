@@ -78,6 +78,16 @@ Test must be run and must pass before any task is considered complete. This is a
 - Register them in `tests/CMakeLists.txt` as sources of `greenflame_tests`
 - Tests must only link against `greenflame_core` and the testable logic library — never against `greenflame` directly
 
+## Source coverage
+
+LLVM-based source coverage for `greenflame_core` can be generated with:
+
+```powershell
+.\scripts\coverage.ps1
+```
+
+See [docs/coverage.md](coverage.md) for prerequisites and details.
+
 ## Manual verification coverage
 
 Some Win32 overlay behaviors cannot be exercised in the unit-test binary because `greenflame_tests`

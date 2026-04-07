@@ -81,6 +81,10 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     if(GREENFLAME_ENABLE_TIME_TRACE)
         target_compile_options(greenflame_tests PRIVATE -ftime-trace)
     endif()
+    if(GREENFLAME_ENABLE_COVERAGE)
+        target_compile_options(greenflame_tests PRIVATE -fprofile-instr-generate -fcoverage-mapping)
+        target_link_options(greenflame_tests PRIVATE -fprofile-instr-generate)
+    endif()
 elseif(MSVC)
     target_compile_options(greenflame_tests PRIVATE
         /Wall

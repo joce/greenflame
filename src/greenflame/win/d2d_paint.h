@@ -7,6 +7,7 @@
 #include "greenflame_core/rect_px.h"
 #include "greenflame_core/selection_handles.h"
 #include "greenflame_core/selection_wheel.h"
+#include "greenflame_core/spell_check_service.h"
 #include "greenflame_core/text_annotation_types.h"
 
 namespace greenflame {
@@ -48,6 +49,7 @@ struct D2DPaintInput {
     std::optional<core::SizePx> selection_size_override = std::nullopt;
     std::wstring_view text_wheel_hub_font_family = {};
     std::vector<core::RectPx> draft_text_selection_rects = {};
+    std::vector<core::SpellError> draft_text_spell_errors = {};
     std::optional<core::TextAnnotationBaseStyle> text_cursor_preview_style =
         std::nullopt;
     std::array<std::wstring_view, 4> selection_wheel_font_families = {};

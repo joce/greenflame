@@ -8,6 +8,7 @@
 #include "win/overlay_button.h"
 #include "win/overlay_help_overlay.h"
 #include "win/overlay_warning_dialog.h"
+#include "win/win32_services.h"
 
 namespace greenflame {
 
@@ -31,6 +32,9 @@ class IOverlayEvents {
                                             HBITMAP thumbnail,
                                             std::wstring_view saved_path,
                                             bool file_copied_to_clipboard) = 0;
+    // Called when one or more language tags in spell_check_languages are not
+    // supported by the Windows spell checking API on this machine.
+    virtual void On_spell_check_languages_unsupported(std::wstring_view warning) = 0;
 };
 
 class OverlayWindow final {
@@ -50,7 +54,14 @@ class OverlayWindow final {
 
     [[nodiscard]] bool Is_open() const;
 
+    // Call after the app config has been reloaded from disk. If the overlay is
+    // open, the spell check service is rebuilt immediately; otherwise it will
+    // be rebuilt on the next Open(). Fires On_spell_check_languages_unsupported
+    // if any requested language is unavailable on this machine.
+    void On_config_updated();
+
   private:
+    void Rebuild_spell_check_service();
     enum class ToolbarButtonAction : uint8_t {
         SelectAnnotationTool,
         ToggleCapturedCursor,
@@ -239,6 +250,7 @@ class OverlayWindow final {
     std::unique_ptr<ObfuscateSourceProvider> obfuscate_source_provider_;
     std::unique_ptr<D2DOverlayResources> d2d_resources_;
     std::unique_ptr<D2DTextLayoutEngine> text_layout_engine_;
+    std::unique_ptr<Win32SpellCheckService> spell_check_service_;
     std::optional<core::SelectionHandle> last_hover_handle_;
     OverlayHelpOverlay hotkey_help_overlay_ = {};
     OverlayWarningDialog obfuscate_warning_dialog_ = {};

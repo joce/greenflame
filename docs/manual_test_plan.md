@@ -1091,6 +1091,58 @@ unless a real end-to-end bug escapes into the Win32 shell:
   - Double-clicking a text annotation that is part of a multi-selection does not enter text editing mode.
   - Double-clicking a non-text annotation (line, arrow, rectangle, etc.) does not enter text editing mode.
 
+### GF-MAN-ANN-022 - Spell-Check Squiggles During Text Editing
+
+- Priority: `P1`
+- Run on: `ENV-A`
+
+#### Basic spell-check (single language)
+
+- Prerequisite: Set `"spell_check_languages": ["en-US"]` under `tools.text` in the config file. No restart required; the change is picked up automatically within ~400 ms.
+- Steps:
+  1. Activate the Text tool and click to start a new annotation.
+  2. Type a deliberately misspelled word such as `helo wrold`.
+  3. Observe the draft annotation while still in editing mode.
+  4. Click outside the annotation to commit it.
+  5. Inspect the saved or copied output.
+  6. Re-open the config, set `"spell_check_languages": []` (empty array), and save.
+  7. Repeat steps 1–3.
+- Expected:
+  - While editing (step 3): red squiggly underlines appear under each misspelled word.
+  - After committing (step 4): squiggles are no longer visible on the overlay.
+  - In saved/copied output (step 5): no squiggles appear in the image.
+  - With no language configured (step 7): no squiggles appear at all.
+
+#### Multi-language intersection
+
+- Prerequisite: Set `"spell_check_languages": ["en-US", "fr-CA"]`.
+- Steps:
+  1. Activate the Text tool and type a sentence mixing English and French words, e.g. `helo bonjour wrold monde`.
+  2. Observe squiggles while still in editing mode.
+- Expected:
+  - Words that are valid in **either** language (e.g. `bonjour`, `monde`) show no squiggle.
+  - Words that are wrong in **all** configured languages (e.g. `helo`, `wrold`) show red squiggles.
+
+#### Hot-reload of languages while app is running
+
+- Steps:
+  1. Set `"spell_check_languages": ["en-US"]`, save. Confirm squiggles appear for misspelled English words.
+  2. While the app is running, change the config to `"spell_check_languages": ["fr-CA"]` and save.
+  3. Wait ~400 ms (no restart), then open a text annotation.
+  4. Type a word that is misspelled in French but valid in English (or vice versa).
+- Expected: The active language changes without restarting. Squiggle behavior reflects the new language immediately.
+
+#### Invalid language warning
+
+- Steps:
+  1. Set `"spell_check_languages": ["xx-XX"]` (unsupported tag) and save while the app is running.
+  2. Observe the tray icon area.
+  3. Also test at startup: set the same config and launch the app fresh.
+- Expected:
+  - A tray balloon warning appears identifying the unsupported language tag (e.g. `'xx-XX'`).
+  - No crash occurs; spell checking silently does nothing for the unsupported language.
+  - The warning also appears shortly after launch when an unsupported language is already in the config.
+
 ### GF-MAN-ANN-016 - Selection Wheel Keyboard Navigation (Up/Down arrows)
 
 - Priority: `P1`

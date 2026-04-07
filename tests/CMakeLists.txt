@@ -39,6 +39,7 @@ add_executable(greenflame_tests
     annotation_controller_tests.cpp
     text_annotation_redit_tests.cpp
     text_draft_buffer_tests.cpp
+    spell_check_tests.cpp
     text_html_tests.cpp
     text_rtf_tests.cpp
     selection_wheel_tests.cpp

@@ -168,6 +168,7 @@ class OverlayController final {
     [[nodiscard]] std::optional<AnnotationToolId>
     Active_annotation_tool() const noexcept;
     void Set_text_layout_engine(ITextLayoutEngine *engine) noexcept;
+    void Set_spell_check_service(ISpellCheckService *service) noexcept;
     [[nodiscard]] bool Has_active_text_edit() const noexcept;
     [[nodiscard]] TextEditController *Active_text_edit() noexcept;
     [[nodiscard]] int32_t Text_point_size() const noexcept;

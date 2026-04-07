@@ -1,6 +1,7 @@
 #pragma once
 
 #include "greenflame_core/app_services.h"
+#include "greenflame_core/spell_check_service.h"
 #include "win/window_query.h"
 
 namespace greenflame {
@@ -76,6 +77,24 @@ class Win32FileSystemService final : public IFileSystemService {
                             std::wstring &error_message) const override;
     void Delete_file_if_exists(std::wstring_view path) const override;
     [[nodiscard]] core::SaveTimestamp Get_current_timestamp() const override;
+};
+
+class Win32SpellCheckService final : public core::ISpellCheckService {
+  public:
+    explicit Win32SpellCheckService(std::span<const std::wstring> language_tags);
+    ~Win32SpellCheckService() override;
+    [[nodiscard]] std::vector<core::SpellError>
+    Check(std::wstring_view text) const override;
+    // Language tags that were requested but are not supported on this machine.
+    [[nodiscard]] std::vector<std::wstring> const &
+    Unsupported_languages() const noexcept {
+        return unsupported_languages_;
+    }
+
+  private:
+    bool co_init_owned_ = false;
+    std::vector<Microsoft::WRL::ComPtr<ISpellChecker>> spell_checkers_;
+    std::vector<std::wstring> unsupported_languages_;
 };
 
 } // namespace greenflame

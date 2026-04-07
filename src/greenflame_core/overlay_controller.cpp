@@ -301,6 +301,10 @@ void OverlayController::Set_text_layout_engine(ITextLayoutEngine *engine) noexce
     annotation_controller_.Set_text_layout_engine(engine);
 }
 
+void OverlayController::Set_spell_check_service(ISpellCheckService *service) noexcept {
+    annotation_controller_.Set_spell_check_service(service);
+}
+
 void OverlayController::Set_obfuscate_source_provider(
     IObfuscateSourceProvider *provider) noexcept {
     annotation_controller_.Set_obfuscate_source_provider(provider);

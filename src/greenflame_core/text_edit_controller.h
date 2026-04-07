@@ -1,5 +1,6 @@
 #pragma once
 
+#include "greenflame_core/spell_check_service.h"
 #include "greenflame_core/text_layout_engine.h"
 
 namespace greenflame::core {
@@ -32,6 +33,7 @@ struct TextDraftView final {
     std::vector<RectPx> selection_rects = {};
     RectPx caret_rect = {};
     RectPx overwrite_caret_rect = {};
+    std::vector<SpellError> spell_errors = {};
     bool insert_mode = true;
 
     [[nodiscard]] RectPx Hit_bounds() const noexcept {
@@ -49,11 +51,13 @@ struct TextDraftView final {
 class TextEditController final {
   public:
     TextEditController(PointPx origin, TextAnnotationBaseStyle const &base_style,
-                       ITextLayoutEngine *layout_engine);
+                       ITextLayoutEngine *layout_engine,
+                       ISpellCheckService *spell_check_service = nullptr);
     // Re-edit constructor: pre-populates the buffer with existing runs.
     TextEditController(PointPx origin, TextAnnotationBaseStyle const &base_style,
                        std::vector<TextRun> initial_runs,
-                       ITextLayoutEngine *layout_engine);
+                       ITextLayoutEngine *layout_engine,
+                       ISpellCheckService *spell_check_service = nullptr);
     TextEditController(TextEditController const &) = delete;
     TextEditController &operator=(TextEditController const &) = delete;
     TextEditController(TextEditController &&) = default;
@@ -101,8 +105,10 @@ class TextEditController final {
     std::vector<TextDraftSnapshot> history_ = {};
     size_t history_index_ = 0;
     ITextLayoutEngine *layout_engine_ = nullptr;
+    ISpellCheckService *spell_check_service_ = nullptr;
     DraftTextLayoutResult layout_ = {};
     TextAnnotation draft_annotation_ = {};
+    std::vector<SpellError> spell_errors_ = {};
     bool pointer_selecting_ = false;
 };
 

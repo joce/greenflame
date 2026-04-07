@@ -426,6 +426,11 @@ void AnnotationController::Set_text_layout_engine(ITextLayoutEngine *engine) noe
     text_layout_engine_ = engine;
 }
 
+void AnnotationController::Set_spell_check_service(
+    ISpellCheckService *service) noexcept {
+    spell_check_service_ = service;
+}
+
 void AnnotationController::Set_obfuscate_source_provider(
     IObfuscateSourceProvider *provider) noexcept {
     obfuscate_source_provider_ = provider;
@@ -465,7 +470,8 @@ void AnnotationController::Begin_text_draft(PointPx origin) {
         text_layout_engine_ ? text_layout_engine_->Line_ascent(base_style) : 0;
     PointPx const adjusted_origin{origin.x + x_offset_px,
                                   origin.y - ascent + y_offset_px};
-    text_edit_ctrl_.emplace(adjusted_origin, base_style, text_layout_engine_);
+    text_edit_ctrl_.emplace(adjusted_origin, base_style, text_layout_engine_,
+                            spell_check_service_);
 }
 
 void AnnotationController::Commit_text_annotation(UndoStack &undo_stack,
@@ -511,7 +517,7 @@ bool AnnotationController::Begin_text_edit_on_annotation(uint64_t annotation_id,
 
     editing_annotation_id_ = annotation_id;
     text_edit_ctrl_.emplace(text_ann->origin, text_ann->base_style, text_ann->runs,
-                            text_layout_engine_);
+                            text_layout_engine_, spell_check_service_);
     text_edit_ctrl_->On_pointer_press(cursor);
     return true;
 }

@@ -52,6 +52,8 @@ struct AppConfig final {
     int32_t highlighter_pause_straighten_ms = kDefaultHighlighterPauseStraightenMs;
     int32_t highlighter_pause_straighten_deadzone_px = 0;
     TextFontChoice text_current_font = TextFontChoice::Sans;
+    std::vector<std::wstring> spell_check_languages =
+        {}; // BCP-47 tags; empty = disabled
     TextFontChoice bubble_current_font = TextFontChoice::Sans;
     std::wstring text_font_sans = L"Arial";
     std::wstring text_font_serif = L"Times New Roman";

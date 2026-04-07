@@ -16,6 +16,7 @@
 #include <dxgi1_2.h>
 #include <gdiplus.h>
 #include <shellapi.h>
+#include <spellcheck.h>
 #include <wincodec.h>
 #include <windows.graphics.directx.direct3d11.interop.h>
 #include <winrt/Windows.Foundation.h>

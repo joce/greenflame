@@ -448,3 +448,80 @@ TEST(app_config_json, ParseWithDiagnostics_SchemaErrorLoadsOtherValidValues) {
     EXPECT_EQ(result.config.brush_size, AppConfig::kDefaultBrushSize);
     EXPECT_EQ(result.config.default_save_format, L"png");
 }
+
+TEST(app_config_json, Parse_SpellCheckLanguages_SingleLanguage) {
+    std::optional<AppConfig> const config = Parse_app_config_json(
+        R"json({"tools":{"text":{"spell_check_languages":["en-US"]}}})json");
+
+    ASSERT_TRUE(config.has_value());
+    ASSERT_EQ(config->spell_check_languages.size(), 1u);
+    EXPECT_EQ(config->spell_check_languages[0], L"en-US");
+}
+
+TEST(app_config_json, Parse_SpellCheckLanguages_MultipleLanguages) {
+    std::optional<AppConfig> const config = Parse_app_config_json(
+        R"json({"tools":{"text":{"spell_check_languages":["en-US","fr-CA"]}}})json");
+
+    ASSERT_TRUE(config.has_value());
+    ASSERT_EQ(config->spell_check_languages.size(), 2u);
+    EXPECT_EQ(config->spell_check_languages[0], L"en-US");
+    EXPECT_EQ(config->spell_check_languages[1], L"fr-CA");
+}
+
+TEST(app_config_json, Parse_SpellCheckLanguages_EmptyArray_YieldsEmptyVector) {
+    std::optional<AppConfig> const config = Parse_app_config_json(
+        R"json({"tools":{"text":{"spell_check_languages":[]}}})json");
+
+    ASSERT_TRUE(config.has_value());
+    EXPECT_TRUE(config->spell_check_languages.empty());
+}
+
+TEST(app_config_json, Parse_SpellCheckLanguages_NonArray_ReportsSchemaError) {
+    AppConfigParseResult const result = Parse_app_config_json_with_diagnostics(
+        R"json({"tools":{"text":{"spell_check_languages":"en-US"}}})json");
+
+    EXPECT_TRUE(result.Has_error());
+    ASSERT_TRUE(result.diagnostic.has_value());
+    EXPECT_THAT(result.diagnostic->message,
+                testing::HasSubstr(L"spell_check_languages"));
+}
+
+TEST(app_config_json, Parse_SpellCheckLanguages_NonStringElement_ReportsSchemaError) {
+    AppConfigParseResult const result = Parse_app_config_json_with_diagnostics(
+        R"json({"tools":{"text":{"spell_check_languages":[42]}}})json");
+
+    EXPECT_TRUE(result.Has_error());
+    ASSERT_TRUE(result.diagnostic.has_value());
+    EXPECT_THAT(result.diagnostic->message,
+                testing::HasSubstr(L"spell_check_languages"));
+}
+
+TEST(app_config_json, Parse_SpellCheckLanguages_TooManyEntries_ReportsSchemaError) {
+    // 9 entries exceeds the max of 8.
+    AppConfigParseResult const result = Parse_app_config_json_with_diagnostics(
+        R"json({"tools":{"text":{"spell_check_languages":["a","b","c","d","e","f","g","h","i"]}}})json");
+
+    EXPECT_TRUE(result.Has_error());
+    ASSERT_TRUE(result.diagnostic.has_value());
+    EXPECT_THAT(result.diagnostic->message,
+                testing::HasSubstr(L"spell_check_languages"));
+}
+
+TEST(app_config_json, Serialize_SpellCheckLanguages_RoundTrip) {
+    AppConfig config;
+    config.spell_check_languages = {L"en-US", L"fr-CA"};
+    std::string const json = Serialize_app_config_json(config);
+    std::optional<AppConfig> const parsed = Parse_app_config_json(json);
+
+    ASSERT_TRUE(parsed.has_value());
+    ASSERT_EQ(parsed->spell_check_languages.size(), 2u);
+    EXPECT_EQ(parsed->spell_check_languages[0], L"en-US");
+    EXPECT_EQ(parsed->spell_check_languages[1], L"fr-CA");
+}
+
+TEST(app_config_json, Serialize_SpellCheckLanguages_EmptyVector_NotWritten) {
+    AppConfig config;
+    // Default: empty — key must not appear in output.
+    std::string const json = Serialize_app_config_json(config);
+    EXPECT_EQ(json.find("spell_check_languages"), std::string::npos);
+}

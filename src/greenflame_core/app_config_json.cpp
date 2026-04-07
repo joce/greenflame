@@ -46,7 +46,9 @@ constexpr std::array<std::string_view, 1> kSizeOnlyKeys = {{"size"}};
 constexpr std::array<std::string_view, 7> kHighlighterKeys = {
     {"size", "colors", "current_color", "opacity_percent", "pause_straighten_ms",
      "pause_straighten_deadzone_px", "smoothing_mode"}};
-constexpr std::array<std::string_view, 2> kTextToolKeys = {{"size", "current_font"}};
+constexpr std::array<std::string_view, 3> kTextAnnotationToolKeys = {
+    {"size", "current_font", "spell_check_languages"}};
+constexpr std::array<std::string_view, 2> kBubbleToolKeys = {{"size", "current_font"}};
 constexpr std::array<std::string_view, 8> kSaveKeys = {
     {"default_save_dir", "last_save_as_dir", "default_save_format", "padding_color",
      "filename_pattern_region", "filename_pattern_desktop", "filename_pattern_monitor",
@@ -911,17 +913,62 @@ void Apply_highlighter_object(Json const &object, ParseContext &ctx) {
 }
 
 void Apply_text_tool_object(Json const &object, std::wstring_view path,
+                            std::span<const std::string_view> allowed_keys,
                             int32_t &size_target, TextFontChoice &font_target,
+                            std::vector<std::wstring> *spell_check_languages,
                             ParseContext &ctx) {
+    constexpr size_t max_spell_check_language_chars = 64;
+    constexpr size_t max_spell_check_language_count = 8;
+
     if (object.JSON_type() != JsonClass::Object) {
         ctx.Report_schema_error(path, L"Must be an object.");
         return;
     }
 
-    Report_unknown_keys(object, kTextToolKeys, path, ctx);
+    Report_unknown_keys(object, allowed_keys, path, ctx);
     Apply_integer_property(object, "size", path, kMinToolSize, kMaxToolSize,
                            size_target, ctx);
     Apply_font_choice_property(object, "current_font", path, font_target, ctx);
+    if (spell_check_languages != nullptr && object.has_key("spell_check_languages")) {
+        std::wstring_view const langs_path = L"tools.text.spell_check_languages";
+        Json const &arr = object["spell_check_languages"];
+        if (arr.JSON_type() != JsonClass::Array) {
+            ctx.Report_schema_error(langs_path,
+                                    L"Must be an array of BCP-47 language strings.");
+        } else if (arr.size() > max_spell_check_language_count) {
+            ctx.Report_schema_error(langs_path, L"Too many languages (max 8).");
+        } else {
+            std::vector<std::wstring> langs;
+            bool ok = true;
+            for (Json const &element : arr.array_range()) {
+                if (element.JSON_type() != JsonClass::String) {
+                    ctx.Report_schema_error(langs_path,
+                                            L"Each entry must be a string.");
+                    ok = false;
+                    break;
+                }
+                std::string const utf8_tag = Get_json_string(element);
+                if (utf8_tag.empty() ||
+                    utf8_tag.size() > max_spell_check_language_chars) {
+                    ctx.Report_schema_error(
+                        langs_path, L"Each language tag must be 1–64 characters.");
+                    ok = false;
+                    break;
+                }
+                std::wstring decoded;
+                if (!Try_decode_utf8(utf8_tag, decoded) || decoded.empty()) {
+                    ctx.Report_schema_error(langs_path,
+                                            L"Each entry must be valid UTF-8.");
+                    ok = false;
+                    break;
+                }
+                langs.push_back(std::move(decoded));
+            }
+            if (ok) {
+                *spell_check_languages = std::move(langs);
+            }
+        }
+    }
 }
 
 void Apply_tools_object(Json const &object, ParseContext &ctx) {
@@ -969,14 +1016,15 @@ void Apply_tools_object(Json const &object, ParseContext &ctx) {
         Apply_highlighter_object(object["highlighter"], ctx);
     }
     if (object.has_key("text")) {
-        Apply_text_tool_object(object["text"], L"tools.text",
+        Apply_text_tool_object(object["text"], L"tools.text", kTextAnnotationToolKeys,
                                ctx.result.config.text_size,
-                               ctx.result.config.text_current_font, ctx);
+                               ctx.result.config.text_current_font,
+                               &ctx.result.config.spell_check_languages, ctx);
     }
     if (object.has_key("bubble")) {
-        Apply_text_tool_object(object["bubble"], L"tools.bubble",
+        Apply_text_tool_object(object["bubble"], L"tools.bubble", kBubbleToolKeys,
                                ctx.result.config.bubble_size,
-                               ctx.result.config.bubble_current_font, ctx);
+                               ctx.result.config.bubble_current_font, nullptr, ctx);
     }
     if (object.has_key("obfuscate")) {
         Apply_obfuscate_object(object["obfuscate"], ctx);
@@ -1163,7 +1211,8 @@ std::string Serialize_app_config_json(AppConfig const &config) {
         config.text_font_sans != defaults.text_font_sans ||
         config.text_font_serif != defaults.text_font_serif ||
         config.text_font_mono != defaults.text_font_mono ||
-        config.text_font_art != defaults.text_font_art;
+        config.text_font_art != defaults.text_font_art ||
+        !config.spell_check_languages.empty();
 
     if (wrote_tools) {
         root["tools"] = easyjson::object();
@@ -1267,7 +1316,8 @@ std::string Serialize_app_config_json(AppConfig const &config) {
             }
         }
         if (config.text_size != defaults.text_size ||
-            config.text_current_font != defaults.text_current_font) {
+            config.text_current_font != defaults.text_current_font ||
+            !config.spell_check_languages.empty()) {
             root["tools"]["text"] = easyjson::object();
             if (config.text_size != defaults.text_size) {
                 root["tools"]["text"]["size"] = config.text_size;
@@ -1275,6 +1325,13 @@ std::string Serialize_app_config_json(AppConfig const &config) {
             if (config.text_current_font != defaults.text_current_font) {
                 root["tools"]["text"]["current_font"] =
                     std::string(Text_font_choice_token(config.text_current_font));
+            }
+            if (!config.spell_check_languages.empty()) {
+                Json langs = easyjson::array();
+                for (std::wstring const &tag : config.spell_check_languages) {
+                    langs.append(To_utf8(tag));
+                }
+                root["tools"]["text"]["spell_check_languages"] = std::move(langs);
             }
         }
         if (config.bubble_size != defaults.bubble_size ||

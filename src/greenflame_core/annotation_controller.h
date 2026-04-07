@@ -108,6 +108,7 @@ class AnnotationController final : public IAnnotationToolHost,
     [[nodiscard]] bool Has_active_edit_interaction() const noexcept;
     [[nodiscard]] bool Has_active_gesture() const noexcept;
     void Set_text_layout_engine(ITextLayoutEngine *engine) noexcept;
+    void Set_spell_check_service(ISpellCheckService *service) noexcept;
     void Set_obfuscate_source_provider(IObfuscateSourceProvider *provider) noexcept;
     [[nodiscard]] bool Has_active_text_edit() const noexcept;
     [[nodiscard]] TextEditController *Active_text_edit() noexcept;
@@ -243,6 +244,7 @@ class AnnotationController final : public IAnnotationToolHost,
     int32_t obfuscate_block_size_ = kObfuscateDefaultBlockSize;
     std::unique_ptr<IAnnotationEditInteraction> active_edit_interaction_ = {};
     ITextLayoutEngine *text_layout_engine_ = nullptr;
+    ISpellCheckService *spell_check_service_ = nullptr;
     IObfuscateSourceProvider *obfuscate_source_provider_ = nullptr;
     std::optional<TextEditController> text_edit_ctrl_ = std::nullopt;
     std::optional<uint64_t> editing_annotation_id_ = std::nullopt;

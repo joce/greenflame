@@ -1462,10 +1462,12 @@ bool OverlayWindow::Create_and_show(HINSTANCE hinstance) {
                 d2d_resources_->factory.Get(), d2d_resources_->dwrite_factory.Get());
             text_layout_engine_->Set_font_families(Resolve_text_font_families(config_));
         }
+        Rebuild_spell_check_service();
     }
 
     controller_.Reset_for_session(Get_monitors_with_bounds());
     controller_.Set_text_layout_engine(text_layout_engine_.get());
+    controller_.Set_spell_check_service(spell_check_service_.get());
     controller_.Set_obfuscate_source_provider(obfuscate_source_provider_.get());
     controller_.Refresh_snap_edges(Collect_visible_snap_edges(), bounds.left,
                                    bounds.top);
@@ -1533,6 +1535,45 @@ void OverlayWindow::Destroy() {
 }
 
 bool OverlayWindow::Is_open() const { return hwnd_ != nullptr && IsWindow(hwnd_) != 0; }
+
+void OverlayWindow::Rebuild_spell_check_service() {
+    if (config_ == nullptr || config_->spell_check_languages.empty()) {
+        spell_check_service_.reset();
+        controller_.Set_spell_check_service(nullptr);
+        return;
+    }
+    spell_check_service_ =
+        std::make_unique<Win32SpellCheckService>(config_->spell_check_languages);
+    controller_.Set_spell_check_service(spell_check_service_.get());
+}
+
+void OverlayWindow::On_config_updated() {
+    // Always rebuild so we can validate language support and warn immediately,
+    // regardless of whether the overlay is currently open.
+    Rebuild_spell_check_service();
+
+    if (spell_check_service_ != nullptr && events_ != nullptr) {
+        std::vector<std::wstring> const &unsupported =
+            spell_check_service_->Unsupported_languages();
+        if (!unsupported.empty()) {
+            std::wstring msg = L"Unsupported spell check language(s): ";
+            for (size_t i = 0; i < unsupported.size(); ++i) {
+                if (i > 0) {
+                    msg += L", ";
+                }
+                msg += L'\'' + unsupported[i] + L'\'';
+            }
+            msg += L'.';
+            events_->On_spell_check_languages_unsupported(msg);
+        }
+    }
+
+    if (!Is_open()) {
+        // Overlay is closed; discard the service — it will be rebuilt on next Open().
+        spell_check_service_.reset();
+        controller_.Set_spell_check_service(nullptr);
+    }
+}
 
 core::SnapEdges OverlayWindow::Collect_visible_snap_edges() const {
     core::SnapEdges snap_edges;
@@ -3987,6 +4028,7 @@ LRESULT OverlayWindow::On_paint() {
             input.draft_text_annotation = draft_text_view->annotation;
             input.draft_text_selection_rects =
                 std::move(draft_text_view->selection_rects);
+            input.draft_text_spell_errors = std::move(draft_text_view->spell_errors);
             input.draft_text_caret_rect = draft_text_view->insert_mode
                                               ? draft_text_view->caret_rect
                                               : draft_text_view->overwrite_caret_rect;
@@ -4136,6 +4178,7 @@ void OverlayWindow::Handle_device_loss() {
         !d2d_resources_->Create_shared_resources() ||
         !d2d_resources_->Create_cache_targets(w, h)) {
         controller_.Set_text_layout_engine(nullptr);
+        controller_.Set_spell_check_service(nullptr);
         text_layout_engine_.reset();
         d2d_resources_.reset();
         InvalidateRect(hwnd_, nullptr, TRUE);
@@ -4161,6 +4204,7 @@ void OverlayWindow::Handle_device_loss() {
         text_layout_engine_->Set_font_families(Resolve_text_font_families(config_));
     }
     controller_.Set_text_layout_engine(text_layout_engine_.get());
+    controller_.Set_spell_check_service(spell_check_service_.get());
     d2d_resources_->Invalidate_annotations();
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
@@ -4178,8 +4222,10 @@ LRESULT OverlayWindow::On_destroy() {
     selection_wheel_ = {};
     toolbar_buttons_.clear();
     controller_.Set_text_layout_engine(nullptr);
+    controller_.Set_spell_check_service(nullptr);
     controller_.Set_obfuscate_source_provider(nullptr);
     text_layout_engine_.reset();
+    spell_check_service_.reset();
     if (d2d_resources_) {
         d2d_resources_->Release_all();
         d2d_resources_.reset();

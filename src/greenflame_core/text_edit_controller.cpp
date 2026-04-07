@@ -166,8 +166,10 @@ void Set_style_flag(TextStyleFlags &flags, TextStyleToggle which, bool value) no
 
 TextEditController::TextEditController(PointPx origin,
                                        TextAnnotationBaseStyle const &base_style,
-                                       ITextLayoutEngine *layout_engine)
-    : origin_(origin), layout_engine_(layout_engine) {
+                                       ITextLayoutEngine *layout_engine,
+                                       ISpellCheckService *spell_check_service)
+    : origin_(origin), layout_engine_(layout_engine),
+      spell_check_service_(spell_check_service) {
     buffer_.base_style = base_style;
     draft_annotation_.origin = origin_;
     draft_annotation_.base_style = base_style;
@@ -179,8 +181,10 @@ TextEditController::TextEditController(PointPx origin,
 TextEditController::TextEditController(PointPx origin,
                                        TextAnnotationBaseStyle const &base_style,
                                        std::vector<TextRun> initial_runs,
-                                       ITextLayoutEngine *layout_engine)
-    : origin_(origin), layout_engine_(layout_engine) {
+                                       ITextLayoutEngine *layout_engine,
+                                       ISpellCheckService *spell_check_service)
+    : origin_(origin), layout_engine_(layout_engine),
+      spell_check_service_(spell_check_service) {
     buffer_.base_style = base_style;
     buffer_.runs = std::move(initial_runs);
     draft_annotation_.origin = origin_;
@@ -193,7 +197,8 @@ TextEditController::TextEditController(PointPx origin,
 TextDraftView TextEditController::Build_view() const {
     return TextDraftView{&draft_annotation_,           layout_.visual_bounds,
                          layout_.selection_rects,      layout_.caret_rect,
-                         layout_.overwrite_caret_rect, !buffer_.overwrite_mode};
+                         layout_.overwrite_caret_rect, spell_errors_,
+                         !buffer_.overwrite_mode};
 }
 
 void TextEditController::On_text_input(std::wstring_view text) {
@@ -562,6 +567,12 @@ void TextEditController::Rebuild_layout() {
         layout_ = {};
     }
     draft_annotation_.visual_bounds = layout_.visual_bounds;
+
+    if (spell_check_service_ != nullptr) {
+        spell_errors_ = spell_check_service_->Check(Flatten_text(buffer_.runs));
+    } else {
+        spell_errors_.clear();
+    }
 }
 
 void TextEditController::Refresh_preferred_x_from_layout() noexcept {

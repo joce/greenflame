@@ -130,6 +130,8 @@ Clicking outside a draft commits it if it has text, otherwise discards it. Click
 
 Committed text annotations can be selected, moved, and deleted, but are not re-editable as live text.
 
+Live **spell-check squiggles** appear under misspelled words while editing a draft. Configure one or more BCP-47 language tags in `tools.text.spell_check_languages` (e.g. `["en-US", "fr-CA"]`). Squiggles are visible only during editing and never appear in saved images. When multiple languages are configured, a word is only flagged if all languages agree it is misspelled.
+
 ### Saving, copying, and pinning
 
 |Shortcut|Action|
@@ -390,6 +392,7 @@ Greenflame reads `\~/.config/greenflame/greenflame.json` (i.e. `%USERPROFILE%\\.
 |`tools.highlighter.pause\_straighten\_deadzone\_px`|`0`|Mouse must move more than this many physical pixels from the last timer-reset position before the pause timer resets. `0` means any movement resets the timer.|
 |`tools.text.size`|`10`|Text tool size step (1–50).|
 |`tools.text.current\_font`|`sans`|Active font slot for the Text tool. Accepted values: `sans`, `serif`, `mono`, `art`.|
+|`tools.text.spell\_check\_languages`|`[]`|List of BCP-47 language tags (e.g. `["en-US"]` or `["en-US", "fr-CA"]`) for live spell-check squiggles during text editing. Empty list disables spell checking. A word is only underlined if **all** listed checkers agree it is misspelled, so mixing languages avoids false positives. Unsupported tags trigger a tray warning and are silently skipped. Changes take effect without restarting the app.|
 |`tools.bubble.size`|`10`|Bubble size step (1–50).|
 |`tools.bubble.current\_font`|`sans`|Active font slot for the Bubble tool. Accepted values: `sans`, `serif`, `mono`, `art`.|
 |`tools.obfuscate.block\_size`|`10`|Obfuscate tool block size (1–50). `1` uses blur mode; `2..50` uses block pixelation.|

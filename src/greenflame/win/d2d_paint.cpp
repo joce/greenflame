@@ -36,6 +36,11 @@ constexpr D2D1_COLOR_F kSelectionWheelHubHoverFill = Make_d2d_color(206, 231, 19
 constexpr D2D1_COLOR_F kSelectedAnnotationMarqueeBlack = Make_d2d_color(0, 0, 0);
 constexpr D2D1_COLOR_F kSelectedAnnotationMarqueeGray = Make_d2d_color(187, 187, 187);
 constexpr D2D1_COLOR_F kSelectedAnnotationMarqueeWhite = Make_d2d_color(255, 255, 255);
+constexpr D2D1_COLOR_F kSpellSquiggleColor = Make_d2d_color(255, 0, 0);
+constexpr float kSpellSquiggleAmplitudePx = 2.0f;
+constexpr float kSpellSquiggleHalfPeriodPx = 2.0f;
+constexpr float kSpellSquiggleStrokeWidthPx = 1.0f;
+constexpr UINT32 kSpellSquiggleHitTestInitialCapacity = 8u;
 
 void Draw_clipped_screenshot_rect(ID2D1RenderTarget *rt, ID2D1Bitmap *screenshot,
                                   core::RectPx restore_rect, int vd_width,
@@ -437,6 +442,54 @@ void Draw_draft_text(ID2D1RenderTarget *rt, D2DOverlayResources &res,
                                 format, layout, layout_data)) {
         res.solid_brush->SetColor(Colorref_to_d2d(annotation->base_style.color));
         rt->DrawTextLayout(Pt(annotation->origin), layout.Get(), res.solid_brush.Get());
+
+        if (!input.draft_text_spell_errors.empty()) {
+            float const origin_x = static_cast<float>(annotation->origin.x);
+            float const origin_y = static_cast<float>(annotation->origin.y);
+            std::vector<DWRITE_HIT_TEST_METRICS> metrics(
+                kSpellSquiggleHitTestInitialCapacity);
+            res.solid_brush->SetColor(kSpellSquiggleColor);
+            for (core::SpellError const &error : input.draft_text_spell_errors) {
+                if (error.length_utf16 <= 0) {
+                    continue;
+                }
+                auto const err_start = static_cast<UINT32>(error.start_utf16);
+                auto const err_length = static_cast<UINT32>(error.length_utf16);
+                UINT32 actual_count = 0;
+                HRESULT hr = layout->HitTestTextRange(
+                    err_start, err_length, origin_x, origin_y, metrics.data(),
+                    static_cast<UINT32>(metrics.size()), &actual_count);
+                if (hr == E_NOT_SUFFICIENT_BUFFER) {
+                    metrics.resize(actual_count);
+                    hr = layout->HitTestTextRange(
+                        err_start, err_length, origin_x, origin_y, metrics.data(),
+                        static_cast<UINT32>(metrics.size()), &actual_count);
+                }
+                if (FAILED(hr)) {
+                    continue;
+                }
+                for (UINT32 i = 0; i < actual_count; ++i) {
+                    DWRITE_HIT_TEST_METRICS const &m = metrics[i];
+                    float const y_base = m.top + m.height;
+                    float const x_end = m.left + m.width;
+                    float x = m.left;
+                    bool going_up = true;
+                    while (x < x_end) {
+                        float const x_next =
+                            std::min(x + kSpellSquiggleHalfPeriodPx, x_end);
+                        float const y_from =
+                            going_up ? y_base : y_base - kSpellSquiggleAmplitudePx;
+                        float const y_to =
+                            going_up ? y_base - kSpellSquiggleAmplitudePx : y_base;
+                        rt->DrawLine(D2D1::Point2F(x, y_from),
+                                     D2D1::Point2F(x_next, y_to), res.solid_brush.Get(),
+                                     kSpellSquiggleStrokeWidthPx);
+                        x = x_next;
+                        going_up = !going_up;
+                    }
+                }
+            }
+        }
     }
 
     if (!input.draft_text_blink_visible || input.draft_text_caret_rect.Is_empty()) {

@@ -164,6 +164,7 @@ uint8_t GreenflameApp::Run() {
         return To_exit_code(ProcessExitCode::TrayWindowCreateFailed);
     }
     Show_config_issue(load_result, tray_window_);
+    overlay_window_.On_config_updated();
 
     ChangeNotificationGuard watcher;
     {
@@ -210,6 +211,7 @@ uint8_t GreenflameApp::Run() {
             if (!had_issue && load_result.issue.has_value()) {
                 Show_config_issue(load_result, tray_window_);
             }
+            overlay_window_.On_config_updated();
             continue;
         }
 
@@ -351,6 +353,10 @@ void GreenflameApp::On_selection_saved_to_file(core::RectPx screen_rect,
     } else if (thumbnail != nullptr) {
         DeleteObject(thumbnail);
     }
+}
+
+void GreenflameApp::On_spell_check_languages_unsupported(std::wstring_view warning) {
+    tray_window_.Show_balloon(TrayBalloonIcon::Warning, std::wstring(warning).c_str());
 }
 
 } // namespace greenflame

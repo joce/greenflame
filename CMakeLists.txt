@@ -192,6 +192,7 @@ add_library(greenflame_core STATIC
     src/greenflame_core/text_layout_engine.h
     src/greenflame_core/text_edit_controller.cpp
     src/greenflame_core/text_edit_controller.h
+    src/greenflame_core/spell_check_service.h
     src/greenflame_core/text_html.cpp
     src/greenflame_core/text_html.h
     src/greenflame_core/text_rtf.cpp
@@ -353,6 +354,7 @@ add_executable(greenflame WIN32
     src/greenflame/win/window_query.h
     src/greenflame/win/win32_services.cpp
     src/greenflame/win/win32_services.h
+    src/greenflame/win/win32_spell_check_service.cpp
     src/greenflame/win/overlay_button.h
     src/greenflame/win/overlay_button.cpp
     src/greenflame/win/d2d_overlay_resources.h

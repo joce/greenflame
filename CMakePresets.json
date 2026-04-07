@@ -32,12 +32,24 @@
         "CMAKE_C_COMPILER": "clang-cl.exe",
         "CMAKE_CXX_COMPILER": "clang-cl.exe"
       }
+    },
+    {
+      "name": "x64-coverage-clang",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/x64-coverage-clang",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "clang-cl.exe",
+        "CMAKE_CXX_COMPILER": "clang-cl.exe",
+        "GREENFLAME_ENABLE_COVERAGE": "ON"
+      }
     }
   ],
   "buildPresets": [
     { "name": "x64-debug", "configurePreset": "x64-debug" },
     { "name": "x64-release", "configurePreset": "x64-release" },
     { "name": "x64-debug-clang", "configurePreset": "x64-debug-clang" },
-    { "name": "x64-release-clang", "configurePreset": "x64-release-clang" }
+    { "name": "x64-release-clang", "configurePreset": "x64-release-clang" },
+    { "name": "x64-coverage-clang", "configurePreset": "x64-coverage-clang" }
   ]
 }

@@ -11,6 +11,10 @@ option(GREENFLAME_ENABLE_TIME_TRACE
     "Emit Clang -ftime-trace JSON files during compilation"
     OFF
 )
+option(GREENFLAME_ENABLE_COVERAGE
+    "Instrument greenflame_core and tests for LLVM source coverage (Clang only)"
+    OFF
+)
 
 # cmake-scripts (pulled by Catch2/CPM) sets CMAKE_COMPILE_WARNING_AS_ERROR=ON
 # which adds /WX globally, breaking builds on warnings in third-party headers.
@@ -269,6 +273,9 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     )
     if(GREENFLAME_ENABLE_TIME_TRACE)
         target_compile_options(greenflame_core PRIVATE -ftime-trace)
+    endif()
+    if(GREENFLAME_ENABLE_COVERAGE)
+        target_compile_options(greenflame_core PRIVATE -fprofile-instr-generate -fcoverage-mapping)
     endif()
 elseif(MSVC)
     target_compile_options(greenflame_core PRIVATE

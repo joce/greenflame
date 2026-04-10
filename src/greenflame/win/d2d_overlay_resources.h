@@ -27,6 +27,10 @@ struct D2DOverlayResources final {
     // ArithmeticComposite effect (k1=1, k2=k3=k4=0) for multiply-blend highlighting.
     // Null until Create_hwnd_rt succeeds and ID2D1DeviceContext QI is available.
     Microsoft::WRL::ComPtr<ID2D1Effect> multiply_effect;
+    // Composite effect used to merge cached highlighter body + live tail masks before
+    // the multiply pass. Null until Create_hwnd_rt succeeds and ID2D1DeviceContext QI
+    // is available.
+    Microsoft::WRL::ComPtr<ID2D1Effect> draft_stroke_composite_effect;
 
     // Per-session bitmaps
     Microsoft::WRL::ComPtr<ID2D1Bitmap> screenshot;
@@ -42,11 +46,13 @@ struct D2DOverlayResources final {
     size_t draft_stroke_point_count = 0; // points rendered into draft_stroke_rt
     core::PointPx draft_stroke_last_point =
         {}; // last point rendered into draft_stroke_rt
+    size_t draft_stroke_body_raw_point_count = 0;
     size_t draft_stroke_stable_tail_start_index = 0;
     std::optional<core::StrokeStyle> draft_stroke_style = std::nullopt;
     core::FreehandTipShape draft_stroke_tip_shape = core::FreehandTipShape::Round;
     core::FreehandSmoothingMode draft_stroke_smoothing_mode =
         core::FreehandSmoothingMode::Off;
+    bool draft_stroke_bitmap_uses_cached_body = false;
 
     // Reusable shared resources (recreated on device loss)
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> solid_brush;

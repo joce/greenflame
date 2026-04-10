@@ -72,3 +72,33 @@ TEST(freehand_smoothing, PreviewPlan_ReportsStablePrefixAndTailStartIndex) {
     EXPECT_EQ(plan.tail_points.front(), points[plan.tail_start_index]);
     EXPECT_EQ(plan.tail_points.back(), points.back());
 }
+
+TEST(freehand_smoothing, PreviewPlan_ExtendedStrokeKeepsSmoothedStablePrefix) {
+    std::vector<PointPx> const points_before = {{10, 10}, {20, 10}, {30, 15}, {40, 20},
+                                                {50, 25}, {60, 30}, {70, 30}, {80, 30},
+                                                {90, 30}, {100, 30}};
+    std::vector<PointPx> const points_after = {
+        {10, 10},  {20, 10},  {30, 15},  {40, 20},  {50, 25},  {60, 30},
+        {70, 30},  {80, 30},  {90, 30},  {100, 30}, {110, 32}, {120, 35},
+        {130, 39}, {140, 42}, {150, 44}, {160, 45}};
+
+    FreehandPreviewPlan const plan_before =
+        Build_freehand_preview_plan(points_before, FreehandSmoothingMode::Smooth, 6);
+    FreehandPreviewPlan const plan_after =
+        Build_freehand_preview_plan(points_after, FreehandSmoothingMode::Smooth, 6);
+
+    ASSERT_GT(plan_before.stable_raw_point_count, 0u);
+    ASSERT_GT(plan_after.stable_raw_point_count, plan_before.stable_raw_point_count);
+
+    std::vector<PointPx> const smoothed_before =
+        Smooth_freehand_points(std::span<const PointPx>(points_before)
+                                   .first(plan_before.stable_raw_point_count),
+                               FreehandSmoothingMode::Smooth, 6);
+    std::vector<PointPx> const smoothed_after = Smooth_freehand_points(
+        std::span<const PointPx>(points_after).first(plan_after.stable_raw_point_count),
+        FreehandSmoothingMode::Smooth, 6);
+
+    ASSERT_GE(smoothed_after.size(), smoothed_before.size());
+    EXPECT_TRUE(std::equal(smoothed_before.begin(), smoothed_before.end(),
+                           smoothed_after.begin()));
+}

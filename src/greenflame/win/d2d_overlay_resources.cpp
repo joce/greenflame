@@ -164,6 +164,7 @@ bool D2DOverlayResources::Create_hwnd_rt(HWND hwnd, int width, int height) {
     // Create the ArithmeticComposite multiply-blend effect (O = I1 * I2).
     // Requires ID2D1DeviceContext, available when factory is ID2D1Factory1.
     multiply_effect.Reset();
+    draft_stroke_composite_effect.Reset();
     Microsoft::WRL::ComPtr<ID2D1DeviceContext> dc;
     if (SUCCEEDED(hwnd_rt->QueryInterface(IID_PPV_ARGS(&dc)))) {
         Microsoft::WRL::ComPtr<ID2D1Effect> effect;
@@ -172,6 +173,12 @@ bool D2DOverlayResources::Create_hwnd_rt(HWND hwnd, int width, int height) {
             D2D1_VECTOR_4F const coeffs = {1.0f, 0.0f, 0.0f, 0.0f};
             (void)effect->SetValue(D2D1_ARITHMETICCOMPOSITE_PROP_COEFFICIENTS, coeffs);
             multiply_effect = std::move(effect);
+        }
+        if (SUCCEEDED(dc->CreateEffect(
+                CLSID_D2D1Composite,
+                draft_stroke_composite_effect.ReleaseAndGetAddressOf()))) {
+            // Default mode is SOURCE_OVER, which is sufficient for combining
+            // same-colored premultiplied coverage masks without seam darkening.
         }
     }
     return true;
@@ -433,10 +440,12 @@ bool D2DOverlayResources::Create_cache_targets(int width, int height) {
     annotations_valid = false;
     frozen_valid = false;
     draft_stroke_point_count = 0;
+    draft_stroke_body_raw_point_count = 0;
     draft_stroke_stable_tail_start_index = 0;
     draft_stroke_style.reset();
     draft_stroke_tip_shape = core::FreehandTipShape::Round;
     draft_stroke_smoothing_mode = core::FreehandSmoothingMode::Off;
+    draft_stroke_bitmap_uses_cached_body = false;
     return true;
 }
 
@@ -488,11 +497,14 @@ void D2DOverlayResources::Release_device_resources() {
     draft_stroke_bitmap.Reset();
     draft_stroke_body_bitmap.Reset();
     draft_stroke_point_count = 0;
+    draft_stroke_body_raw_point_count = 0;
     draft_stroke_stable_tail_start_index = 0;
     draft_stroke_style.reset();
     draft_stroke_tip_shape = core::FreehandTipShape::Round;
     draft_stroke_smoothing_mode = core::FreehandSmoothingMode::Off;
+    draft_stroke_bitmap_uses_cached_body = false;
     multiply_effect.Reset();
+    draft_stroke_composite_effect.Reset();
     solid_brush.Reset();
     round_cap_style.Reset();
     flat_cap_style.Reset();

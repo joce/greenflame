@@ -1589,7 +1589,9 @@ unless a real end-to-end bug escapes into the Win32 shell:
   4. Draw comparable brush and freehand highlighter strokes over detailed content.
   5. While drawing with smoothing enabled, watch the live stroke tip near the
      cursor.
-  6. With `tools.highlighter.pause_straighten_ms` left enabled, draw another
+  6. Draw a single long freehand highlighter stroke across much of the selection
+     and keep moving continuously for several seconds.
+  7. With `tools.highlighter.pause_straighten_ms` left enabled, draw another
      highlighter stroke that pauses long enough to straighten.
 - Expected:
   - With both smoothing modes set to `off`, both committed strokes preserve the
@@ -1600,6 +1602,9 @@ unless a real end-to-end bug escapes into the Win32 shell:
     stroke looks cleaner without obvious relocation or multiply-dark seams.
   - During the live smoothed preview, the stroke body looks cleaned up while the tip
     stays attached to the cursor instead of lagging behind it.
+  - During a long live highlighter preview, the older body stays visually uniform
+    instead of growing darker or seamier as the stroke extends, and responsiveness
+    does not visibly degrade just because the stroke is longer.
   - A straightened highlighter stroke still commits as the same explicit straight bar
     shape rather than being reinterpreted as a smoothed freehand path.
 

@@ -2180,10 +2180,12 @@ void Clear_bitmap_target(ID2D1BitmapRenderTarget *render_target) {
 void Reset_draft_stroke_metadata(D2DOverlayResources &res) {
     res.draft_stroke_point_count = 0;
     res.draft_stroke_last_point = {};
+    res.draft_stroke_body_raw_point_count = 0;
     res.draft_stroke_stable_tail_start_index = 0;
     res.draft_stroke_style.reset();
     res.draft_stroke_tip_shape = core::FreehandTipShape::Round;
     res.draft_stroke_smoothing_mode = core::FreehandSmoothingMode::Off;
+    res.draft_stroke_bitmap_uses_cached_body = false;
 }
 
 void Clear_draft_stroke_surface(D2DOverlayResources &res) {
@@ -2208,6 +2210,14 @@ void Draw_preview_segments(ID2D1RenderTarget *render_target, D2DOverlayResources
     Draw_freehand_points(render_target, res, points, style, tip_shape);
 }
 
+[[nodiscard]] core::StrokeStyle Preview_draw_style(core::StrokeStyle style,
+                                                   core::FreehandTipShape tip_shape) {
+    if (tip_shape == core::FreehandTipShape::Square) {
+        style.opacity_percent = core::StrokeStyle::kMaxOpacityPercent;
+    }
+    return style;
+}
+
 [[nodiscard]] bool Has_matching_cached_draft_input(
     D2DOverlayResources const &res, std::span<const core::PointPx> points,
     std::optional<core::StrokeStyle> const &style, core::FreehandTipShape tip_shape,
@@ -2222,12 +2232,14 @@ void Store_draft_stroke_metadata(D2DOverlayResources &res,
                                  std::span<const core::PointPx> points,
                                  core::StrokeStyle style,
                                  core::FreehandTipShape tip_shape,
-                                 core::FreehandSmoothingMode smoothing_mode) {
+                                 core::FreehandSmoothingMode smoothing_mode,
+                                 bool uses_cached_body = false) {
     res.draft_stroke_point_count = points.size();
     res.draft_stroke_last_point = points.back();
     res.draft_stroke_style = style;
     res.draft_stroke_tip_shape = tip_shape;
     res.draft_stroke_smoothing_mode = smoothing_mode;
+    res.draft_stroke_bitmap_uses_cached_body = uses_cached_body;
 }
 
 [[nodiscard]] bool
@@ -2245,6 +2257,7 @@ Can_reuse_draft_stroke_body(D2DOverlayResources const &res, core::StrokeStyle st
 [[nodiscard]] bool Rebuild_draft_stroke_body_bitmap(
     D2DOverlayResources &res, std::span<const core::PointPx> stable_points,
     core::StrokeStyle style, core::FreehandTipShape tip_shape,
+    core::FreehandSmoothingMode smoothing_mode, size_t raw_point_count,
     size_t tail_start_index) {
     if (!res.draft_stroke_body_rt) {
         return false;
@@ -2252,18 +2265,79 @@ Can_reuse_draft_stroke_body(D2DOverlayResources const &res, core::StrokeStyle st
 
     res.draft_stroke_body_rt->BeginDraw();
     res.draft_stroke_body_rt->Clear(D2D1::ColorF(0.f, 0.f, 0.f, 0.f));
-    Draw_preview_segments(res.draft_stroke_body_rt.Get(), res, stable_points, style,
-                          tip_shape);
+    Draw_preview_segments(res.draft_stroke_body_rt.Get(), res, stable_points,
+                          Preview_draw_style(style, tip_shape), tip_shape);
     HRESULT const hr = res.draft_stroke_body_rt->EndDraw();
     if (FAILED(hr)) {
         res.draft_stroke_body_bitmap.Reset();
+        res.draft_stroke_body_raw_point_count = 0;
         res.draft_stroke_stable_tail_start_index = 0;
         return false;
     }
 
     (void)res.draft_stroke_body_rt->GetBitmap(
         res.draft_stroke_body_bitmap.ReleaseAndGetAddressOf());
+    res.draft_stroke_body_raw_point_count = raw_point_count;
     res.draft_stroke_stable_tail_start_index = tail_start_index;
+    res.draft_stroke_style = style;
+    res.draft_stroke_tip_shape = tip_shape;
+    res.draft_stroke_smoothing_mode = smoothing_mode;
+    return res.draft_stroke_body_bitmap != nullptr;
+}
+
+[[nodiscard]] bool Update_incremental_square_draft_stroke_body_bitmap(
+    D2DOverlayResources &res, std::span<const core::PointPx> points,
+    core::StrokeStyle style, core::FreehandSmoothingMode smoothing_mode,
+    core::FreehandPreviewPlan const &plan) {
+    bool const cache_matches =
+        res.draft_stroke_body_bitmap != nullptr &&
+        res.draft_stroke_style == std::optional<core::StrokeStyle>(style) &&
+        res.draft_stroke_tip_shape == core::FreehandTipShape::Square &&
+        res.draft_stroke_smoothing_mode == smoothing_mode &&
+        res.draft_stroke_body_raw_point_count <= plan.stable_raw_point_count;
+    if (!cache_matches) {
+        std::vector<core::PointPx> const smoothed_points = core::Smooth_freehand_points(
+            points.first(plan.stable_raw_point_count), smoothing_mode, style.width_px);
+        return Rebuild_draft_stroke_body_bitmap(
+            res, smoothed_points, style, core::FreehandTipShape::Square, smoothing_mode,
+            plan.stable_raw_point_count, plan.tail_start_index);
+    }
+
+    if (res.draft_stroke_body_raw_point_count == plan.stable_raw_point_count) {
+        res.draft_stroke_body_raw_point_count = plan.stable_raw_point_count;
+        res.draft_stroke_stable_tail_start_index = plan.tail_start_index;
+        return true;
+    }
+    if (!res.draft_stroke_body_rt) {
+        return false;
+    }
+
+    constexpr size_t kSquareDraftBodyOverlapRawPointCount = 8;
+    size_t const draw_start_index =
+        res.draft_stroke_body_raw_point_count > kSquareDraftBodyOverlapRawPointCount
+            ? res.draft_stroke_body_raw_point_count -
+                  kSquareDraftBodyOverlapRawPointCount
+            : 0;
+    std::vector<core::PointPx> const smoothed_points = core::Smooth_freehand_points(
+        points.subspan(draw_start_index,
+                       plan.stable_raw_point_count - draw_start_index),
+        smoothing_mode, style.width_px);
+    res.draft_stroke_body_rt->BeginDraw();
+    Draw_preview_segments(res.draft_stroke_body_rt.Get(), res, smoothed_points,
+                          Preview_draw_style(style, core::FreehandTipShape::Square),
+                          core::FreehandTipShape::Square);
+    HRESULT const hr = res.draft_stroke_body_rt->EndDraw();
+    if (FAILED(hr)) {
+        res.draft_stroke_body_bitmap.Reset();
+        res.draft_stroke_body_raw_point_count = 0;
+        res.draft_stroke_stable_tail_start_index = 0;
+        return false;
+    }
+
+    (void)res.draft_stroke_body_rt->GetBitmap(
+        res.draft_stroke_body_bitmap.ReleaseAndGetAddressOf());
+    res.draft_stroke_body_raw_point_count = plan.stable_raw_point_count;
+    res.draft_stroke_stable_tail_start_index = plan.tail_start_index;
     return res.draft_stroke_body_bitmap != nullptr;
 }
 
@@ -2278,8 +2352,8 @@ Can_reuse_draft_stroke_body(D2DOverlayResources const &res, core::StrokeStyle st
     res.draft_stroke_rt->BeginDraw();
     res.draft_stroke_rt->Clear(D2D1::ColorF(0.f, 0.f, 0.f, 0.f));
     res.draft_stroke_rt->DrawBitmap(res.draft_stroke_body_bitmap.Get());
-    Draw_preview_segments(res.draft_stroke_rt.Get(), res, plan.tail_points, style,
-                          tip_shape);
+    Draw_preview_segments(res.draft_stroke_rt.Get(), res, plan.tail_points,
+                          Preview_draw_style(style, tip_shape), tip_shape);
 
     HRESULT const hr = res.draft_stroke_rt->EndDraw();
     if (FAILED(hr)) {
@@ -2290,6 +2364,34 @@ Can_reuse_draft_stroke_body(D2DOverlayResources const &res, core::StrokeStyle st
     (void)res.draft_stroke_rt->GetBitmap(
         res.draft_stroke_bitmap.ReleaseAndGetAddressOf());
     Store_draft_stroke_metadata(res, points, style, tip_shape, smoothing_mode);
+    return res.draft_stroke_bitmap != nullptr;
+}
+
+[[nodiscard]] bool Rebuild_square_draft_stroke_tail_bitmap(
+    D2DOverlayResources &res, std::span<const core::PointPx> points,
+    core::StrokeStyle style, core::FreehandSmoothingMode smoothing_mode,
+    core::FreehandPreviewPlan const &plan) {
+    if (!res.draft_stroke_rt) {
+        return false;
+    }
+
+    res.draft_stroke_rt->BeginDraw();
+    res.draft_stroke_rt->Clear(D2D1::ColorF(0.f, 0.f, 0.f, 0.f));
+    Draw_preview_segments(res.draft_stroke_rt.Get(), res, plan.tail_points,
+                          Preview_draw_style(style, core::FreehandTipShape::Square),
+                          core::FreehandTipShape::Square);
+
+    HRESULT const hr = res.draft_stroke_rt->EndDraw();
+    if (FAILED(hr)) {
+        res.draft_stroke_bitmap.Reset();
+        return false;
+    }
+
+    (void)res.draft_stroke_rt->GetBitmap(
+        res.draft_stroke_bitmap.ReleaseAndGetAddressOf());
+    Store_draft_stroke_metadata(res, points, style, core::FreehandTipShape::Square,
+                                smoothing_mode,
+                                /*uses_cached_body=*/true);
     return res.draft_stroke_bitmap != nullptr;
 }
 
@@ -2313,6 +2415,7 @@ void Update_draft_stroke_bitmap(D2DOverlayResources &res,
     if (!res.draft_stroke_rt) {
         return;
     }
+    core::StrokeStyle const preview_draw_style = Preview_draw_style(*style, tip_shape);
 
     bool const uses_smoothed_preview =
         smoothing_mode != core::FreehandSmoothingMode::Off && points.size() > 2;
@@ -2322,17 +2425,34 @@ void Update_draft_stroke_bitmap(D2DOverlayResources &res,
             core::Build_freehand_preview_plan(points, smoothing_mode, style->width_px));
         bool drew_from_cached_body = false;
         if (preview_plan->stable_raw_point_count != 0) {
-            bool const reused_body = Can_reuse_draft_stroke_body(
-                res, *style, tip_shape, smoothing_mode, *preview_plan);
-            if (reused_body ||
-                Rebuild_draft_stroke_body_bitmap(
-                    res,
-                    core::Smooth_freehand_points(
-                        points.first(preview_plan->stable_raw_point_count),
-                        smoothing_mode, style->width_px),
-                    *style, tip_shape, preview_plan->tail_start_index)) {
-                drew_from_cached_body = Rebuild_draft_stroke_bitmap_from_cached_body(
-                    res, points, *style, tip_shape, smoothing_mode, *preview_plan);
+            bool body_ready = false;
+            if (tip_shape == core::FreehandTipShape::Square) {
+                body_ready = Update_incremental_square_draft_stroke_body_bitmap(
+                    res, points, *style, smoothing_mode, *preview_plan);
+            } else {
+                bool const reused_body = Can_reuse_draft_stroke_body(
+                    res, *style, tip_shape, smoothing_mode, *preview_plan);
+                body_ready = reused_body ||
+                             Rebuild_draft_stroke_body_bitmap(
+                                 res,
+                                 core::Smooth_freehand_points(
+                                     points.first(preview_plan->stable_raw_point_count),
+                                     smoothing_mode, style->width_px),
+                                 *style, tip_shape, smoothing_mode,
+                                 preview_plan->stable_raw_point_count,
+                                 preview_plan->tail_start_index);
+            }
+            if (body_ready) {
+                if (tip_shape == core::FreehandTipShape::Square &&
+                    res.draft_stroke_composite_effect) {
+                    drew_from_cached_body = Rebuild_square_draft_stroke_tail_bitmap(
+                        res, points, *style, smoothing_mode, *preview_plan);
+                } else {
+                    drew_from_cached_body =
+                        Rebuild_draft_stroke_bitmap_from_cached_body(
+                            res, points, *style, tip_shape, smoothing_mode,
+                            *preview_plan);
+                }
             }
         }
 
@@ -2342,10 +2462,12 @@ void Update_draft_stroke_bitmap(D2DOverlayResources &res,
 
         if (preview_plan->stable_raw_point_count == 0) {
             res.draft_stroke_body_bitmap.Reset();
+            res.draft_stroke_body_raw_point_count = 0;
             res.draft_stroke_stable_tail_start_index = 0;
         }
     } else {
         res.draft_stroke_body_bitmap.Reset();
+        res.draft_stroke_body_raw_point_count = 0;
         res.draft_stroke_stable_tail_start_index = 0;
     }
 
@@ -2353,16 +2475,16 @@ void Update_draft_stroke_bitmap(D2DOverlayResources &res,
     res.draft_stroke_rt->Clear(D2D1::ColorF(0.f, 0.f, 0.f, 0.f));
 
     if (!preview_plan.has_value() || preview_plan->stable_raw_point_count == 0) {
-        Draw_preview_segments(res.draft_stroke_rt.Get(), res, points, *style,
-                              tip_shape);
+        Draw_preview_segments(res.draft_stroke_rt.Get(), res, points,
+                              preview_draw_style, tip_shape);
     } else {
         Draw_preview_segments(res.draft_stroke_rt.Get(), res,
                               core::Smooth_freehand_points(
                                   points.first(preview_plan->stable_raw_point_count),
                                   smoothing_mode, style->width_px),
-                              *style, tip_shape);
+                              preview_draw_style, tip_shape);
         Draw_preview_segments(res.draft_stroke_rt.Get(), res, preview_plan->tail_points,
-                              *style, tip_shape);
+                              preview_draw_style, tip_shape);
     }
 
     HRESULT const hr = res.draft_stroke_rt->EndDraw();
@@ -2371,6 +2493,22 @@ void Update_draft_stroke_bitmap(D2DOverlayResources &res,
             res.draft_stroke_bitmap.ReleaseAndGetAddressOf());
         Store_draft_stroke_metadata(res, points, *style, tip_shape, smoothing_mode);
     }
+}
+
+void Set_live_square_draft_mask_input(ID2D1Effect *multiply_effect,
+                                      D2DOverlayResources &res) noexcept {
+    if (multiply_effect == nullptr) {
+        return;
+    }
+    if (res.draft_stroke_bitmap_uses_cached_body && res.draft_stroke_body_bitmap &&
+        res.draft_stroke_bitmap && res.draft_stroke_composite_effect) {
+        res.draft_stroke_composite_effect->SetInput(0,
+                                                    res.draft_stroke_body_bitmap.Get());
+        res.draft_stroke_composite_effect->SetInput(1, res.draft_stroke_bitmap.Get());
+        multiply_effect->SetInputEffect(1, res.draft_stroke_composite_effect.Get());
+        return;
+    }
+    multiply_effect->SetInput(1, res.draft_stroke_bitmap.Get());
 }
 
 // ---------------------------------------------------------------------------
@@ -2395,19 +2533,21 @@ void Draw_live_annotation_draft(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         if (res.draft_stroke_bitmap) {
             if (input.draft_freehand_tip_shape == core::FreehandTipShape::Square &&
                 res.screenshot && res.multiply_effect) {
-                // Multiply blend: result = screenshot * stroke (opacity baked in
-                // stroke). Non-stroke pixels are transparent and leave the destination
-                // unchanged.
+                // Multiply blend: the preview stroke bitmap is an opaque coverage mask
+                // tinted to the selected highlighter color. k1 applies the user
+                // opacity once at compose time. Non-stroke pixels stay transparent and
+                // leave the destination unchanged.
                 Microsoft::WRL::ComPtr<ID2D1DeviceContext> dc;
                 if (SUCCEEDED(rt->QueryInterface(IID_PPV_ARGS(&dc)))) {
-                    // k1 = opacity (stroke is full-alpha; k1 scales the multiply
-                    // result).
+                    if (res.draft_stroke_bitmap == nullptr) {
+                        return;
+                    }
                     D2D1_VECTOR_4F const coeffs = {input.draft_freehand_blit_opacity,
                                                    0.0f, 0.0f, 0.0f};
                     (void)res.multiply_effect->SetValue(
                         D2D1_ARITHMETICCOMPOSITE_PROP_COEFFICIENTS, coeffs);
                     res.multiply_effect->SetInput(0, res.screenshot.Get());
-                    res.multiply_effect->SetInput(1, res.draft_stroke_bitmap.Get());
+                    Set_live_square_draft_mask_input(res.multiply_effect.Get(), res);
                     dc->DrawImage(res.multiply_effect.Get());
                 } else {
                     rt->DrawBitmap(res.draft_stroke_bitmap.Get(), nullptr,

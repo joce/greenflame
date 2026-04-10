@@ -557,3 +557,94 @@ TEST(text_html, Decode_SemanticBold_WithUnderlineStyle_AppliesBoth) {
     }
     EXPECT_TRUE(found);
 }
+
+TEST(text_html, Decode_Utf8_ThreeByteChar) {
+    std::string const html = "\xE2\x82\xAC";
+    auto const runs = Decode_html_clipboard(html);
+    ASSERT_FALSE(runs.empty());
+    EXPECT_EQ(runs[0].text, L"\u20AC");
+}
+
+TEST(text_html, Decode_Utf8_FourByteChar) {
+    std::string const html = "\xF0\x9F\x98\x80";
+    auto const runs = Decode_html_clipboard(html);
+    ASSERT_FALSE(runs.empty());
+    std::wstring const expected = {static_cast<wchar_t>(0xD83D),
+                                   static_cast<wchar_t>(0xDE00)};
+    EXPECT_EQ(runs[0].text, expected);
+}
+
+TEST(text_html, Decode_InvalidUtf8Sequence_ProducesReplacementCharacter) {
+    auto const runs = Decode_html_clipboard("\xC3");
+    ASSERT_EQ(runs.size(), 1u);
+    ASSERT_EQ(runs[0].text.size(), 1u);
+    EXPECT_EQ(runs[0].text[0], L'\uFFFD');
+}
+
+TEST(text_html, Decode_NumericEntity_HexWithUppercaseDigit) {
+    auto const runs = Decode_html_clipboard("&#x4A;");
+    EXPECT_EQ(All_text(runs), L"J");
+}
+
+TEST(text_html, Decode_DoctypeCommentAndHeadContentAreIgnored) {
+    auto const runs = Decode_html_clipboard(
+        "<!DOCTYPE html><!--comment--><head><title>ignored</title></head><p>A</p>");
+    EXPECT_EQ(All_text(runs), L"A");
+}
+
+TEST(text_html, Decode_SelfClosingInlineTagRestoresPriorFlags) {
+    auto const runs =
+        Decode_html_clipboard("<b>X<span style=\"font-weight:normal\"/>Y</b>Z");
+    EXPECT_EQ(All_text(runs), L"XYZ");
+    ASSERT_GE(runs.size(), 2u);
+    EXPECT_TRUE(runs[0].flags.bold);
+    EXPECT_FALSE(runs.back().flags.bold);
+}
+
+TEST(text_html, Decode_CssNormalResetsInheritedBoldWithTrimmedWhitespace) {
+    auto const runs =
+        Decode_html_clipboard("<b><span style=\"\tfont-weight:\tnormal\t\">x</span>y</b>");
+    ASSERT_EQ(runs.size(), 2u);
+    EXPECT_EQ(runs[0].text, L"x");
+    EXPECT_FALSE(runs[0].flags.bold);
+    EXPECT_EQ(runs[1].text, L"y");
+    EXPECT_TRUE(runs[1].flags.bold);
+}
+
+TEST(text_html, Decode_CssNormalResetsInheritedItalic) {
+    auto const runs =
+        Decode_html_clipboard("<i><span style=\"font-style:normal\">x</span>y</i>");
+    ASSERT_EQ(runs.size(), 2u);
+    EXPECT_EQ(runs[0].text, L"x");
+    EXPECT_FALSE(runs[0].flags.italic);
+    EXPECT_EQ(runs[1].text, L"y");
+    EXPECT_TRUE(runs[1].flags.italic);
+}
+
+TEST(text_html, Encode_Tab_BecomesNumericEntityAndRoundTrips) {
+    std::vector<TextRun> const runs = {Plain(L"A\tB")};
+    std::string const encoded = Encode_html_clipboard(runs);
+    EXPECT_NE(encoded.find("&#9;"), std::string::npos);
+
+    auto const decoded = Decode_html_clipboard(encoded);
+    EXPECT_EQ(All_text(decoded), L"A\tB");
+}
+
+TEST(text_html, Encode_Utf8_ThreeByteChar) {
+    std::vector<TextRun> const runs = {Plain(L"\u20AC")};
+    std::string const out = Encode_html_clipboard(runs);
+    EXPECT_NE(out.find("\xE2\x82\xAC"), std::string::npos);
+}
+
+TEST(text_html, Encode_NonBmpCharacter_RoundTrips) {
+    std::wstring const emoji = {static_cast<wchar_t>(0xD83D),
+                                static_cast<wchar_t>(0xDE00)};
+    std::vector<TextRun> const runs = {Plain(emoji)};
+
+    std::string const encoded = Encode_html_clipboard(runs);
+    EXPECT_NE(encoded.find("\xF0\x9F\x98\x80"), std::string::npos);
+
+    auto const decoded = Decode_html_clipboard(encoded);
+    ASSERT_EQ(decoded.size(), 1u);
+    EXPECT_EQ(decoded[0].text, emoji);
+}

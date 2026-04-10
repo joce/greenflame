@@ -98,6 +98,8 @@ class RecordingEditInteractionHost final : public IAnnotationEditInteractionHost
 
     void Update_annotation_at(size_t index, Annotation annotation,
                               std::span<const uint64_t> selection) override {
+        selected_annotation_ids =
+            AnnotationSelection(selection.begin(), selection.end());
         selected_annotation_id = selection.size() == 1
                                      ? std::optional<uint64_t>{selection.front()}
                                      : std::nullopt;
@@ -108,6 +110,7 @@ class RecordingEditInteractionHost final : public IAnnotationEditInteractionHost
     }
 
     std::vector<Annotation> annotations = {};
+    AnnotationSelection selected_annotation_ids = {};
     std::optional<uint64_t> selected_annotation_id = std::nullopt;
 };
 
@@ -485,4 +488,128 @@ TEST(annotation_edit_interaction,
     EXPECT_EQ(
         std::get<FreehandStrokeAnnotation>(command->annotation_after.data).points[0],
         (PointPx{20, 20}));
+}
+
+TEST(annotation_edit_interaction, HitTest_MultiSelectionBodyUsesSelectionBounds) {
+    std::vector<Annotation> const annotations = {
+        Make_rectangle(1, RectPx::From_ltrb(40, 40, 81, 81), 4),
+        Make_rectangle(2, RectPx::From_ltrb(120, 40, 161, 81), 4),
+    };
+    AnnotationSelection const selected_ids = {1, 2};
+    RectPx const selection_bounds = RectPx::From_ltrb(40, 40, 161, 81);
+
+    EXPECT_EQ(
+        Hit_test_annotation_edit_target(selected_ids, annotations, selection_bounds,
+                                        {100, 60}),
+        (std::optional<AnnotationEditTarget>{AnnotationEditTarget{
+            0, AnnotationEditTargetKind::SelectionBody}}));
+}
+
+TEST(annotation_edit_interaction,
+     RectangleHandleTargets_CreateMatchingHandleInteractions) {
+    Annotation const rectangle = Make_rectangle(21, RectPx::From_ltrb(40, 40, 81, 81), 4);
+    std::vector<Annotation> const annotations = {rectangle};
+
+    struct Case final {
+        PointPx cursor = {};
+        AnnotationEditTargetKind target_kind = AnnotationEditTargetKind::Body;
+        AnnotationEditHandleKind handle_kind = AnnotationEditHandleKind::LineStart;
+    };
+
+    std::array<Case, 8> const cases = {{
+        {{40, 40}, AnnotationEditTargetKind::RectangleTopLeftHandle,
+         AnnotationEditHandleKind::RectangleTopLeft},
+        {{60, 40}, AnnotationEditTargetKind::RectangleTopHandle,
+         AnnotationEditHandleKind::RectangleTop},
+        {{80, 40}, AnnotationEditTargetKind::RectangleTopRightHandle,
+         AnnotationEditHandleKind::RectangleTopRight},
+        {{80, 60}, AnnotationEditTargetKind::RectangleRightHandle,
+         AnnotationEditHandleKind::RectangleRight},
+        {{80, 80}, AnnotationEditTargetKind::RectangleBottomRightHandle,
+         AnnotationEditHandleKind::RectangleBottomRight},
+        {{60, 80}, AnnotationEditTargetKind::RectangleBottomHandle,
+         AnnotationEditHandleKind::RectangleBottom},
+        {{40, 80}, AnnotationEditTargetKind::RectangleBottomLeftHandle,
+         AnnotationEditHandleKind::RectangleBottomLeft},
+        {{40, 60}, AnnotationEditTargetKind::RectangleLeftHandle,
+         AnnotationEditHandleKind::RectangleLeft},
+    }};
+
+    for (Case const &test_case : cases) {
+        std::optional<AnnotationEditTarget> const target =
+            Hit_test_annotation_edit_target(&annotations[0], annotations,
+                                            test_case.cursor);
+        ASSERT_TRUE(target.has_value());
+        EXPECT_EQ(target->annotation_id, 21u);
+        EXPECT_EQ(target->kind, test_case.target_kind);
+
+        std::unique_ptr<IAnnotationEditInteraction> interaction =
+            Create_annotation_edit_interaction(*target, 0, rectangle,
+                                               test_case.cursor);
+        ASSERT_NE(interaction, nullptr);
+        EXPECT_EQ(interaction->Active_handle(),
+                  std::optional<AnnotationEditHandleKind>{test_case.handle_kind});
+    }
+}
+
+TEST(annotation_edit_interaction,
+     CreateSelectionMoveInteraction_RejectsSelectionsSmallerThanTwo) {
+    std::vector<Annotation> const annotations = {
+        Make_rectangle(1, RectPx::From_ltrb(40, 40, 81, 81), 4),
+    };
+    AnnotationSelection const selection_ids = {1};
+
+    EXPECT_EQ(
+        Create_selection_move_edit_interaction(annotations, selection_ids, {40, 40}),
+        nullptr);
+}
+
+TEST(annotation_edit_interaction,
+     SelectionMoveInteraction_PreviewsCommitAllAndCancelTrackAllAnnotations) {
+    RecordingEditInteractionHost host;
+    Annotation const first = Make_rectangle(1, RectPx::From_ltrb(40, 40, 81, 81), 4);
+    Annotation const second = Make_ellipse(2, RectPx::From_ltrb(120, 50, 171, 101), 6);
+    host.annotations = {first, second};
+    AnnotationSelection const selection_ids = {1, 2};
+
+    std::unique_ptr<IAnnotationEditInteraction> interaction =
+        Create_selection_move_edit_interaction(host.annotations, selection_ids,
+                                               {60, 60});
+    ASSERT_NE(interaction, nullptr);
+    EXPECT_TRUE(interaction->Is_move_drag());
+
+    EXPECT_TRUE(interaction->Update(host, {90, 100}));
+    EXPECT_EQ(host.selected_annotation_id, std::nullopt);
+    EXPECT_EQ(host.selected_annotation_ids, selection_ids);
+    EXPECT_EQ(std::get<RectangleAnnotation>(host.annotations[0].data).outer_bounds,
+              (RectPx::From_ltrb(70, 80, 111, 121)));
+    EXPECT_EQ(std::get<EllipseAnnotation>(host.annotations[1].data).outer_bounds,
+              (RectPx::From_ltrb(150, 90, 201, 141)));
+
+    std::vector<AnnotationEditPreview> const previews = interaction->Previews();
+    ASSERT_EQ(previews.size(), 2u);
+    EXPECT_EQ(previews[0].index, 0u);
+    EXPECT_EQ(previews[0].annotation_before, first);
+    EXPECT_EQ(previews[0].annotation_after, host.annotations[0]);
+    EXPECT_EQ(previews[1].index, 1u);
+    EXPECT_EQ(previews[1].annotation_before, second);
+    EXPECT_EQ(previews[1].annotation_after, host.annotations[1]);
+
+    std::vector<AnnotationEditCommandData> const commands = interaction->Commit_all();
+    ASSERT_EQ(commands.size(), 2u);
+    EXPECT_EQ(commands[0].description, "Move annotations");
+    EXPECT_EQ(commands[0].selection_before, selection_ids);
+    EXPECT_EQ(commands[0].selection_after, selection_ids);
+    EXPECT_EQ(commands[0].annotation_before, first);
+    EXPECT_EQ(commands[0].annotation_after, host.annotations[0]);
+    EXPECT_EQ(commands[1].description, "Move annotations");
+    EXPECT_EQ(commands[1].selection_before, selection_ids);
+    EXPECT_EQ(commands[1].selection_after, selection_ids);
+    EXPECT_EQ(commands[1].annotation_before, second);
+    EXPECT_EQ(commands[1].annotation_after, host.annotations[1]);
+
+    EXPECT_TRUE(interaction->Cancel(host));
+    EXPECT_EQ(host.annotations[0], first);
+    EXPECT_EQ(host.annotations[1], second);
+    EXPECT_EQ(host.selected_annotation_ids, selection_ids);
 }

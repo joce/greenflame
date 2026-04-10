@@ -1,3 +1,4 @@
+#include "fake_spell_check_service.h"
 #include "fake_text_layout_engine.h"
 #include "greenflame_core/annotation_controller.h"
 #include "greenflame_core/annotation_hit_test.h"
@@ -275,6 +276,90 @@ TEST(annotation_controller, ToolbarViews_ExposeAnnotationTools) {
     EXPECT_EQ(views[10].tooltip, L"Bubble (N)");
     EXPECT_EQ(views[10].glyph, AnnotationToolbarGlyph::Bubble);
     EXPECT_FALSE(views[10].active);
+}
+
+TEST(annotation_controller, ToolIdFromHotkey_MapsShiftVariantsAndRejectsUnknown) {
+    AnnotationController controller;
+
+    EXPECT_EQ(controller.Tool_id_from_hotkey(L'b'),
+              std::optional<AnnotationToolId>{AnnotationToolId::Freehand});
+    EXPECT_EQ(controller.Tool_id_from_hotkey(L'H'),
+              std::optional<AnnotationToolId>{AnnotationToolId::Highlighter});
+    EXPECT_EQ(controller.Tool_id_from_hotkey(L'R', true),
+              std::optional<AnnotationToolId>{AnnotationToolId::FilledRectangle});
+    EXPECT_EQ(controller.Tool_id_from_hotkey(L'E', true),
+              std::optional<AnnotationToolId>{AnnotationToolId::FilledEllipse});
+    EXPECT_EQ(controller.Tool_id_from_hotkey(L'N'),
+              std::optional<AnnotationToolId>{AnnotationToolId::Bubble});
+    EXPECT_EQ(controller.Tool_id_from_hotkey(L'Z'), std::nullopt);
+}
+
+TEST(annotation_controller, SetHighlighterOpacityPercent_ClampsAndNoopsAtLimits) {
+    AnnotationController controller;
+
+    EXPECT_TRUE(controller.Set_highlighter_opacity_percent(
+        StrokeStyle::kMaxOpacityPercent + 10));
+    EXPECT_EQ(controller.Highlighter_opacity_percent(),
+              StrokeStyle::kMaxOpacityPercent);
+    EXPECT_FALSE(controller.Set_highlighter_opacity_percent(
+        StrokeStyle::kMaxOpacityPercent));
+
+    EXPECT_TRUE(controller.Set_highlighter_opacity_percent(
+        StrokeStyle::kMinOpacityPercent - 10));
+    EXPECT_EQ(controller.Highlighter_opacity_percent(),
+              StrokeStyle::kMinOpacityPercent);
+    EXPECT_FALSE(controller.Set_highlighter_opacity_percent(
+        StrokeStyle::kMinOpacityPercent));
+}
+
+TEST(annotation_controller,
+     DraftFreehandSmoothingMode_ReflectsBrushAndHighlighterGestures) {
+    AnnotationController controller;
+
+    EXPECT_EQ(controller.Draft_freehand_smoothing_mode(),
+              FreehandSmoothingMode::Off);
+
+    EXPECT_TRUE(controller.Toggle_tool(AnnotationToolId::Freehand));
+    EXPECT_TRUE(controller.On_primary_press({10, 10}));
+    EXPECT_TRUE(controller.On_pointer_move({12, 11}));
+    EXPECT_EQ(controller.Draft_freehand_smoothing_mode(),
+              FreehandSmoothingMode::Smooth);
+    EXPECT_TRUE(controller.On_cancel());
+
+    EXPECT_TRUE(controller.Set_brush_smoothing_mode(FreehandSmoothingMode::Off));
+    EXPECT_TRUE(controller.On_primary_press({20, 20}));
+    EXPECT_TRUE(controller.On_pointer_move({22, 22}));
+    EXPECT_EQ(controller.Draft_freehand_smoothing_mode(),
+              FreehandSmoothingMode::Off);
+    EXPECT_TRUE(controller.On_cancel());
+
+    EXPECT_TRUE(controller.Set_highlighter_smoothing_mode(
+        FreehandSmoothingMode::Off));
+    EXPECT_TRUE(controller.Toggle_tool(AnnotationToolId::Highlighter));
+    EXPECT_TRUE(controller.On_primary_press({30, 30}));
+    EXPECT_TRUE(controller.On_pointer_move({40, 40}));
+    EXPECT_EQ(controller.Draft_freehand_smoothing_mode(),
+              FreehandSmoothingMode::Off);
+}
+
+TEST(annotation_controller, SetSpellCheckService_PropagatesIntoTextDraft) {
+    AnnotationController controller;
+    FakeTextLayoutEngine engine;
+    FakeSpellCheckService spell_service;
+    spell_service.errors_to_return = {SpellError{0, 4}};
+
+    controller.Set_text_layout_engine(&engine);
+    controller.Set_spell_check_service(&spell_service);
+    ASSERT_TRUE(controller.Toggle_tool(AnnotationToolId::Text));
+
+    controller.Begin_text_draft({100, 200});
+    ASSERT_TRUE(controller.Has_active_text_edit());
+    controller.Active_text_edit()->On_text_input(L"helo");
+
+    TextDraftView const view = controller.Active_text_edit()->Build_view();
+    ASSERT_EQ(view.spell_errors.size(), 1u);
+    EXPECT_EQ(view.spell_errors[0].start_utf16, 0);
+    EXPECT_EQ(view.spell_errors[0].length_utf16, 4);
 }
 
 TEST(annotation_controller, ToggleToolByHotkey_ActivatesAndDeactivatesFreehand) {
@@ -1796,6 +1881,85 @@ TEST(annotation_controller, SelectedAnnotationBounds_LineUsesVisualNotHitTestBou
     ASSERT_TRUE(bounds.has_value());
     EXPECT_EQ(*bounds, Annotation_visual_bounds(line));
     EXPECT_NE(*bounds, Annotation_bounds(line));
+}
+
+TEST(annotation_controller,
+     ActiveAnnotationEditPreview_ReturnsSinglePreviewForEndpointEdits) {
+    AnnotationController controller;
+    Annotation const original = Make_line(1, {40, 40}, {90, 40}, 6);
+    controller.Insert_annotation_at(0, original, std::optional<uint64_t>{1});
+
+    ASSERT_TRUE(controller.Begin_annotation_edit(
+        AnnotationEditTarget{1, AnnotationEditTargetKind::LineEndHandle}, {90, 40}));
+    EXPECT_TRUE(controller.On_pointer_move({120, 70}));
+
+    std::optional<AnnotationEditPreview> const preview =
+        controller.Active_annotation_edit_preview();
+    ASSERT_TRUE(preview.has_value());
+    EXPECT_EQ(preview->index, 0u);
+    EXPECT_EQ(preview->annotation_before, original);
+    ASSERT_TRUE(std::holds_alternative<LineAnnotation>(preview->annotation_after.data));
+    EXPECT_EQ(std::get<LineAnnotation>(preview->annotation_after.data).end,
+              (PointPx{120, 70}));
+}
+
+TEST(annotation_controller,
+     ActiveAnnotationEditPreviews_ReturnMultipleEntriesForSelectionMove) {
+    AnnotationController controller;
+    controller.Insert_annotation_at(0, Make_rectangle(1, RectPx::From_ltrb(40, 40, 81, 81),
+                                                      4),
+                                    std::nullopt);
+    controller.Insert_annotation_at(1, Make_ellipse(2, RectPx::From_ltrb(120, 50, 171, 101),
+                                                    6),
+                                    std::nullopt);
+    std::array<uint64_t, 2> const selection_ids = {1, 2};
+    ASSERT_TRUE(controller.Set_selected_annotations(selection_ids));
+
+    ASSERT_TRUE(controller.Begin_annotation_edit(
+        AnnotationEditTarget{0, AnnotationEditTargetKind::SelectionBody}, {60, 60}));
+    EXPECT_TRUE(controller.On_pointer_move({90, 100}));
+
+    EXPECT_EQ(controller.Active_annotation_edit_preview(), std::nullopt);
+    std::vector<AnnotationEditPreview> const previews =
+        controller.Active_annotation_edit_previews();
+    ASSERT_EQ(previews.size(), 2u);
+    EXPECT_EQ(previews[0].index, 0u);
+    EXPECT_EQ(std::get<RectangleAnnotation>(previews[0].annotation_after.data).outer_bounds,
+              (RectPx::From_ltrb(70, 80, 111, 121)));
+    EXPECT_EQ(previews[1].index, 1u);
+    EXPECT_EQ(std::get<EllipseAnnotation>(previews[1].annotation_after.data).outer_bounds,
+              (RectPx::From_ltrb(150, 90, 201, 141)));
+}
+
+TEST(annotation_controller, UpdateAnnotationAt_OptionalSelectionIdUpdatesSelection) {
+    AnnotationController controller;
+    controller.Insert_annotation_at(0, Make_line(1, {10, 10}, {30, 30}), std::nullopt);
+
+    controller.Update_annotation_at(
+        0, Make_line(1, {20, 20}, {40, 50}), std::optional<uint64_t>{1});
+
+    ASSERT_EQ(controller.Annotations().size(), 1u);
+    EXPECT_EQ(std::get<LineAnnotation>(controller.Annotations()[0].data).start,
+              (PointPx{20, 20}));
+    EXPECT_EQ(std::get<LineAnnotation>(controller.Annotations()[0].data).end,
+              (PointPx{40, 50}));
+    EXPECT_EQ(controller.Selected_annotation_id(), std::optional<uint64_t>{1});
+}
+
+TEST(annotation_controller,
+     EraseAnnotationAt_OptionalSelectionIdUpdatesOrClearsSelection) {
+    AnnotationController controller;
+    controller.Insert_annotation_at(0, Make_line(1, {10, 10}, {30, 30}), std::nullopt);
+    controller.Insert_annotation_at(1, Make_line(2, {40, 40}, {60, 60}), std::nullopt);
+
+    controller.Erase_annotation_at(0, std::optional<uint64_t>{2});
+    ASSERT_EQ(controller.Annotations().size(), 1u);
+    EXPECT_EQ(controller.Annotations()[0].id, 2u);
+    EXPECT_EQ(controller.Selected_annotation_id(), std::optional<uint64_t>{2});
+
+    controller.Erase_annotation_at(0, std::nullopt);
+    EXPECT_TRUE(controller.Annotations().empty());
+    EXPECT_EQ(controller.Selected_annotation_id(), std::nullopt);
 }
 
 // ---------------------------------------------------------------------------

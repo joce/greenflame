@@ -525,3 +525,315 @@ TEST(app_config_json, Serialize_SpellCheckLanguages_EmptyVector_NotWritten) {
     std::string const json = Serialize_app_config_json(config);
     EXPECT_EQ(json.find("spell_check_languages"), std::string::npos);
 }
+
+TEST(app_config, Normalize_TruncatesPathsAndPatternsAndMasksPaddingColor) {
+    AppConfig config{};
+    config.default_save_dir.assign(300, L'a');
+    config.last_save_as_dir.assign(300, L'b');
+    config.filename_pattern_region.assign(300, L'c');
+    config.filename_pattern_desktop.assign(300, L'd');
+    config.filename_pattern_monitor.assign(300, L'e');
+    config.filename_pattern_window.assign(300, L'f');
+    config.padding_color = static_cast<COLORREF>(0xFF123456u);
+
+    config.Normalize();
+
+    EXPECT_EQ(config.default_save_dir.size(), 259u);
+    EXPECT_EQ(config.last_save_as_dir.size(), 259u);
+    EXPECT_EQ(config.filename_pattern_region.size(), 256u);
+    EXPECT_EQ(config.filename_pattern_desktop.size(), 256u);
+    EXPECT_EQ(config.filename_pattern_monitor.size(), 256u);
+    EXPECT_EQ(config.filename_pattern_window.size(), 256u);
+    EXPECT_EQ(config.padding_color, Make_colorref(0x56, 0x34, 0x12));
+}
+
+TEST(app_config, Normalize_NormalizesDefaultSaveFormatCaseWhitespaceAndJpegAlias) {
+    AppConfig config{};
+
+    config.default_save_format = L"  JpEg  ";
+    config.Normalize();
+    EXPECT_EQ(config.default_save_format, L"jpg");
+
+    config.default_save_format = L"  PnG ";
+    config.Normalize();
+    EXPECT_EQ(config.default_save_format, L"png");
+
+    config.default_save_format = L" BMP\t";
+    config.Normalize();
+    EXPECT_EQ(config.default_save_format, L"bmp");
+}
+
+TEST(app_config, Normalize_ClearsUnsupportedDefaultSaveFormat) {
+    AppConfig config{};
+    config.default_save_format = L" gif ";
+
+    config.Normalize();
+
+    EXPECT_TRUE(config.default_save_format.empty());
+}
+
+TEST(app_config_json, Parse_RejectsLineToolWhenNotObject) {
+    EXPECT_FALSE(Parse_app_config_json(R"json({"tools":{"line":5}})json").has_value());
+}
+
+TEST(app_config_json, Parse_RejectsUnknownAnnotationColorSlot) {
+    AppConfigParseResult const result = Parse_app_config_json_with_diagnostics(
+        R"json({"tools":{"colors":{"8":"#112233"}}})json");
+
+    EXPECT_TRUE(result.Has_error());
+    ASSERT_TRUE(result.diagnostic.has_value());
+    EXPECT_THAT(result.diagnostic->message, testing::HasSubstr(L"tools.colors.8"));
+}
+
+TEST(app_config_json, Parse_RejectsUnknownHighlighterColorSlot) {
+    AppConfigParseResult const result = Parse_app_config_json_with_diagnostics(
+        R"json({"tools":{"highlighter":{"colors":{"6":"#112233"}}}})json");
+
+    EXPECT_TRUE(result.Has_error());
+    ASSERT_TRUE(result.diagnostic.has_value());
+    EXPECT_THAT(result.diagnostic->message,
+                testing::HasSubstr(L"tools.highlighter.colors.6"));
+}
+
+TEST(app_config_json, Parse_RejectsInvalidTextCurrentFontToken) {
+    AppConfigParseResult const result = Parse_app_config_json_with_diagnostics(
+        R"json({"tools":{"text":{"current_font":"script"}}})json");
+
+    EXPECT_TRUE(result.Has_error());
+    ASSERT_TRUE(result.diagnostic.has_value());
+    EXPECT_THAT(result.diagnostic->message, testing::HasSubstr(L"current_font"));
+}
+
+TEST(app_config_json, Serialize_WritesSizeOnlyToolsAndFontTokensWhenNonDefault) {
+    AppConfig config{};
+    config.line_size = 7;
+    config.arrow_size = 8;
+    config.rect_size = 9;
+    config.ellipse_size = 10;
+    config.text_current_font = TextFontChoice::Mono;
+    config.bubble_current_font = TextFontChoice::Art;
+
+    std::string const json = Serialize_app_config_json(config);
+    std::optional<AppConfig> const parsed = Parse_app_config_json(json);
+
+    EXPECT_NE(json.find(R"json("line")json"), std::string::npos);
+    EXPECT_NE(json.find(R"json("arrow")json"), std::string::npos);
+    EXPECT_NE(json.find(R"json("rect")json"), std::string::npos);
+    EXPECT_NE(json.find(R"json("ellipse")json"), std::string::npos);
+    EXPECT_NE(json.find(R"json("current_font")json"), std::string::npos);
+    EXPECT_NE(json.find(R"json("mono")json"), std::string::npos);
+    EXPECT_NE(json.find(R"json("art")json"), std::string::npos);
+    ASSERT_TRUE(parsed.has_value());
+    EXPECT_EQ(parsed->line_size, 7);
+    EXPECT_EQ(parsed->arrow_size, 8);
+    EXPECT_EQ(parsed->rect_size, 9);
+    EXPECT_EQ(parsed->ellipse_size, 10);
+    EXPECT_EQ(parsed->text_current_font, TextFontChoice::Mono);
+    EXPECT_EQ(parsed->bubble_current_font, TextFontChoice::Art);
+}
+
+TEST(app_config_json, Serialize_WritesFontFamiliesAndSaveFieldsWhenNonDefault) {
+    AppConfig config{};
+    config.text_font_sans = L"Aptos";
+    config.text_font_serif = L"Georgia";
+    config.text_font_mono = L"Consolas";
+    config.text_font_art = L"Impact";
+    config.default_save_dir = L"C:\\captures";
+    config.last_save_as_dir = L"C:\\exports";
+    config.filename_pattern_region = L"region_%Y%m%d";
+    config.filename_pattern_desktop = L"desktop_%H%M";
+    config.filename_pattern_monitor = L"monitor_%N";
+    config.filename_pattern_window = L"window_%T";
+    config.default_save_format = L"png";
+
+    std::string const json = Serialize_app_config_json(config);
+    std::optional<AppConfig> const parsed = Parse_app_config_json(json);
+
+    EXPECT_NE(json.find(R"json("font")json"), std::string::npos);
+    EXPECT_NE(json.find(R"json("default_save_dir")json"), std::string::npos);
+    EXPECT_NE(json.find(R"json("last_save_as_dir")json"), std::string::npos);
+    EXPECT_NE(json.find(R"json("filename_pattern_window")json"), std::string::npos);
+    ASSERT_TRUE(parsed.has_value());
+    EXPECT_EQ(parsed->text_font_sans, L"Aptos");
+    EXPECT_EQ(parsed->text_font_serif, L"Georgia");
+    EXPECT_EQ(parsed->text_font_mono, L"Consolas");
+    EXPECT_EQ(parsed->text_font_art, L"Impact");
+    EXPECT_EQ(parsed->default_save_dir, L"C:\\captures");
+    EXPECT_EQ(parsed->last_save_as_dir, L"C:\\exports");
+    EXPECT_EQ(parsed->filename_pattern_region, L"region_%Y%m%d");
+    EXPECT_EQ(parsed->filename_pattern_desktop, L"desktop_%H%M");
+    EXPECT_EQ(parsed->filename_pattern_monitor, L"monitor_%N");
+    EXPECT_EQ(parsed->filename_pattern_window, L"window_%T");
+    EXPECT_EQ(parsed->default_save_format, L"png");
+}
+
+TEST(app_config_json, Serialize_WritesColorMapsAndPaddingColorAsHex) {
+    AppConfig config{};
+    config.annotation_colors[1] = Make_colorref(0x12, 0x34, 0x56);
+    config.highlighter_colors[2] = Make_colorref(0x89, 0xab, 0xcd);
+    config.current_annotation_color_index = 1;
+    config.current_highlighter_color_index = 2;
+    config.padding_color = Make_colorref(0x44, 0x55, 0x66);
+
+    std::string const json = Serialize_app_config_json(config);
+    std::optional<AppConfig> const parsed = Parse_app_config_json(json);
+
+    EXPECT_NE(json.find(R"json("#123456")json"), std::string::npos);
+    EXPECT_NE(json.find(R"json("#89abcd")json"), std::string::npos);
+    EXPECT_NE(json.find(R"json("#445566")json"), std::string::npos);
+    ASSERT_TRUE(parsed.has_value());
+    EXPECT_EQ(parsed->annotation_colors[1], Make_colorref(0x12, 0x34, 0x56));
+    EXPECT_EQ(parsed->highlighter_colors[2], Make_colorref(0x89, 0xab, 0xcd));
+    EXPECT_EQ(parsed->current_annotation_color_index, 1);
+    EXPECT_EQ(parsed->current_highlighter_color_index, 2);
+    EXPECT_EQ(parsed->padding_color, Make_colorref(0x44, 0x55, 0x66));
+}
+
+TEST(app_config_json, Parse_AcceptsUppercaseHexColors) {
+    std::optional<AppConfig> const config = Parse_app_config_json(R"json(
+{
+  "tools": {
+    "colors": { "1": "#AaBbCc" },
+    "highlighter": { "colors": { "2": "#DDEEFF" } }
+  },
+  "save": { "padding_color": "#0A0B0C" }
+}
+)json");
+
+    ASSERT_TRUE(config.has_value());
+    EXPECT_EQ(config->annotation_colors[1], Make_colorref(0xAA, 0xBB, 0xCC));
+    EXPECT_EQ(config->highlighter_colors[2], Make_colorref(0xDD, 0xEE, 0xFF));
+    EXPECT_EQ(config->padding_color, Make_colorref(0x0A, 0x0B, 0x0C));
+}
+
+TEST(app_config_json, ParseWithDiagnostics_TopLevelNullAndSchemaTypeReportErrors) {
+    {
+        AppConfigParseResult const result =
+            Parse_app_config_json_with_diagnostics("null");
+
+        EXPECT_TRUE(result.Has_error());
+        ASSERT_TRUE(result.diagnostic.has_value());
+        EXPECT_THAT(result.diagnostic->message,
+                    testing::HasSubstr(L"Top-level JSON value must be an object."));
+    }
+
+    {
+        AppConfigParseResult const result =
+            Parse_app_config_json_with_diagnostics(R"json({"$schema":1})json");
+
+        EXPECT_TRUE(result.Has_error());
+        ASSERT_TRUE(result.diagnostic.has_value());
+        EXPECT_THAT(result.diagnostic->message, testing::HasSubstr(L"$schema"));
+    }
+}
+
+TEST(app_config_json, ParseWithDiagnostics_RejectsMalformedSectionObjectTypes) {
+    AppConfigParseResult const result = Parse_app_config_json_with_diagnostics(R"json(
+{
+  "capture": 0,
+  "ui": 0,
+  "tools": {
+    "brush": 0,
+    "line": 0,
+    "font": 0,
+    "highlighter": 0,
+    "text": 0,
+    "bubble": 0,
+    "obfuscate": 0,
+    "colors": []
+  },
+  "save": 0
+}
+)json");
+
+    EXPECT_TRUE(result.Has_error());
+    ASSERT_TRUE(result.diagnostic.has_value());
+}
+
+TEST(app_config_json, ParseWithDiagnostics_RejectsColorSlotValueTypesAndSpellCheckUtf8Issues) {
+    {
+        AppConfigParseResult const result = Parse_app_config_json_with_diagnostics(
+            R"json({"tools":{"colors":{"0":7},"highlighter":{"colors":{"0":"#12zz34"}}}})json");
+
+        EXPECT_TRUE(result.Has_error());
+        ASSERT_TRUE(result.diagnostic.has_value());
+        EXPECT_THAT(result.diagnostic->message,
+                    testing::HasSubstr(L"tools.colors.0"));
+    }
+
+    {
+        std::string const long_tag(65u, 'a');
+        std::string const json =
+            "{\"tools\":{\"text\":{\"spell_check_languages\":[\"" + long_tag +
+            "\"]}}}";
+
+        AppConfigParseResult const result =
+            Parse_app_config_json_with_diagnostics(json);
+
+        EXPECT_TRUE(result.Has_error());
+        ASSERT_TRUE(result.diagnostic.has_value());
+        EXPECT_THAT(result.diagnostic->message,
+                    testing::HasSubstr(L"spell_check_languages"));
+    }
+
+    {
+        std::string json = "{\"tools\":{\"text\":{\"spell_check_languages\":[\"";
+        json.push_back(static_cast<char>(0x80));
+        json += "\"]}}}";
+
+        AppConfigParseResult const result =
+            Parse_app_config_json_with_diagnostics(json);
+
+        EXPECT_TRUE(result.Has_error());
+        ASSERT_TRUE(result.diagnostic.has_value());
+        EXPECT_THAT(result.diagnostic->message,
+                    testing::HasSubstr(L"spell_check_languages"));
+    }
+}
+
+TEST(app_config_json, ParseWithDiagnostics_RejectsNonStringSaveFields) {
+    AppConfigParseResult const result = Parse_app_config_json_with_diagnostics(
+        R"json({"save":{"default_save_format":5,"padding_color":5}})json");
+
+    EXPECT_TRUE(result.Has_error());
+    ASSERT_TRUE(result.diagnostic.has_value());
+    EXPECT_THAT(result.diagnostic->message,
+                testing::HasSubstr(L"default_save_format"));
+}
+
+TEST(app_config_json, Serialize_WritesUiAndToolSizeOverridesWhenNonDefault) {
+    AppConfig config{};
+    config.show_balloons = false;
+    config.show_selection_size_side_labels = false;
+    config.show_selection_size_center_label = false;
+    config.tool_size_overlay_duration_ms = 750;
+    config.brush_size = 7;
+    config.highlighter_size = 8;
+    config.highlighter_opacity_percent = 91;
+    config.highlighter_pause_straighten_ms = 500;
+    config.highlighter_pause_straighten_deadzone_px = 11;
+    config.text_size = 9;
+    config.bubble_size = 11;
+
+    std::string const json = Serialize_app_config_json(config);
+    std::optional<AppConfig> const parsed = Parse_app_config_json(json);
+
+    EXPECT_NE(json.find(R"json("ui")json"), std::string::npos);
+    EXPECT_NE(json.find(R"json("show_balloons")json"), std::string::npos);
+    EXPECT_NE(json.find(R"json("brush")json"), std::string::npos);
+    EXPECT_NE(json.find(R"json("highlighter")json"), std::string::npos);
+    EXPECT_NE(json.find(R"json("text")json"), std::string::npos);
+    EXPECT_NE(json.find(R"json("bubble")json"), std::string::npos);
+    ASSERT_TRUE(parsed.has_value());
+    EXPECT_FALSE(parsed->show_balloons);
+    EXPECT_FALSE(parsed->show_selection_size_side_labels);
+    EXPECT_FALSE(parsed->show_selection_size_center_label);
+    EXPECT_EQ(parsed->tool_size_overlay_duration_ms, 750);
+    EXPECT_EQ(parsed->brush_size, 7);
+    EXPECT_EQ(parsed->highlighter_size, 8);
+    EXPECT_EQ(parsed->highlighter_opacity_percent, 91);
+    EXPECT_EQ(parsed->highlighter_pause_straighten_ms, 500);
+    EXPECT_EQ(parsed->highlighter_pause_straighten_deadzone_px, 11);
+    EXPECT_EQ(parsed->text_size, 9);
+    EXPECT_EQ(parsed->bubble_size, 11);
+}

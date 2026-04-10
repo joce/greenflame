@@ -403,3 +403,113 @@ TEST(annotation_hit_test, AnnotationVisualBounds_VerticalLineExcludesCapExtensio
 
     EXPECT_EQ(Annotation_visual_bounds(line), (RectPx::From_ltrb(48, 10, 53, 91)));
 }
+
+TEST(annotation_hit_test, AnnotationHitsPoint_RoundFreehandSinglePointUsesCircularTip) {
+    Annotation const stroke =
+        Make_freehand(11, {{10, 10}}, StrokeStyle{.width_px = 4});
+
+    EXPECT_TRUE(Annotation_hits_point(stroke, {10, 10}));
+    EXPECT_FALSE(Annotation_hits_point(stroke, {12, 12}));
+}
+
+TEST(annotation_hit_test, AnnotationHitsPoint_EmptyFreehandMisses) {
+    Annotation const stroke = Make_freehand(12, {}, StrokeStyle{.width_px = 4});
+
+    EXPECT_FALSE(Annotation_hits_point(stroke, {10, 10}));
+}
+
+TEST(annotation_hit_test, AnnotationBoundsAndVisualBounds_ArrowIncludeHeadGeometry) {
+    Annotation const arrow = Make_line(13, {10, 10}, {50, 10}, 4, true);
+
+    RectPx const bounds = Annotation_bounds(arrow);
+    RectPx const visual = Annotation_visual_bounds(arrow);
+
+    EXPECT_TRUE(bounds.Contains({50, 10}));
+    EXPECT_TRUE(visual.Contains({50, 10}));
+    EXPECT_LE(bounds.left, visual.left);
+    EXPECT_LE(bounds.top, visual.top);
+    EXPECT_GE(bounds.right, visual.right);
+    EXPECT_GE(bounds.bottom, visual.bottom);
+}
+
+TEST(annotation_hit_test, AnnotationHitsPoint_TextWithInvalidBitmapLayoutMisses) {
+    {
+        Annotation text =
+            Make_text(14, {40, 50}, RectPx::From_ltrb(40, 50, 42, 52), std::vector<uint8_t>(16u, 0xFF));
+        auto &text_data = std::get<TextAnnotation>(text.data);
+        text_data.bitmap_row_bytes = 7;
+
+        EXPECT_FALSE(Annotation_hits_point(text, {40, 50}));
+    }
+
+    {
+        Annotation text =
+            Make_text(15, {40, 50}, RectPx::From_ltrb(40, 50, 42, 52), std::vector<uint8_t>(16u, 0xFF));
+        auto &text_data = std::get<TextAnnotation>(text.data);
+        text_data.premultiplied_bgra.resize(8u);
+
+        EXPECT_FALSE(Annotation_hits_point(text, {41, 51}));
+    }
+
+    {
+        Annotation text =
+            Make_text(16, {40, 50}, RectPx::From_ltrb(40, 50, 42, 52), std::vector<uint8_t>(16u, 0xFF));
+        EXPECT_FALSE(Annotation_hits_point(text, {42, 51}));
+    }
+}
+
+TEST(annotation_hit_test, SelectionHelpers_NormalizeBoundsIntersectAndIndex) {
+    Annotation const rect0 = Make_rectangle(1, RectPx::From_ltrb(0, 0, 11, 11), 2, true);
+    Annotation const rect1 =
+        Make_rectangle(2, RectPx::From_ltrb(5, 5, 16, 16), 2, true);
+    std::vector<Annotation> const annotations = {rect0, rect1};
+
+    AnnotationSelection const normalized =
+        Normalize_annotation_selection(annotations, AnnotationSelection{2, 1, 2, 99});
+    EXPECT_EQ(normalized, (AnnotationSelection{1, 2}));
+    EXPECT_TRUE(Selection_contains_annotation_id(normalized, 2));
+    EXPECT_FALSE(Selection_contains_annotation_id(normalized, 3));
+
+    std::optional<RectPx> const bounds =
+        Annotation_selection_bounds(annotations, normalized);
+    ASSERT_TRUE(bounds.has_value());
+    EXPECT_EQ(*bounds, (RectPx::From_ltrb(-1, -1, 17, 17)));
+
+    EXPECT_EQ(Annotation_ids_intersecting_selection_rect(
+                  annotations, RectPx::From_ltrb(14, 14, 15, 15)),
+              (AnnotationSelection{2}));
+    EXPECT_TRUE(Annotation_ids_intersecting_selection_rect(
+                    annotations, RectPx::From_ltrb(5, 5, 5, 5))
+                    .empty());
+
+    EXPECT_EQ(Index_of_topmost_annotation_at(annotations, {6, 6}),
+              std::optional<size_t>{1});
+    EXPECT_EQ(Index_of_annotation_id(annotations, 2), std::optional<size_t>{1});
+    EXPECT_EQ(Index_of_annotation_id(annotations, 7), std::nullopt);
+}
+
+TEST(annotation_hit_test, HitTestRectangleResizeHandles_HiddenSideHandleDoesNotHit) {
+    EXPECT_EQ(Hit_test_rectangle_resize_handles(RectPx::From_ltrb(10, 10, 31, 31),
+                                                {20, 10}),
+              std::nullopt);
+}
+
+TEST(annotation_hit_test, ResizeRectangleFromHandle_EmptyBoundsStayEmpty) {
+    EXPECT_EQ(Resize_rectangle_from_handle(RectPx{}, SelectionHandle::TopLeft,
+                                           {10, 10}),
+              RectPx{});
+}
+
+TEST(annotation_hit_test, ResizeRectangleFromHandle_ClampsMinimumSizeForCrossedEdges) {
+    RectPx const from_top_left = Resize_rectangle_from_handle(
+        RectPx::From_ltrb(10, 10, 21, 21), SelectionHandle::TopLeft, {21, 21});
+    EXPECT_EQ(from_top_left, (RectPx::From_ltrb(20, 20, 21, 21)));
+
+    RectPx const from_left = Resize_rectangle_from_handle(
+        RectPx::From_ltrb(10, 10, 21, 21), SelectionHandle::Left, {21, 15});
+    EXPECT_EQ(from_left, (RectPx::From_ltrb(20, 10, 21, 21)));
+
+    RectPx const from_top = Resize_rectangle_from_handle(
+        RectPx::From_ltrb(10, 10, 21, 21), SelectionHandle::Top, {15, 21});
+    EXPECT_EQ(from_top, (RectPx::From_ltrb(10, 20, 21, 21)));
+}

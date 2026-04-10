@@ -567,6 +567,65 @@ TEST(annotation_tool, BubbleTool_ShowsSingleDraftAndCommitsAtLatestCursor) {
               (PointPx{60, 70}));
 }
 
+TEST(annotation_tool, BubbleTool_PressFailsWhenHostCannotBuildDraft) {
+    RecordingAnnotationToolHost host;
+    UndoStack undo_stack;
+    BubbleAnnotationTool tool;
+
+    host.bubble_build_enabled = false;
+
+    EXPECT_FALSE(tool.On_primary_press(host, {30, 40}));
+    EXPECT_FALSE(tool.Has_active_gesture());
+    EXPECT_EQ(tool.Draft_annotation(host), nullptr);
+    EXPECT_TRUE(host.committed_annotations.empty());
+    EXPECT_FALSE(tool.On_primary_release(host, undo_stack));
+}
+
+TEST(annotation_tool, BubbleTool_PointerMoveNoopsWithoutGestureAndAtSameCursor) {
+    RecordingAnnotationToolHost host;
+    BubbleAnnotationTool tool;
+
+    EXPECT_FALSE(tool.On_pointer_move(host, {10, 10}));
+
+    EXPECT_TRUE(tool.On_primary_press(host, {30, 40}));
+    EXPECT_FALSE(tool.On_pointer_move(host, {30, 40}));
+    ASSERT_NE(tool.Draft_annotation(host), nullptr);
+    EXPECT_EQ(std::get<BubbleAnnotation>(tool.Draft_annotation(host)->data).center,
+              (PointPx{30, 40}));
+}
+
+TEST(annotation_tool, BubbleTool_StrokeChangeInvalidatesCacheAndCancelResetsGesture) {
+    RecordingAnnotationToolHost host;
+    BubbleAnnotationTool tool;
+
+    EXPECT_TRUE(tool.On_primary_press(host, {30, 40}));
+    tool.On_stroke_style_changed();
+
+    ASSERT_NE(tool.Draft_annotation(host), nullptr);
+    EXPECT_EQ(std::get<BubbleAnnotation>(tool.Draft_annotation(host)->data).center,
+              (PointPx{30, 40}));
+
+    EXPECT_TRUE(tool.On_cancel(host));
+    EXPECT_FALSE(tool.Has_active_gesture());
+    EXPECT_FALSE(tool.On_cancel(host));
+    EXPECT_EQ(tool.Draft_annotation(host), nullptr);
+}
+
+TEST(annotation_tool, BubbleTool_ReleaseFailsWhenDraftCannotBeRebuilt) {
+    RecordingAnnotationToolHost host;
+    UndoStack undo_stack;
+    BubbleAnnotationTool tool;
+
+    EXPECT_TRUE(tool.On_primary_press(host, {30, 40}));
+    tool.On_stroke_style_changed();
+    host.bubble_build_enabled = false;
+
+    EXPECT_FALSE(tool.On_primary_release(host, undo_stack));
+    EXPECT_FALSE(tool.Has_active_gesture());
+    EXPECT_EQ(tool.Draft_annotation(host), nullptr);
+    EXPECT_TRUE(host.committed_annotations.empty());
+}
+
 TEST(annotation_tool, FreehandTool_Straighten_CollapsesFreehandToTwoPoints) {
     RecordingAnnotationToolHost host;
     UndoStack undo_stack;

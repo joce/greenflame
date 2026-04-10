@@ -263,8 +263,60 @@ TEST(app_controller, copy_window_uses_target_window_rect_and_copies) {
     EXPECT_THAT(result.balloon_message, HasSubstr(L"copied"));
 }
 
+TEST(app_controller, copy_window_falls_back_to_foreground_when_target_copy_fails) {
+    ControllerFixture fixture;
+    HWND const hwnd = reinterpret_cast<HWND>(static_cast<uintptr_t>(0x1112));
+    RectPx const target = RectPx::From_ltrb(10, 20, 310, 220);
+    RectPx const foreground = RectPx::From_ltrb(40, 50, 340, 250);
+
+    EXPECT_CALL(fixture.windows, Get_window_rect(hwnd)).WillOnce(Return(target));
+    EXPECT_CALL(fixture.capture, Copy_rect_to_clipboard(target, false))
+        .WillOnce(Return(false));
+    EXPECT_CALL(fixture.windows, Get_foreground_window_rect(hwnd))
+        .WillOnce(Return(foreground));
+    EXPECT_CALL(fixture.capture, Copy_rect_to_clipboard(foreground, false))
+        .WillOnce(Return(true));
+
+    ClipboardCopyResult const result =
+        fixture.controller.On_copy_window_to_clipboard_requested(hwnd);
+    EXPECT_TRUE(result.success);
+}
+
+TEST(app_controller,
+     copy_window_falls_back_to_window_under_cursor_when_foreground_unavailable) {
+    ControllerFixture fixture;
+    RectPx const fallback = RectPx::From_ltrb(100, 120, 220, 240);
+
+    EXPECT_CALL(fixture.windows, Get_foreground_window_rect(nullptr))
+        .WillOnce(Return(std::nullopt));
+    EXPECT_CALL(fixture.display, Get_cursor_pos_px())
+        .WillOnce(Return(PointPx{150, 160}));
+    EXPECT_CALL(fixture.windows, Get_window_rect_under_cursor(_, nullptr))
+        .WillOnce(Return(fallback));
+    EXPECT_CALL(fixture.capture, Copy_rect_to_clipboard(fallback, false))
+        .WillOnce(Return(true));
+
+    ClipboardCopyResult const result =
+        fixture.controller.On_copy_window_to_clipboard_requested(nullptr);
+    EXPECT_TRUE(result.success);
+}
+
 TEST(app_controller, copy_last_region_without_state_returns_warning) {
     ControllerFixture fixture;
+
+    ClipboardCopyResult const result =
+        fixture.controller.On_copy_last_region_to_clipboard_requested();
+    EXPECT_FALSE(result.success);
+    EXPECT_THAT(result.balloon_message, HasSubstr(L"No previously captured region"));
+}
+
+TEST(app_controller, copy_last_region_returns_warning_when_clipboard_copy_fails) {
+    ControllerFixture fixture;
+    RectPx const rect = RectPx::From_ltrb(0, 0, 100, 100);
+    std::ignore = fixture.controller.On_selection_copied_to_clipboard(rect, std::nullopt);
+
+    EXPECT_CALL(fixture.capture, Copy_rect_to_clipboard(rect, false))
+        .WillOnce(Return(false));
 
     ClipboardCopyResult const result =
         fixture.controller.On_copy_last_region_to_clipboard_requested();
@@ -305,6 +357,47 @@ TEST(app_controller, copy_last_window_requeries_and_copies) {
     EXPECT_TRUE(result.success);
 }
 
+TEST(app_controller, copy_last_window_clears_invalid_saved_handle) {
+    ControllerFixture fixture;
+    HWND const hwnd = reinterpret_cast<HWND>(static_cast<uintptr_t>(0x3334));
+    RectPx const saved = RectPx::From_ltrb(1, 2, 51, 52);
+    std::ignore = fixture.controller.On_selection_copied_to_clipboard(saved, hwnd);
+
+    EXPECT_CALL(fixture.windows, Is_window_valid(hwnd)).WillOnce(Return(false));
+
+    ClipboardCopyResult const first =
+        fixture.controller.On_copy_last_window_to_clipboard_requested();
+    EXPECT_FALSE(first.success);
+    EXPECT_THAT(first.balloon_message, HasSubstr(L"no longer available"));
+
+    ClipboardCopyResult const second =
+        fixture.controller.On_copy_last_window_to_clipboard_requested();
+    EXPECT_FALSE(second.success);
+    EXPECT_THAT(second.balloon_message, HasSubstr(L"No previously captured window"));
+}
+
+TEST(app_controller, copy_last_window_clears_saved_handle_when_rect_lookup_fails) {
+    ControllerFixture fixture;
+    HWND const hwnd = reinterpret_cast<HWND>(static_cast<uintptr_t>(0x3335));
+    RectPx const saved = RectPx::From_ltrb(1, 2, 51, 52);
+    std::ignore = fixture.controller.On_selection_copied_to_clipboard(saved, hwnd);
+
+    EXPECT_CALL(fixture.windows, Is_window_valid(hwnd)).WillOnce(Return(true));
+    EXPECT_CALL(fixture.windows, Is_window_minimized(hwnd)).WillOnce(Return(false));
+    EXPECT_CALL(fixture.windows, Get_window_rect(hwnd))
+        .WillOnce(Return(std::nullopt));
+
+    ClipboardCopyResult const first =
+        fixture.controller.On_copy_last_window_to_clipboard_requested();
+    EXPECT_FALSE(first.success);
+    EXPECT_THAT(first.balloon_message, HasSubstr(L"no longer available"));
+
+    ClipboardCopyResult const second =
+        fixture.controller.On_copy_last_window_to_clipboard_requested();
+    EXPECT_FALSE(second.success);
+    EXPECT_THAT(second.balloon_message, HasSubstr(L"No previously captured window"));
+}
+
 TEST(app_controller, copy_monitor_uses_cursor_monitor_bounds) {
     ControllerFixture fixture;
     MonitorWithBounds monitor0{};
@@ -322,6 +415,21 @@ TEST(app_controller, copy_monitor_uses_cursor_monitor_bounds) {
     ClipboardCopyResult const result =
         fixture.controller.On_copy_monitor_to_clipboard_requested();
     EXPECT_TRUE(result.success);
+}
+
+TEST(app_controller, copy_monitor_returns_empty_when_cursor_is_outside_all_monitors) {
+    ControllerFixture fixture;
+    MonitorWithBounds monitor{};
+    monitor.bounds = RectPx::From_ltrb(0, 0, 100, 100);
+
+    EXPECT_CALL(fixture.display, Get_monitors_with_bounds())
+        .WillOnce(Return(std::vector<MonitorWithBounds>{monitor}));
+    EXPECT_CALL(fixture.display, Get_cursor_pos_px())
+        .WillOnce(Return(PointPx{200, 200}));
+
+    ClipboardCopyResult const result =
+        fixture.controller.On_copy_monitor_to_clipboard_requested();
+    EXPECT_FALSE(result.success);
 }
 
 TEST(app_controller, copy_desktop_uses_virtual_desktop_bounds) {

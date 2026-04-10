@@ -1,3 +1,4 @@
+#include "fake_spell_check_service.h"
 #include "fake_text_layout_engine.h"
 #include "greenflame_core/modification_command.h"
 #include "greenflame_core/monitor_rules.h"
@@ -38,6 +39,124 @@ std::vector<MonitorWithBounds> Triple_with_left_monitor() {
     return {Make_monitor(-1920, 0, 1920, 1080), Make_monitor(0, 0, 1920, 1080),
             Make_monitor(1920, 0, 1920, 1080)};
 }
+
+struct FakeObfuscateSourceProvider final : public IObfuscateSourceProvider {
+    [[nodiscard]] std::optional<BgraBitmap>
+    Build_composited_source(RectPx bounds,
+                            std::span<const Annotation> /*lower_annotations*/) override {
+        RectPx const normalized_bounds = bounds.Normalized();
+        if (normalized_bounds.Is_empty()) {
+            return std::nullopt;
+        }
+
+        int32_t const width = normalized_bounds.Width();
+        int32_t const height = normalized_bounds.Height();
+        int32_t const row_bytes = width * 4;
+        return BgraBitmap{
+            .width_px = width,
+            .height_px = height,
+            .row_bytes = row_bytes,
+            .premultiplied_bgra = std::vector<uint8_t>(
+                static_cast<size_t>(row_bytes) * static_cast<size_t>(height), 0xCC),
+        };
+    }
+};
+
+class OpaqueTextLayoutEngine final : public ITextLayoutEngine {
+  public:
+    [[nodiscard]] int32_t Line_ascent(TextAnnotationBaseStyle const &) override {
+        return 0;
+    }
+
+    [[nodiscard]] DraftTextLayoutResult Build_draft_layout(TextDraftBuffer const &buf,
+                                                           PointPx origin) override {
+        constexpr int32_t char_width_px = 10;
+        constexpr int32_t line_height_px = 20;
+
+        std::wstring const text = Flatten_text(buf.runs);
+        DraftTextLayoutResult result{};
+        std::vector<int32_t> const starts = Line_starts(text);
+
+        int32_t max_line_length = 0;
+        for (int32_t const start : starts) {
+            max_line_length = std::max(max_line_length, Line_end(text, start) - start);
+        }
+        if (!text.empty()) {
+            result.visual_bounds = RectPx::From_ltrb(
+                origin.x, origin.y, origin.x + max_line_length * char_width_px,
+                origin.y + static_cast<int32_t>(starts.size()) * line_height_px);
+        }
+
+        int32_t const active_line =
+            Line_index_for_offset(text, buf.selection.active_utf16);
+        int32_t const active_column = std::clamp(buf.selection.active_utf16, 0,
+                                                 static_cast<int32_t>(text.size())) -
+                                      starts[static_cast<size_t>(active_line)];
+        int32_t const caret_left = origin.x + active_column * char_width_px;
+        int32_t const caret_top = origin.y + active_line * line_height_px;
+        result.caret_rect = RectPx::From_ltrb(caret_left, caret_top, caret_left + 1,
+                                              caret_top + line_height_px);
+        result.overwrite_caret_rect =
+            RectPx::From_ltrb(caret_left, caret_top, caret_left + char_width_px,
+                              caret_top + line_height_px);
+        result.preferred_x_px = active_column * char_width_px;
+        return result;
+    }
+
+    [[nodiscard]] int32_t Hit_test_point(TextDraftBuffer const &buf, PointPx origin,
+                                         PointPx point) override {
+        constexpr int32_t char_width_px = 10;
+        constexpr int32_t line_height_px = 20;
+
+        std::wstring const text = Flatten_text(buf.runs);
+        std::vector<int32_t> const starts = Line_starts(text);
+        int32_t const line = std::clamp((point.y - origin.y) / line_height_px, 0,
+                                        static_cast<int32_t>(starts.size()) - 1);
+        int32_t const line_start = starts[static_cast<size_t>(line)];
+        int32_t const line_end = Line_end(text, line_start);
+        int32_t const column = std::max(0, (point.x - origin.x) / char_width_px);
+        return std::clamp(line_start + column, line_start, line_end);
+    }
+
+    [[nodiscard]] int32_t Move_vertical(TextDraftBuffer const &buf, PointPx origin,
+                                        int32_t offset, int delta_lines,
+                                        int32_t preferred_x_px) override {
+        constexpr int32_t char_width_px = 10;
+        (void)origin;
+
+        std::wstring const text = Flatten_text(buf.runs);
+        std::vector<int32_t> const starts = Line_starts(text);
+        int32_t const current_line = Line_index_for_offset(text, offset);
+        int32_t const target_line = std::clamp(current_line + delta_lines, 0,
+                                               static_cast<int32_t>(starts.size()) - 1);
+        int32_t const column = std::max(0, preferred_x_px / char_width_px);
+        int32_t const line_start = starts[static_cast<size_t>(target_line)];
+        return std::clamp(line_start + column, line_start, Line_end(text, line_start));
+    }
+
+    void Rasterize(TextAnnotation &annotation) override {
+        annotation.bitmap_width_px = std::max(0, annotation.visual_bounds.Width());
+        annotation.bitmap_height_px = std::max(0, annotation.visual_bounds.Height());
+        annotation.bitmap_row_bytes = annotation.bitmap_width_px * 4;
+        annotation.premultiplied_bgra.assign(
+            static_cast<size_t>(annotation.bitmap_row_bytes) *
+                static_cast<size_t>(annotation.bitmap_height_px),
+            0);
+        for (size_t index = 3; index < annotation.premultiplied_bgra.size();
+             index += 4u) {
+            annotation.premultiplied_bgra[index] = 255u;
+        }
+    }
+
+    void Rasterize_bubble(BubbleAnnotation &annotation) override {
+        int32_t const diameter = annotation.diameter_px;
+        annotation.bitmap_width_px = diameter;
+        annotation.bitmap_height_px = diameter;
+        annotation.bitmap_row_bytes = diameter * 4;
+        annotation.premultiplied_bgra.assign(
+            static_cast<size_t>(diameter) * static_cast<size_t>(diameter) * 4u, 0);
+    }
+};
 
 OverlayController
 Make_controller(std::vector<MonitorWithBounds> monitors = Single_monitor()) {
@@ -2056,4 +2175,227 @@ TEST(overlay_controller,
               OverlayAction::InvalidateFrozenCache);
     EXPECT_TRUE(c.Should_show_annotation_toolbar());
     EXPECT_TRUE(c.Can_interact_with_annotation_toolbar());
+}
+
+TEST(overlay_controller,
+     DirectToolSelectionAndToolbarViews_RequireCaptureSelection) {
+    auto c = Make_controller();
+
+    EXPECT_TRUE(c.Build_annotation_toolbar_button_views().empty());
+    EXPECT_EQ(c.On_select_annotation_tool(AnnotationToolId::Text),
+              OverlayAction::None);
+
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+
+    std::vector<AnnotationToolbarButtonView> const inactive_views =
+        c.Build_annotation_toolbar_button_views();
+    ASSERT_EQ(inactive_views.size(), 11u);
+    EXPECT_FALSE(inactive_views.empty());
+
+    EXPECT_EQ(c.On_select_annotation_tool(AnnotationToolId::Text),
+              OverlayAction::Repaint);
+    EXPECT_EQ(c.Active_annotation_tool(),
+              std::optional<AnnotationToolId>{AnnotationToolId::Text});
+
+    std::vector<AnnotationToolbarButtonView> const active_views =
+        c.Build_annotation_toolbar_button_views();
+    auto const it = std::find_if(
+        active_views.begin(), active_views.end(),
+        [](AnnotationToolbarButtonView const &view) {
+            return view.id == AnnotationToolId::Text;
+        });
+    ASSERT_NE(it, active_views.end());
+    EXPECT_TRUE(it->active);
+
+    EXPECT_EQ(c.On_select_annotation_tool(AnnotationToolId::Text),
+              OverlayAction::Repaint);
+    EXPECT_EQ(c.Active_annotation_tool(), std::nullopt);
+}
+
+TEST(overlay_controller,
+     SetterWrappers_UpdateFontsColorsAndHighlighterOpacity) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+
+    c.Set_text_current_font(TextFontChoice::Mono);
+    c.Set_bubble_current_font(TextFontChoice::Art);
+    c.Set_brush_annotation_color(RGB(0x11, 0x22, 0x33));
+
+    EXPECT_EQ(c.Text_current_font(), TextFontChoice::Mono);
+    EXPECT_EQ(c.Bubble_current_font(), TextFontChoice::Art);
+    EXPECT_EQ(c.Brush_annotation_color(), RGB(0x11, 0x22, 0x33));
+
+    ASSERT_EQ(c.On_select_annotation_tool(AnnotationToolId::Freehand),
+              OverlayAction::Repaint);
+    c.Set_annotation_color(RGB(0x44, 0x55, 0x66));
+    EXPECT_EQ(c.Annotation_color(), RGB(0x44, 0x55, 0x66));
+    EXPECT_EQ(c.Brush_annotation_color(), RGB(0x44, 0x55, 0x66));
+
+    ASSERT_EQ(c.On_select_annotation_tool(AnnotationToolId::Highlighter),
+              OverlayAction::Repaint);
+    c.Set_annotation_color(RGB(0x77, 0x88, 0x99));
+    EXPECT_EQ(c.Annotation_color(), RGB(0x77, 0x88, 0x99));
+    EXPECT_EQ(c.Highlighter_color(), RGB(0x77, 0x88, 0x99));
+
+    c.Set_highlighter_color(RGB(0xAA, 0xBB, 0xCC));
+    EXPECT_EQ(c.Highlighter_color(), RGB(0xAA, 0xBB, 0xCC));
+
+    c.Set_highlighter_opacity_percent(StrokeStyle::kMaxOpacityPercent + 10);
+    EXPECT_EQ(c.Highlighter_opacity_percent(), StrokeStyle::kMaxOpacityPercent);
+}
+
+TEST(overlay_controller, SpellCheckService_IsUsedByTextDrafts) {
+    auto c = Make_controller();
+    FakeTextLayoutEngine engine;
+    FakeSpellCheckService spell_service;
+    spell_service.errors_to_return = {SpellError{0, 4}};
+    c.Set_text_layout_engine(&engine);
+    c.Set_spell_check_service(&spell_service);
+
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+    ASSERT_EQ(c.On_select_annotation_tool(AnnotationToolId::Text),
+              OverlayAction::Repaint);
+    ASSERT_EQ(Press(c, {140, 140}), OverlayAction::Repaint);
+    ASSERT_TRUE(c.Has_active_text_edit());
+
+    c.Active_text_edit()->On_text_input(L"helo");
+    TextDraftView const view = c.Active_text_edit()->Build_view();
+    ASSERT_EQ(view.spell_errors.size(), 1u);
+    EXPECT_EQ(view.spell_errors[0].start_utf16, 0);
+    EXPECT_EQ(view.spell_errors[0].length_utf16, 4);
+}
+
+TEST(overlay_controller,
+     DeleteSelectedAnnotation_WrapperInvalidatesFrozenCacheAndUndoRedoWorks) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+
+    ASSERT_EQ(c.On_select_annotation_tool(AnnotationToolId::FilledRectangle),
+              OverlayAction::Repaint);
+    ASSERT_EQ(Press(c, {120, 120}), OverlayAction::Repaint);
+    ASSERT_EQ(Move(c, {170, 170}), OverlayAction::Repaint);
+    ASSERT_EQ(Release(c, {170, 170}), OverlayAction::InvalidateFrozenCache);
+    ASSERT_EQ(c.Annotations().size(), 1u);
+
+    ASSERT_EQ(c.On_select_annotation_tool(AnnotationToolId::FilledRectangle),
+              OverlayAction::Repaint);
+    ASSERT_EQ(Press(c, {140, 140}), OverlayAction::Repaint);
+    ASSERT_EQ(Release(c, {140, 140}), OverlayAction::None);
+    EXPECT_EQ(c.Selected_annotation_count(), 1u);
+
+    EXPECT_EQ(c.On_delete_selected_annotation(),
+              OverlayAction::InvalidateFrozenCache);
+    EXPECT_TRUE(c.Annotations().empty());
+
+    c.Undo();
+    ASSERT_EQ(c.Annotations().size(), 1u);
+    EXPECT_EQ(c.Selected_annotation_count(), 1u);
+
+    c.Redo();
+    EXPECT_TRUE(c.Annotations().empty());
+}
+
+TEST(overlay_controller,
+     PrimaryDoublePress_BeginsTextEditForSelectedTextAnnotation) {
+    auto c = Make_controller();
+    OpaqueTextLayoutEngine engine;
+    c.Set_text_layout_engine(&engine);
+
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+    ASSERT_EQ(c.On_select_annotation_tool(AnnotationToolId::Text),
+              OverlayAction::Repaint);
+    ASSERT_EQ(Press(c, {140, 140}), OverlayAction::Repaint);
+    ASSERT_TRUE(c.Has_active_text_edit());
+    c.Active_text_edit()->On_text_input(L"abc");
+    ASSERT_TRUE(c.Commit_active_text_edit());
+    ASSERT_EQ(c.Annotations().size(), 1u);
+    TextAnnotation const &annotation = std::get<TextAnnotation>(c.Annotations()[0].data);
+    PointPx const click_point{annotation.visual_bounds.left + 1,
+                              annotation.visual_bounds.top + 1};
+
+    ASSERT_EQ(c.On_select_annotation_tool(AnnotationToolId::Text),
+              OverlayAction::Repaint);
+    ASSERT_TRUE(c.Has_annotation_at(click_point));
+    ASSERT_EQ(Press(c, click_point), OverlayAction::Repaint);
+    std::ignore = Release(c, click_point);
+    ASSERT_EQ(c.Selected_annotation_count(), 1u);
+
+    EXPECT_EQ(c.On_primary_double_press(click_point),
+              OverlayAction::InvalidateFrozenCache);
+    EXPECT_TRUE(c.Has_active_text_edit());
+    EXPECT_TRUE(c.Editing_annotation_id().has_value());
+}
+
+TEST(overlay_controller,
+     HighlighterDraftWrappers_ExposeSmoothingStyleAndStraighten) {
+    auto c = Make_controller();
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+
+    ASSERT_EQ(c.On_select_annotation_tool(AnnotationToolId::Highlighter),
+              OverlayAction::Repaint);
+    ASSERT_EQ(Press(c, {120, 120}), OverlayAction::Repaint);
+    ASSERT_EQ(Move(c, {140, 130}), OverlayAction::Repaint);
+    ASSERT_EQ(Move(c, {160, 150}), OverlayAction::Repaint);
+
+    std::optional<StrokeStyle> const style = c.Draft_freehand_style();
+    ASSERT_TRUE(style.has_value());
+    EXPECT_EQ(style->opacity_percent, c.Highlighter_opacity_percent());
+    EXPECT_EQ(c.Draft_freehand_smoothing_mode(),
+              FreehandSmoothingMode::Smooth);
+    ASSERT_GT(c.Draft_freehand_points().size(), 2u);
+
+    EXPECT_TRUE(c.Straighten_highlighter_stroke());
+    ASSERT_EQ(c.Draft_freehand_points().size(), 2u);
+    EXPECT_EQ(c.Draft_freehand_points().front(), (PointPx{120, 120}));
+    EXPECT_EQ(c.Draft_freehand_points().back(), (PointPx{160, 150}));
+}
+
+TEST(overlay_controller,
+     HitTargetBoundsAndObfuscatePreviewWrappersReflectSelectionState) {
+    auto c = Make_controller();
+    FakeObfuscateSourceProvider source_provider;
+    c.Set_obfuscate_source_provider(&source_provider);
+
+    Press(c, {100, 100});
+    Release(c, {300, 300});
+
+    ASSERT_EQ(c.On_select_annotation_tool(AnnotationToolId::Line),
+              OverlayAction::Repaint);
+    ASSERT_EQ(Press(c, {140, 140}), OverlayAction::Repaint);
+    ASSERT_EQ(Move(c, {220, 180}), OverlayAction::Repaint);
+    ASSERT_EQ(Release(c, {220, 180}), OverlayAction::InvalidateFrozenCache);
+    ASSERT_EQ(c.On_select_annotation_tool(AnnotationToolId::Line),
+              OverlayAction::Repaint);
+
+    ASSERT_EQ(Press(c, {180, 160}), OverlayAction::Repaint);
+    ASSERT_EQ(Release(c, {180, 160}), OverlayAction::None);
+    EXPECT_TRUE(c.Has_annotation_at({180, 160}));
+    EXPECT_TRUE(c.Selected_annotation_bounds().has_value());
+    EXPECT_EQ(
+        c.Annotation_edit_target_at({140, 140}),
+        (std::optional<AnnotationEditTarget>{AnnotationEditTarget{
+            1, AnnotationEditTargetKind::LineStartHandle}}));
+
+    ASSERT_EQ(c.On_select_annotation_tool(AnnotationToolId::Obfuscate),
+              OverlayAction::Repaint);
+    ASSERT_EQ(Press(c, {210, 210}), OverlayAction::Repaint);
+    ASSERT_EQ(Move(c, {250, 250}), OverlayAction::Repaint);
+    ASSERT_EQ(Release(c, {250, 250}), OverlayAction::InvalidateFrozenCache);
+    ASSERT_EQ(c.On_select_annotation_tool(AnnotationToolId::Obfuscate),
+              OverlayAction::Repaint);
+
+    ASSERT_EQ(Press(c, {220, 220}), OverlayAction::Repaint);
+    ASSERT_EQ(Release(c, {220, 220}), OverlayAction::None);
+    EXPECT_TRUE(c.Active_obfuscate_preview_indices().empty());
+
+    ASSERT_EQ(Press(c, {220, 220}), OverlayAction::Repaint);
+    ASSERT_EQ(Move(c, {240, 240}), OverlayAction::Repaint);
+    EXPECT_EQ(c.Active_obfuscate_preview_indices(), (std::vector<size_t>{1}));
+    EXPECT_EQ(Release(c, {240, 240}), OverlayAction::InvalidateFrozenCache);
 }

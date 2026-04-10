@@ -306,3 +306,82 @@ TEST(text_rtf, Decode_Uc0_ZeroReplacementChars) {
     EXPECT_EQ(text[1], L'?');      // not skipped (uc_count = 0)
     EXPECT_EQ(text[2], L'e');
 }
+
+TEST(text_rtf, Encode_Tab_RoundTrips) {
+    std::vector<TextRun> const runs = {Plain(L"a\tb")};
+    std::string const encoded = Encode_rtf(runs);
+    EXPECT_NE(encoded.find("\\tab "), std::string::npos);
+
+    std::vector<TextRun> const decoded = Decode_rtf(encoded);
+    ASSERT_EQ(decoded.size(), 1u);
+    EXPECT_EQ(decoded[0].text, L"a\tb");
+}
+
+TEST(text_rtf, Decode_TooLargeInput_ReturnsEmpty) {
+    std::string rtf = "{\\rtf1 ";
+    rtf.append((4 * 1024 * 1024) + 1, 'a');
+    rtf += "}";
+
+    EXPECT_TRUE(Decode_rtf(rtf).empty());
+}
+
+TEST(text_rtf, Decode_ExcessiveGroupDepth_ReturnsEmpty) {
+    std::string rtf = "{\\rtf1";
+    rtf.append(201, '{');
+    rtf.append(201, '}');
+    rtf += "}";
+
+    EXPECT_TRUE(Decode_rtf(rtf).empty());
+}
+
+TEST(text_rtf, Decode_HeaderDestinationWithLeadingSpaces_IsSkipped) {
+    std::string const rtf =
+        "{\\rtf1{   \\fonttbl{\\f0\\fnil Segoe UI;}}\\pard content}";
+
+    std::vector<TextRun> const runs = Decode_rtf(rtf);
+    ASSERT_FALSE(runs.empty());
+
+    std::wstring combined;
+    for (TextRun const &run : runs) {
+        combined += run.text;
+    }
+
+    EXPECT_EQ(combined.find(L"Segoe"), std::wstring::npos);
+    EXPECT_NE(combined.find(L"content"), std::wstring::npos);
+}
+
+TEST(text_rtf, Decode_BackslashNewlineIsIgnored) {
+    std::string const rtf = "{\\rtf1\\pard one\\\n two}";
+
+    std::vector<TextRun> const runs = Decode_rtf(rtf);
+    ASSERT_EQ(runs.size(), 1u);
+    EXPECT_EQ(runs[0].text, L"one two");
+}
+
+TEST(text_rtf, Decode_ControlEscapesForSpacingAndTabVariants) {
+    std::string const rtf = "{\\rtf1\\pard a\\~b\\_c\\-d\\line e\\tab f}";
+
+    std::vector<TextRun> const runs = Decode_rtf(rtf);
+    ASSERT_EQ(runs.size(), 1u);
+    EXPECT_EQ(runs[0].text, L"a\u00A0b\u2011cd\ne\tf");
+}
+
+TEST(text_rtf, Decode_HexEscapesAcceptLowerAndUppercaseDigits) {
+    std::string const rtf = "{\\rtf1\\pard \\'e9\\'C4}";
+
+    std::vector<TextRun> const runs = Decode_rtf(rtf);
+    ASSERT_EQ(runs.size(), 1u);
+    EXPECT_EQ(runs[0].text, L"\u00E9\u00C4");
+}
+
+TEST(text_rtf, Decode_StrikedVariantAndUnknownSingleCharEscape) {
+    std::string const rtf =
+        "{\\rtf1\\pard \\striked1 struck\\striked0 \\:plain}";
+
+    std::vector<TextRun> const runs = Decode_rtf(rtf);
+    ASSERT_GE(runs.size(), 2u);
+    EXPECT_TRUE(runs[0].flags.strikethrough);
+    EXPECT_EQ(runs[0].text, L"struck");
+    EXPECT_FALSE(runs.back().flags.strikethrough);
+    EXPECT_EQ(runs.back().text, L"plain");
+}

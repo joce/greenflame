@@ -89,6 +89,27 @@ jobs:
       - name: Test
         run: ctest --test-dir build/x64-release --output-on-failure
 
+      - name: Package release assets
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $distRoot = Join-Path $env:GITHUB_WORKSPACE 'dist'
+          $skillSourceDir = Join-Path $env:GITHUB_WORKSPACE 'skills\greenflame'
+          $skillZipPath = Join-Path $distRoot "greenflame-skill-$tag.zip"
+
+          if (Test-Path -LiteralPath $distRoot) {
+            Remove-Item -LiteralPath $distRoot -Recurse -Force
+          }
+
+          if (-not (Test-Path -LiteralPath $skillSourceDir)) {
+            throw "Missing skill directory at $skillSourceDir"
+          }
+
+          New-Item -ItemType Directory -Path $distRoot -Force | Out-Null
+          Compress-Archive -LiteralPath $skillSourceDir -DestinationPath $skillZipPath -Force
+
+          "SKILL_RELEASE_ASSET=dist/greenflame-skill-$tag.zip" >> $env:GITHUB_ENV
+
       - name: Create GitHub Release
         shell: bash
         run: |
@@ -108,6 +129,7 @@ jobs:
             --title "Greenflame ${{ env.PRODUCT_VERSION }}" \
             $notes_flag \
             $prerelease_flag \
-            build/x64-release/greenflame.exe
+            build/x64-release/greenflame.exe \
+            "${{ env.SKILL_RELEASE_ASSET }}"
         env:
           GH_TOKEN: ${{ github.token }}

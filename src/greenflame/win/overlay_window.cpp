@@ -256,12 +256,14 @@ Capture_bounds_screen(greenflame::core::PointPx origin,
         }
     }
 
-    if (include_captured_cursor && captured_cursor.has_value() &&
-        captured_cursor->Is_valid() &&
-        !greenflame::Composite_cursor_snapshot(*captured_cursor, capture_origin_px,
-                                               display_capture)) {
-        display_capture.Free();
-        return false;
+    if (include_captured_cursor && captured_cursor.has_value()) {
+        auto const &captured_cursor_value = captured_cursor.value();
+        if (captured_cursor_value.Is_valid() &&
+            !greenflame::Composite_cursor_snapshot(
+                captured_cursor_value, capture_origin_px, display_capture)) {
+            display_capture.Free();
+            return false;
+        }
     }
 
     return true;
@@ -825,8 +827,18 @@ bool OverlayWindow::Is_captured_cursor_visible() const noexcept {
 }
 
 bool OverlayWindow::Current_capture_has_captured_cursor() const noexcept {
-    return resources_ != nullptr && resources_->captured_cursor.has_value() &&
-           resources_->captured_cursor->Is_valid();
+    if (resources_ == nullptr) {
+        return false;
+    }
+
+    std::optional<CapturedCursorSnapshot> const &captured_cursor =
+        resources_->captured_cursor;
+    if (!captured_cursor.has_value()) {
+        return false;
+    }
+
+    auto const &captured_cursor_value = captured_cursor.value();
+    return captured_cursor_value.Is_valid();
 }
 
 std::wstring OverlayWindow::Build_captured_cursor_tooltip() const {
@@ -3708,12 +3720,19 @@ bool OverlayWindow::Build_selection_capture(GdiCaptureResult &out) const {
     }
 
     core::RectPx const selection_screen_rect = Selection_visible_screen_rect();
-    if (Is_captured_cursor_visible() && Current_capture_has_captured_cursor() &&
-        !Composite_cursor_snapshot(
-            *resources_->captured_cursor,
-            {selection_screen_rect.left, selection_screen_rect.top}, out)) {
-        out.Free();
-        return false;
+    if (Is_captured_cursor_visible()) {
+        std::optional<CapturedCursorSnapshot> const &captured_cursor =
+            resources_->captured_cursor;
+        if (captured_cursor.has_value()) {
+            auto const &captured_cursor_value = captured_cursor.value();
+            if (captured_cursor_value.Is_valid() &&
+                !Composite_cursor_snapshot(
+                    captured_cursor_value,
+                    {selection_screen_rect.left, selection_screen_rect.top}, out)) {
+                out.Free();
+                return false;
+            }
+        }
     }
 
     return true;

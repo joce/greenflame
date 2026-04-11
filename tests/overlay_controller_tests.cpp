@@ -2338,7 +2338,11 @@ TEST(overlay_controller, HighlighterDraftWrappers_ExposeSmoothingStyleAndStraigh
 
     std::optional<StrokeStyle> const style = c.Draft_freehand_style();
     ASSERT_TRUE(style.has_value());
-    EXPECT_EQ(style->opacity_percent, c.Highlighter_opacity_percent());
+    if (!style.has_value()) {
+        return;
+    }
+    StrokeStyle const &style_value = style.value();
+    EXPECT_EQ(style_value.opacity_percent, c.Highlighter_opacity_percent());
     EXPECT_EQ(c.Draft_freehand_smoothing_mode(), FreehandSmoothingMode::Smooth);
     ASSERT_GT(c.Draft_freehand_points().size(), 2u);
 

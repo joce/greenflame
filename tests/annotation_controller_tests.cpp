@@ -1911,10 +1911,15 @@ TEST(annotation_controller,
     std::optional<AnnotationEditPreview> const preview =
         controller.Active_annotation_edit_preview();
     ASSERT_TRUE(preview.has_value());
-    EXPECT_EQ(preview->index, 0u);
-    EXPECT_EQ(preview->annotation_before, original);
-    ASSERT_TRUE(std::holds_alternative<LineAnnotation>(preview->annotation_after.data));
-    EXPECT_EQ(std::get<LineAnnotation>(preview->annotation_after.data).end,
+    if (!preview.has_value()) {
+        return;
+    }
+    AnnotationEditPreview const &preview_value = preview.value();
+    EXPECT_EQ(preview_value.index, 0u);
+    EXPECT_EQ(preview_value.annotation_before, original);
+    ASSERT_TRUE(
+        std::holds_alternative<LineAnnotation>(preview_value.annotation_after.data));
+    EXPECT_EQ(std::get<LineAnnotation>(preview_value.annotation_after.data).end,
               (PointPx{120, 70}));
 }
 

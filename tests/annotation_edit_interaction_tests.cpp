@@ -562,11 +562,16 @@ TEST(annotation_edit_interaction,
             Hit_test_annotation_edit_target(&annotations[0], annotations,
                                             test_case.cursor);
         ASSERT_TRUE(target.has_value());
-        EXPECT_EQ(target->annotation_id, 21u);
-        EXPECT_EQ(target->kind, test_case.target_kind);
+        if (!target.has_value()) {
+            return;
+        }
+        AnnotationEditTarget const &target_value = target.value();
+        EXPECT_EQ(target_value.annotation_id, 21u);
+        EXPECT_EQ(target_value.kind, test_case.target_kind);
 
         std::unique_ptr<IAnnotationEditInteraction> interaction =
-            Create_annotation_edit_interaction(*target, 0, rectangle, test_case.cursor);
+            Create_annotation_edit_interaction(target_value, 0, rectangle,
+                                               test_case.cursor);
         ASSERT_NE(interaction, nullptr);
         EXPECT_EQ(interaction->Active_handle(),
                   std::optional<AnnotationEditHandleKind>{test_case.handle_kind});

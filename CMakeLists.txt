@@ -15,6 +15,31 @@ option(GREENFLAME_ENABLE_COVERAGE
     "Instrument greenflame_core and tests for LLVM source coverage (Clang only)"
     OFF
 )
+option(GREENFLAME_ENABLE_SUPERLUMINAL
+    "Enable Superluminal Performance API instrumentation"
+    OFF
+)
+set(GREENFLAME_SUPERLUMINAL_API_ROOT
+    "C:/Program Files/Superluminal/Performance/API"
+    CACHE PATH "Root directory of the Superluminal Performance API install"
+)
+
+if(GREENFLAME_ENABLE_SUPERLUMINAL)
+    set(greenflame_superluminal_api_root "${GREENFLAME_SUPERLUMINAL_API_ROOT}")
+    file(TO_CMAKE_PATH "${greenflame_superluminal_api_root}"
+         greenflame_superluminal_api_root)
+    list(PREPEND CMAKE_MODULE_PATH "${greenflame_superluminal_api_root}")
+    set(SuperluminalAPI_ROOT "${greenflame_superluminal_api_root}")
+    find_package(SuperluminalAPI REQUIRED)
+
+    add_library(greenflame_superluminal INTERFACE)
+    target_compile_definitions(greenflame_superluminal INTERFACE
+        GREENFLAME_ENABLE_SUPERLUMINAL=1
+    )
+    target_link_libraries(greenflame_superluminal INTERFACE
+        SuperluminalAPI
+    )
+endif()
 
 # cmake-scripts (pulled by Catch2/CPM) sets CMAKE_COMPILE_WARNING_AS_ERROR=ON
 # which adds /WX globally, breaking builds on warnings in third-party headers.
@@ -256,6 +281,12 @@ target_link_libraries(greenflame_core PRIVATE
     easyjson
 )
 
+if(GREENFLAME_ENABLE_SUPERLUMINAL)
+    target_link_libraries(greenflame_core PUBLIC
+        greenflame_superluminal
+    )
+endif()
+
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_compile_options(greenflame_core PRIVATE
         -Wall
@@ -457,6 +488,12 @@ target_link_libraries(greenflame PRIVATE
     dxguid  # CLSID_D2D1ArithmeticComposite and other D2D effect GUIDs
     windowsapp
 )
+
+if(GREENFLAME_ENABLE_SUPERLUMINAL)
+    target_link_libraries(greenflame PRIVATE
+        greenflame_superluminal
+    )
+endif()
 
 # -----------------------------
 # Link-Time Optimization (release builds only)

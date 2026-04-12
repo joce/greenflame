@@ -6,6 +6,7 @@
 #include "greenflame/win/overlay_button.h"
 #include "greenflame/win/overlay_top_layer.h"
 #include "greenflame_core/annotation_hit_test.h"
+#include "greenflame_core/profiling.h"
 #include "greenflame_core/selection_handles.h"
 #include "greenflame_core/selection_wheel.h"
 #include "win/ui_palette.h"
@@ -2729,6 +2730,7 @@ void Draw_annotations_to_rt(ID2D1RenderTarget *rt, D2DOverlayResources &res,
                             std::span<const core::Annotation> annotations,
                             std::span<const AnnotationPreviewPatch> patches,
                             std::optional<uint64_t> skip_id) {
+    GREENFLAME_PROFILE_SCOPE("D2DPaint::Draw_annotations_to_rt");
 
     auto const is_highlighter = [](core::Annotation const &ann) -> bool {
         auto const *fh = std::get_if<core::FreehandStrokeAnnotation>(&ann.data);
@@ -2756,6 +2758,8 @@ void Draw_annotations_to_rt(ID2D1RenderTarget *rt, D2DOverlayResources &res,
         auto const *const patch = find_patch(i);
         core::Annotation const &ann = patch != nullptr ? *patch : annotations[i];
         if (can_multiply && is_highlighter(ann)) {
+            GREENFLAME_PROFILE_SCOPE(
+                "D2DPaint::Draw_annotations_to_rt::Highlighter");
             auto const &fh = *std::get_if<core::FreehandStrokeAnnotation>(&ann.data);
             bool const use_cached_body =
                 Can_reuse_cached_square_commit(res, fh, i, annotations.size());
@@ -2800,6 +2804,8 @@ void Draw_annotations_to_rt(ID2D1RenderTarget *rt, D2DOverlayResources &res,
                 rt_needs_begin = true;
 
                 {
+                    GREENFLAME_PROFILE_SCOPE(
+                        "D2DPaint::Draw_annotations_to_rt::HighlighterScratch");
                     res.draft_stroke_rt->BeginDraw();
                     res.draft_stroke_rt->Clear(D2D1::ColorF(0.f, 0.f, 0.f, 0.f));
                     Draw_freehand_points(res.draft_stroke_rt.Get(), res, scratch_points,
@@ -2829,6 +2835,8 @@ void Draw_annotations_to_rt(ID2D1RenderTarget *rt, D2DOverlayResources &res,
                                                 use_cached_body);
                 Microsoft::WRL::ComPtr<ID2D1DeviceContext> dc;
                 if (SUCCEEDED(rt->QueryInterface(IID_PPV_ARGS(&dc)))) {
+                    GREENFLAME_PROFILE_SCOPE(
+                        "D2DPaint::Draw_annotations_to_rt::HighlighterComposite");
                     dc->DrawImage(res.multiply_effect.Get(), highlighter_target_offset,
                                   highlighter_rect,
                                   D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR,
@@ -2868,6 +2876,7 @@ void Rebuild_annotations_bitmap(D2DOverlayResources &res,
                                 std::span<const core::Annotation> annotations,
                                 std::span<const AnnotationPreviewPatch> patches,
                                 std::optional<uint64_t> skip_id) {
+    GREENFLAME_PROFILE_SCOPE("D2DPaint::Rebuild_annotations_bitmap");
 
     if (!res.annotations_rt) {
         return;
@@ -2888,6 +2897,7 @@ void Rebuild_annotations_bitmap(D2DOverlayResources &res,
 
 void Rebuild_frozen_bitmap(D2DOverlayResources &res, core::RectPx selection,
                            int vd_width, int vd_height) {
+    GREENFLAME_PROFILE_SCOPE("D2DPaint::Rebuild_frozen_bitmap");
 
     if (!res.frozen_rt || !res.screenshot || !res.annotations_bitmap) {
         return;

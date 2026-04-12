@@ -53,12 +53,25 @@
         "CMAKE_CXX_COMPILER": "clang-cl.exe",
         "GREENFLAME_ENABLE_COVERAGE": "ON"
       }
+    },
+    {
+      "name": "x64-release-pdb-superluminal",
+      "inherits": "x64-release-pdb",
+      "binaryDir": "${sourceDir}/build/x64-release-pdb-superluminal",
+      "cacheVariables": {
+        "GREENFLAME_ENABLE_SUPERLUMINAL": "ON",
+        "GREENFLAME_SUPERLUMINAL_API_ROOT": "C:/Program Files/Superluminal/Performance/API"
+      }
     }
   ],
   "buildPresets": [
     { "name": "x64-debug", "configurePreset": "x64-debug" },
     { "name": "x64-release", "configurePreset": "x64-release" },
     { "name": "x64-release-pdb", "configurePreset": "x64-release-pdb" },
+    {
+      "name": "x64-release-pdb-superluminal",
+      "configurePreset": "x64-release-pdb-superluminal"
+    },
     { "name": "x64-debug-clang", "configurePreset": "x64-debug-clang" },
     { "name": "x64-release-clang", "configurePreset": "x64-release-clang" },
     { "name": "x64-coverage-clang", "configurePreset": "x64-coverage-clang" }

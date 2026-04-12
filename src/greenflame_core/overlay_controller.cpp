@@ -1,5 +1,6 @@
 #include "greenflame_core/overlay_controller.h"
 
+#include "greenflame_core/profiling.h"
 #include "greenflame_core/snap_edge_builder.h"
 #include "greenflame_core/snap_to_edges.h"
 
@@ -922,6 +923,8 @@ OverlayAction OverlayController::On_pointer_move(
 
 OverlayAction OverlayController::On_primary_release(OverlayModifierState mods,
                                                     PointPx cursor_client) {
+    GREENFLAME_PROFILE_FUNCTION();
+
     bool const snap_enabled = !mods.alt;
     PointPx const clamped_cursor =
         Clamp_annotation_cursor_to_visible_selection(cursor_client);

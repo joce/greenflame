@@ -1,5 +1,7 @@
 #include "greenflame_core/freehand_annotation_tool.h"
 
+#include "greenflame_core/profiling.h"
+
 namespace greenflame::core {
 
 namespace {
@@ -69,6 +71,8 @@ bool FreehandAnnotationTool::On_pointer_move(IAnnotationToolHost &host,
 
 bool FreehandAnnotationTool::On_primary_release(IAnnotationToolHost &host,
                                                 UndoStack &undo_stack) {
+    GREENFLAME_PROFILE_FUNCTION();
+
     if (!drawing_) {
         return false;
     }
@@ -79,10 +83,19 @@ bool FreehandAnnotationTool::On_primary_release(IAnnotationToolHost &host,
         return true;
     }
 
-    Annotation annotation = Build_annotation(host, points_);
+    Annotation annotation = {};
+    {
+        GREENFLAME_PROFILE_SCOPE(
+            "FreehandAnnotationTool::On_primary_release::Build_annotation");
+        annotation = Build_annotation(host, points_);
+    }
     points_.clear();
     Invalidate_draft();
-    host.Commit_new_annotation(undo_stack, std::move(annotation));
+    {
+        GREENFLAME_PROFILE_SCOPE(
+            "FreehandAnnotationTool::On_primary_release::Commit_new_annotation");
+        host.Commit_new_annotation(undo_stack, std::move(annotation));
+    }
     return true;
 }
 

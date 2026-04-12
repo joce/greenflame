@@ -2,6 +2,7 @@
 
 #include "greenflame_core/annotation_commands.h"
 #include "greenflame_core/freehand_annotation_tool.h"
+#include "greenflame_core/profiling.h"
 #include "greenflame_core/selection_wheel.h"
 #include "greenflame_core/undo_stack.h"
 
@@ -629,6 +630,8 @@ bool AnnotationController::On_pointer_move(PointPx cursor, bool primary_down) {
 }
 
 bool AnnotationController::On_primary_release(UndoStack &undo_stack) {
+    GREENFLAME_PROFILE_FUNCTION();
+
     if (active_edit_interaction_ != nullptr) {
         std::vector<Annotation> const annotations_before = document_.annotations;
         std::vector<AnnotationEditCommandData> commands =

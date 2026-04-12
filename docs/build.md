@@ -65,6 +65,19 @@ cmake --build --preset x64-release-pdb
 
 Output: `build\x64-release-pdb\greenflame.exe` and `build\x64-release-pdb\greenflame.pdb`.
 
+## Superluminal instrumentation (optional)
+
+To enable the built-in Superluminal instrumentation, configure with:
+
+```bat
+cmake --preset x64-release-pdb-superluminal
+cmake --build --preset x64-release-pdb-superluminal
+```
+
+That preset defaults `GREENFLAME_SUPERLUMINAL_API_ROOT` to the standard Windows
+install location. If your local install lives elsewhere, override the cache variable
+on configure.
+
 ## Clang build
 
 With the Visual Studio "C++ Clang compiler for Windows" (or "Clang-cl") component installed:

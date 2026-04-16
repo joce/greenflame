@@ -165,6 +165,7 @@ bool D2DOverlayResources::Create_hwnd_rt(HWND hwnd, int width, int height) {
     // Requires ID2D1DeviceContext, available when factory is ID2D1Factory1.
     multiply_effect.Reset();
     draft_stroke_composite_effect.Reset();
+    base_composite_effect.Reset();
     Microsoft::WRL::ComPtr<ID2D1DeviceContext> dc;
     if (SUCCEEDED(hwnd_rt->QueryInterface(IID_PPV_ARGS(&dc)))) {
         Microsoft::WRL::ComPtr<ID2D1Effect> effect;
@@ -179,6 +180,11 @@ bool D2DOverlayResources::Create_hwnd_rt(HWND hwnd, int width, int height) {
                 draft_stroke_composite_effect.ReleaseAndGetAddressOf()))) {
             // Default mode is SOURCE_OVER, which is sufficient for combining
             // same-colored premultiplied coverage masks without seam darkening.
+        }
+        if (SUCCEEDED(dc->CreateEffect(
+                CLSID_D2D1Composite, base_composite_effect.ReleaseAndGetAddressOf()))) {
+            // SOURCE_OVER: composite committed annotations on top of the screenshot
+            // to form the highlighter multiply base.
         }
     }
     return true;
@@ -438,6 +444,23 @@ bool D2DOverlayResources::Create_cache_targets(int width, int height) {
         }
     }
 
+    // base_composite_bitmap: BGRA premultiplied snapshot target populated via
+    // CopyFromRenderTarget(annotations_rt) immediately before each highlighter
+    // composite, so the multiply base can include prior annotations.
+    {
+        D2D1_BITMAP_PROPERTIES pf{};
+        pf.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        pf.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+        pf.dpiX = Target_dpi();
+        pf.dpiY = Target_dpi();
+        HRESULT const hr =
+            hwnd_rt->CreateBitmap(D2D1::SizeU(uw, uh), nullptr, 0, pf,
+                                  base_composite_bitmap.ReleaseAndGetAddressOf());
+        if (FAILED(hr)) {
+            return false;
+        }
+    }
+
     annotations_valid = false;
     frozen_valid = false;
     draft_stroke_point_count = 0;
@@ -498,6 +521,7 @@ void D2DOverlayResources::Release_device_resources() {
     frozen_bitmap.Reset();
     draft_stroke_bitmap.Reset();
     draft_stroke_body_bitmap.Reset();
+    base_composite_bitmap.Reset();
     draft_stroke_point_count = 0;
     draft_stroke_body_raw_point_count = 0;
     draft_stroke_body_point_count = 0;
@@ -508,6 +532,7 @@ void D2DOverlayResources::Release_device_resources() {
     draft_stroke_bitmap_uses_cached_body = false;
     multiply_effect.Reset();
     draft_stroke_composite_effect.Reset();
+    base_composite_effect.Reset();
     solid_brush.Reset();
     round_cap_style.Reset();
     flat_cap_style.Reset();

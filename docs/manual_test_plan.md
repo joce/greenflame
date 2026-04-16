@@ -676,6 +676,26 @@ unless a real end-to-end bug escapes into the Win32 shell:
   - A straightened highlighter stroke exposes draggable start and end handles in default mode, and dragging either handle reshapes only that endpoint.
   - Both strokes can be moved in default mode.
 
+### GF-MAN-ANN-002B - Highlighter Composes Over Prior Annotations
+
+- Priority: `P1`
+- Run on: `ENV-A`
+- Steps:
+  1. Create a selection over detailed content.
+  2. Draw a filled red arrow and a non-highlighter brush stroke inside the selection.
+  3. Activate the Highlighter tool and draw a highlighter stroke that crosses both
+     the arrow and the brush stroke.
+  4. Draw a second highlighter stroke that overlaps the first highlighter stroke.
+  5. Save or copy the capture and inspect the exported output.
+- Expected:
+  - Where the highlighter overlaps the arrow or the brush stroke, the arrow and brush
+    pixels remain visible, tinted by the highlighter color (multiply over the
+    underlying annotation), rather than being replaced by a flat tint of the raw
+    screenshot.
+  - Where one highlighter overlaps another, the overlap multiplies through both
+    tints and the prior annotations underneath.
+  - The exported image shows the same composed result as the overlay preview.
+
 ### GF-MAN-ANN-002A - Bubble Tool Placement, Drag Preview, And Editing
 
 - Priority: `P1`

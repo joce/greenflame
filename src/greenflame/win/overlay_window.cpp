@@ -3948,7 +3948,8 @@ LRESULT OverlayWindow::On_paint() {
                         if (index >= controller_.Annotations().size()) continue;
 
                         // Build lower-annotations span with already-computed patches
-                        // applied for correct stacking when multiple obfuscates overlap.
+                        // applied for correct stacking when multiple obfuscates
+                        // overlap.
                         std::span<const core::Annotation> lower_span =
                             controller_.Annotations().first(index);
                         std::vector<core::Annotation> lower_scratch;
@@ -4209,10 +4210,9 @@ LRESULT OverlayWindow::On_paint() {
         bool ok = true;
         {
             GREENFLAME_PROFILE_SCOPE("OverlayWindow::On_paint::Paint_d2d_frame");
-            ok = Paint_d2d_frame(*d2d_resources_, input,
-                                 resources_->display_capture.width,
-                                 resources_->display_capture.height,
-                                 Active_top_layer());
+            ok = Paint_d2d_frame(
+                *d2d_resources_, input, resources_->display_capture.width,
+                resources_->display_capture.height, Active_top_layer());
         }
         if (!ok) {
             Handle_device_loss();

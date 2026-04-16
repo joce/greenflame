@@ -2586,7 +2586,17 @@ void Draw_live_annotation_draft(ID2D1RenderTarget *rt, D2DOverlayResources &res,
                                                    0.0f, 0.0f, 0.0f};
                     (void)res.multiply_effect->SetValue(
                         D2D1_ARITHMETICCOMPOSITE_PROP_COEFFICIENTS, coeffs);
-                    res.multiply_effect->SetInput(0, res.screenshot.Get());
+                    // Base = screenshot + committed annotations, so a live highlighter
+                    // multiplies the current composite (not just the raw screenshot).
+                    if (res.base_composite_effect && res.annotations_bitmap) {
+                        res.base_composite_effect->SetInput(0, res.screenshot.Get());
+                        res.base_composite_effect->SetInput(
+                            1, res.annotations_bitmap.Get());
+                        res.multiply_effect->SetInputEffect(
+                            0, res.base_composite_effect.Get());
+                    } else {
+                        res.multiply_effect->SetInput(0, res.screenshot.Get());
+                    }
                     Set_live_square_draft_mask_input(res.multiply_effect.Get(), res);
                     dc->DrawImage(res.multiply_effect.Get());
                 } else {
@@ -2786,22 +2796,33 @@ void Draw_annotations_to_rt(ID2D1RenderTarget *rt, D2DOverlayResources &res,
             bool rt_needs_begin = false;
             Microsoft::WRL::ComPtr<ID2D1Bitmap> stroke_bmp;
             bool const needs_scratch = !cached_body_covers_annotation;
-            if (needs_scratch) {
-                // Suspend rt so draft_stroke_rt can be used as scratch.
-                if (FAILED(rt->EndDraw())) {
-                    rt->BeginDraw();
-                    continue;
-                }
-                rt_needs_begin = true;
 
-                {
-                    GREENFLAME_PROFILE_SCOPE(
-                        "D2DPaint::Draw_annotations_to_rt::HighlighterScratch");
-                    res.draft_stroke_rt->BeginDraw();
-                    res.draft_stroke_rt->Clear(D2D1::ColorF(0.f, 0.f, 0.f, 0.f));
-                    Draw_freehand_points(res.draft_stroke_rt.Get(), res, scratch_points,
-                                         scratch_style, fh.freehand_tip_shape);
-                }
+            // Suspend rt so we can snapshot it for the multiply base and, if needed,
+            // use draft_stroke_rt as scratch for the mask.
+            if (FAILED(rt->EndDraw())) {
+                rt->BeginDraw();
+                continue;
+            }
+            rt_needs_begin = true;
+
+            // Snapshot the current annotations_rt contents into base_composite_bitmap
+            // so the multiply sees the prior annotations, not just the screenshot.
+            bool base_snapshot_ok = false;
+            if (res.base_composite_bitmap && res.annotations_rt) {
+                GREENFLAME_PROFILE_SCOPE(
+                    "D2DPaint::Draw_annotations_to_rt::HighlighterBaseSnapshot");
+                base_snapshot_ok =
+                    SUCCEEDED(res.base_composite_bitmap->CopyFromRenderTarget(
+                        nullptr, res.annotations_rt.Get(), nullptr));
+            }
+
+            if (needs_scratch) {
+                GREENFLAME_PROFILE_SCOPE(
+                    "D2DPaint::Draw_annotations_to_rt::HighlighterScratch");
+                res.draft_stroke_rt->BeginDraw();
+                res.draft_stroke_rt->Clear(D2D1::ColorF(0.f, 0.f, 0.f, 0.f));
+                Draw_freehand_points(res.draft_stroke_rt.Get(), res, scratch_points,
+                                     scratch_style, fh.freehand_tip_shape);
                 if (FAILED(res.draft_stroke_rt->EndDraw()) ||
                     FAILED(res.draft_stroke_rt->GetBitmap(
                         stroke_bmp.ReleaseAndGetAddressOf()))) {
@@ -2810,18 +2831,24 @@ void Draw_annotations_to_rt(ID2D1RenderTarget *rt, D2DOverlayResources &res,
                 }
             }
 
-            if (!rt_needs_begin || stroke_bmp != nullptr ||
-                cached_body_covers_annotation) {
-                if (rt_needs_begin) {
-                    rt->BeginDraw();
-                    rt_needs_begin = false;
-                }
+            if (rt_needs_begin &&
+                (stroke_bmp != nullptr || cached_body_covers_annotation)) {
+                rt->BeginDraw();
+                rt_needs_begin = false;
 
                 // k1 carries user opacity when reusing the preview's opaque mask cache.
                 D2D1_VECTOR_4F const coeffs = {multiply_alpha, 0.0f, 0.0f, 0.0f};
                 (void)res.multiply_effect->SetValue(
                     D2D1_ARITHMETICCOMPOSITE_PROP_COEFFICIENTS, coeffs);
-                res.multiply_effect->SetInput(0, res.screenshot.Get());
+                if (base_snapshot_ok && res.base_composite_effect) {
+                    res.base_composite_effect->SetInput(0, res.screenshot.Get());
+                    res.base_composite_effect->SetInput(
+                        1, res.base_composite_bitmap.Get());
+                    res.multiply_effect->SetInputEffect(
+                        0, res.base_composite_effect.Get());
+                } else {
+                    res.multiply_effect->SetInput(0, res.screenshot.Get());
+                }
                 Set_committed_square_mask_input(res.multiply_effect.Get(), res,
                                                 stroke_bmp.Get(), use_cached_body);
                 Microsoft::WRL::ComPtr<ID2D1DeviceContext> dc;
@@ -2935,10 +2962,9 @@ bool Paint_d2d_frame(D2DOverlayResources &res, D2DPaintInput const &input, int v
 
     {
         GREENFLAME_PROFILE_SCOPE("D2DPaint::Paint_d2d_frame::Update_draft_stroke");
-        Update_draft_stroke_bitmap(res, input.draft_freehand_points,
-                                   input.draft_freehand_style,
-                                   input.draft_freehand_tip_shape,
-                                   input.draft_freehand_smoothing_mode);
+        Update_draft_stroke_bitmap(
+            res, input.draft_freehand_points, input.draft_freehand_style,
+            input.draft_freehand_tip_shape, input.draft_freehand_smoothing_mode);
     }
 
     // When an annotation edit interaction is active, the annotation under the cursor

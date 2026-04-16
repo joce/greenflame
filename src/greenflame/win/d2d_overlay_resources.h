@@ -31,6 +31,11 @@ struct D2DOverlayResources final {
     // the multiply pass. Null until Create_hwnd_rt succeeds and ID2D1DeviceContext QI
     // is available.
     Microsoft::WRL::ComPtr<ID2D1Effect> draft_stroke_composite_effect;
+    // Composite effect that combines the screenshot with already-committed annotations
+    // to form the base (input 0) of the highlighter multiply. This is what lets a
+    // highlighter tint the pixels of prior annotations that sit beneath it, rather
+    // than only tinting the raw screenshot.
+    Microsoft::WRL::ComPtr<ID2D1Effect> base_composite_effect;
 
     // Per-session bitmaps
     Microsoft::WRL::ComPtr<ID2D1Bitmap> screenshot;
@@ -43,6 +48,10 @@ struct D2DOverlayResources final {
     Microsoft::WRL::ComPtr<ID2D1Bitmap> frozen_bitmap;
     Microsoft::WRL::ComPtr<ID2D1Bitmap> draft_stroke_bitmap;
     Microsoft::WRL::ComPtr<ID2D1Bitmap> draft_stroke_body_bitmap;
+    // Snapshot of annotations_rt contents taken mid-rebuild, just before a highlighter
+    // draws. Used as input 1 of base_composite_effect so the multiply sees the prior
+    // annotations underneath.
+    Microsoft::WRL::ComPtr<ID2D1Bitmap> base_composite_bitmap;
     size_t draft_stroke_point_count = 0; // points rendered into draft_stroke_rt
     core::PointPx draft_stroke_last_point =
         {}; // last point rendered into draft_stroke_rt

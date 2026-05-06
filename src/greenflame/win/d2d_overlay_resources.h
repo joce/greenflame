@@ -22,7 +22,28 @@ struct D2DOverlayResources final {
     static constexpr float kDefaultTargetDpi = 96.f;
     Microsoft::WRL::ComPtr<ID2D1Factory1> factory;
     Microsoft::WRL::ComPtr<IDWriteFactory> dwrite_factory;
-    Microsoft::WRL::ComPtr<ID2D1HwndRenderTarget> hwnd_rt;
+    // Flip-model swap chain stack. Replaces ID2D1HwndRenderTarget so that
+    // Present() no longer falls into CDXGISwapChain::PrepareWindowedBltPresent
+    // (the legacy DWM-throttled blit path that blocked ~28 ms per frame on the
+    // overlay's WM_PAINT thread). With FRAME_LATENCY_WAITABLE_OBJECT and a max
+    // latency of 1, the message pump throttles itself by waiting on the
+    // waitable handle before producing a frame, instead of stalling inside
+    // Present.
+    Microsoft::WRL::ComPtr<ID3D11Device> d3d_device;
+    Microsoft::WRL::ComPtr<IDXGISwapChain2> swap_chain;
+    Microsoft::WRL::ComPtr<ID2D1Device> d2d_device;
+    // The "hwnd_rt" name is kept for blast-radius reasons: every Draw_*
+    // helper and offscreen-rt creator already takes an ID2D1RenderTarget*.
+    // ID2D1DeviceContext IS-A ID2D1RenderTarget so existing callsites keep
+    // working unchanged.
+    Microsoft::WRL::ComPtr<ID2D1DeviceContext> hwnd_rt;
+    // Bitmap wrapping the current back buffer. Re-created from
+    // swap_chain->GetBuffer(0) once at swap-chain creation; FLIP_DISCARD with
+    // BufferCount==2 keeps the same surface object across Present() calls.
+    Microsoft::WRL::ComPtr<ID2D1Bitmap1> back_buffer_bitmap;
+    // Frame-latency waitable. Wait on this BEFORE BeginDraw so the paint
+    // pipeline never builds frames faster than DWM consumes them.
+    HANDLE frame_latency_waitable = nullptr;
     float target_dpi = kDefaultTargetDpi;
     // ArithmeticComposite effect (k1=1, k2=k3=k4=0) for multiply-blend highlighting.
     // Null until Create_hwnd_rt succeeds and ID2D1DeviceContext QI is available.
@@ -69,8 +90,14 @@ struct D2DOverlayResources final {
     Microsoft::WRL::ComPtr<ID2D1StrokeStyle> round_cap_style; // freehand, lines
     Microsoft::WRL::ComPtr<ID2D1StrokeStyle> flat_cap_style;  // rectangles
     Microsoft::WRL::ComPtr<ID2D1StrokeStyle> dashed_style;    // selection border
-    Microsoft::WRL::ComPtr<ID2D1StrokeStyle>
-        crosshair_style;                                   // 1-on/1-off for crosshair
+    // 1-on/1-off stipple bitmap brush for the fullscreen crosshair guides.
+    // Replaces the prior CreateStrokeStyle dashed style: a custom 2-DIP dash
+    // explodes into one convex figure per dash inside D2D's tessellator
+    // (CDasher -> CWidener -> CConvexFigureStorage), which dominated CPU on
+    // 4K-class virtual desktops where each crosshair line spans thousands of
+    // dashes per frame. A 2x2 wrapping bitmap brush samples to the same
+    // 1-on/1-off pixel pattern with zero tessellation.
+    Microsoft::WRL::ComPtr<ID2D1BitmapBrush> crosshair_stipple_brush;
     Microsoft::WRL::ComPtr<IDWriteTextFormat> text_dim;    // 12pt Segoe UI
     Microsoft::WRL::ComPtr<IDWriteTextFormat> text_center; // 36pt Segoe UI Black
     Microsoft::WRL::ComPtr<IDWriteTextFormat> text_hint;   // 16pt Segoe UI

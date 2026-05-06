@@ -48,7 +48,7 @@ constexpr int kBytesPerPixel = 4;
 }
 
 [[nodiscard]] bool
-Upload_capture_bitmap(ID2D1HwndRenderTarget *hwnd_rt, GdiCaptureResult const &cap,
+Upload_capture_bitmap(ID2D1RenderTarget *hwnd_rt, GdiCaptureResult const &cap,
                       float target_dpi,
                       Microsoft::WRL::ComPtr<ID2D1Bitmap> &out_bitmap) {
     if (hwnd_rt == nullptr || !cap.Is_valid()) {
@@ -142,50 +142,154 @@ bool D2DOverlayResources::Create_hwnd_rt(HWND hwnd, int width, int height) {
         return false;
     }
 
-    // The overlay surface still runs with a single target DPI for now. Later
-    // per-monitor plumbing can set this before creating the HWND render target.
-    D2D1_RENDER_TARGET_PROPERTIES rt_props = D2D1::RenderTargetProperties(
-        D2D1_RENDER_TARGET_TYPE_DEFAULT,
-        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE),
-        Target_dpi(), Target_dpi());
-
-    // RETAIN_CONTENTS keeps the previous frame visible to DWM during BeginDraw,
-    // preventing the blank-surface flicker that occurs with PRESENT_OPTIONS_NONE.
-    D2D1_HWND_RENDER_TARGET_PROPERTIES hwnd_props = D2D1::HwndRenderTargetProperties(
-        hwnd, D2D1::SizeU(static_cast<UINT32>(width), static_cast<UINT32>(height)),
-        D2D1_PRESENT_OPTIONS_RETAIN_CONTENTS);
-
-    HRESULT const hr = factory->CreateHwndRenderTarget(
-        rt_props, hwnd_props, hwnd_rt.ReleaseAndGetAddressOf());
+    // 1. D3D11 device. BGRA support is required for D2D interop.
+    UINT device_flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+#if defined(_DEBUG)
+    // Debug layer is best-effort: silently fall back if SDK layers are missing.
+    device_flags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
+    constexpr std::array<D3D_FEATURE_LEVEL, 4> feature_levels = {{
+        D3D_FEATURE_LEVEL_11_1,
+        D3D_FEATURE_LEVEL_11_0,
+        D3D_FEATURE_LEVEL_10_1,
+        D3D_FEATURE_LEVEL_10_0,
+    }};
+    HRESULT hr = D3D11CreateDevice(
+        nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, device_flags,
+        feature_levels.data(), static_cast<UINT>(feature_levels.size()),
+        D3D11_SDK_VERSION, d3d_device.ReleaseAndGetAddressOf(), nullptr, nullptr);
+#if defined(_DEBUG)
+    if (FAILED(hr) && (device_flags & D3D11_CREATE_DEVICE_DEBUG) != 0) {
+        device_flags &= ~static_cast<UINT>(D3D11_CREATE_DEVICE_DEBUG);
+        hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, device_flags,
+                               feature_levels.data(),
+                               static_cast<UINT>(feature_levels.size()),
+                               D3D11_SDK_VERSION, d3d_device.ReleaseAndGetAddressOf(),
+                               nullptr, nullptr);
+    }
+#endif
     if (FAILED(hr)) {
         return false;
     }
 
-    // Create the ArithmeticComposite multiply-blend effect (O = I1 * I2).
-    // Requires ID2D1DeviceContext, available when factory is ID2D1Factory1.
+    // 2. Reach the DXGI factory through the device. Going through the device's
+    // adapter (rather than CreateDXGIFactory*) is the documented requirement
+    // for swap chains that share the same device.
+    Microsoft::WRL::ComPtr<IDXGIDevice> dxgi_device;
+    hr = d3d_device.As(&dxgi_device);
+    if (FAILED(hr)) {
+        return false;
+    }
+    Microsoft::WRL::ComPtr<IDXGIAdapter> dxgi_adapter;
+    hr = dxgi_device->GetAdapter(dxgi_adapter.GetAddressOf());
+    if (FAILED(hr)) {
+        return false;
+    }
+    Microsoft::WRL::ComPtr<IDXGIFactory2> dxgi_factory;
+    hr = dxgi_adapter->GetParent(IID_PPV_ARGS(dxgi_factory.GetAddressOf()));
+    if (FAILED(hr)) {
+        return false;
+    }
+
+    // 3. Flip-discard swap chain with a frame-latency waitable. SCALING_STRETCH
+    // tolerates transient size mismatches between WM_SIZE and ResizeBuffers; the
+    // overlay window is fullscreen-borderless and does not perform live resizes,
+    // so the visual difference vs. SCALING_NONE is irrelevant here.
+    DXGI_SWAP_CHAIN_DESC1 sc_desc{};
+    sc_desc.Width = static_cast<UINT>(width);
+    sc_desc.Height = static_cast<UINT>(height);
+    sc_desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    sc_desc.Stereo = FALSE;
+    sc_desc.SampleDesc.Count = 1;
+    sc_desc.SampleDesc.Quality = 0;
+    sc_desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    sc_desc.BufferCount = 2;
+    sc_desc.Scaling = DXGI_SCALING_STRETCH;
+    sc_desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    sc_desc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
+    sc_desc.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+
+    Microsoft::WRL::ComPtr<IDXGISwapChain1> sc1;
+    hr = dxgi_factory->CreateSwapChainForHwnd(d3d_device.Get(), hwnd, &sc_desc, nullptr,
+                                              nullptr, sc1.GetAddressOf());
+    if (FAILED(hr)) {
+        return false;
+    }
+    hr = sc1.As(&swap_chain);
+    if (FAILED(hr)) {
+        return false;
+    }
+    // Latency 1: Paint blocks on the waitable until DWM has consumed the prior
+    // frame, then produces exactly one new frame. Replaces the implicit
+    // backpressure that Present() used to apply via PrepareWindowedBltPresent.
+    (void)swap_chain->SetMaximumFrameLatency(1);
+    if (frame_latency_waitable != nullptr) {
+        CloseHandle(frame_latency_waitable);
+        frame_latency_waitable = nullptr;
+    }
+    frame_latency_waitable = swap_chain->GetFrameLatencyWaitableObject();
+
+    // 4. D2D device + device context backed by the same D3D11 device. The
+    // device context becomes the new "hwnd_rt": every Draw_* helper, brush
+    // creator, and offscreen-RT factory in this file already takes an
+    // ID2D1RenderTarget* (or ID2D1DeviceContext*), so swapping the concrete
+    // type here is the entire ripple.
+    hr = factory->CreateDevice(dxgi_device.Get(), d2d_device.ReleaseAndGetAddressOf());
+    if (FAILED(hr)) {
+        return false;
+    }
+    hr = d2d_device->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE,
+                                         hwnd_rt.ReleaseAndGetAddressOf());
+    if (FAILED(hr)) {
+        return false;
+    }
+    hwnd_rt->SetDpi(Target_dpi(), Target_dpi());
+    hwnd_rt->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+
+    // 5. Wrap the back buffer surface as an ID2D1Bitmap1 marked TARGET. With
+    // BufferCount == 2 + FLIP_DISCARD the same DXGI surface object is reused
+    // across Present() calls, so a single CreateBitmapFromDxgiSurface call at
+    // setup is sufficient — no per-frame rebind required.
+    Microsoft::WRL::ComPtr<IDXGISurface> back_surface;
+    hr = swap_chain->GetBuffer(0, IID_PPV_ARGS(back_surface.GetAddressOf()));
+    if (FAILED(hr)) {
+        return false;
+    }
+    D2D1_BITMAP_PROPERTIES1 bp{};
+    bp.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    bp.pixelFormat.alphaMode = D2D1_ALPHA_MODE_IGNORE;
+    bp.dpiX = Target_dpi();
+    bp.dpiY = Target_dpi();
+    bp.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
+    hr = hwnd_rt->CreateBitmapFromDxgiSurface(
+        back_surface.Get(), &bp, back_buffer_bitmap.ReleaseAndGetAddressOf());
+    if (FAILED(hr)) {
+        return false;
+    }
+    hwnd_rt->SetTarget(back_buffer_bitmap.Get());
+
+    // 6. Effects shared with the rest of the pipeline (multiply for highlighter
+    // tinting, source-over composites for highlighter base / draft mask merge).
     multiply_effect.Reset();
     draft_stroke_composite_effect.Reset();
     base_composite_effect.Reset();
-    Microsoft::WRL::ComPtr<ID2D1DeviceContext> dc;
-    if (SUCCEEDED(hwnd_rt->QueryInterface(IID_PPV_ARGS(&dc)))) {
-        Microsoft::WRL::ComPtr<ID2D1Effect> effect;
-        if (SUCCEEDED(dc->CreateEffect(CLSID_D2D1ArithmeticComposite, &effect))) {
-            // k1=1, k2=k3=k4=0 → O = I1 * I2 (premultiplied multiply).
-            D2D1_VECTOR_4F const coeffs = {1.0f, 0.0f, 0.0f, 0.0f};
-            (void)effect->SetValue(D2D1_ARITHMETICCOMPOSITE_PROP_COEFFICIENTS, coeffs);
-            multiply_effect = std::move(effect);
-        }
-        if (SUCCEEDED(dc->CreateEffect(
-                CLSID_D2D1Composite,
-                draft_stroke_composite_effect.ReleaseAndGetAddressOf()))) {
-            // Default mode is SOURCE_OVER, which is sufficient for combining
-            // same-colored premultiplied coverage masks without seam darkening.
-        }
-        if (SUCCEEDED(dc->CreateEffect(
-                CLSID_D2D1Composite, base_composite_effect.ReleaseAndGetAddressOf()))) {
-            // SOURCE_OVER: composite committed annotations on top of the screenshot
-            // to form the highlighter multiply base.
-        }
+    Microsoft::WRL::ComPtr<ID2D1Effect> effect;
+    if (SUCCEEDED(hwnd_rt->CreateEffect(CLSID_D2D1ArithmeticComposite, &effect))) {
+        // k1=1, k2=k3=k4=0 → O = I1 * I2 (premultiplied multiply).
+        D2D1_VECTOR_4F const coeffs = {1.0f, 0.0f, 0.0f, 0.0f};
+        (void)effect->SetValue(D2D1_ARITHMETICCOMPOSITE_PROP_COEFFICIENTS, coeffs);
+        multiply_effect = std::move(effect);
+    }
+    if (SUCCEEDED(hwnd_rt->CreateEffect(
+            CLSID_D2D1Composite,
+            draft_stroke_composite_effect.ReleaseAndGetAddressOf()))) {
+        // Default SOURCE_OVER: combines same-colored premultiplied coverage
+        // masks without seam darkening.
+    }
+    if (SUCCEEDED(hwnd_rt->CreateEffect(
+            CLSID_D2D1Composite, base_composite_effect.ReleaseAndGetAddressOf()))) {
+        // SOURCE_OVER: composite committed annotations on top of the screenshot
+        // to form the highlighter multiply base.
     }
     return true;
 }
@@ -264,19 +368,52 @@ bool D2DOverlayResources::Create_shared_resources() {
         }
     }
 
-    // Crosshair style: 1px on, 1px off — matches GDI 1-on/1-off dotted crosshair.
+    // Crosshair stipple brush: 2x2 bitmap, kBorderColor on the diagonal,
+    // transparent off-diagonal, wrapped on both axes.
+    //
+    // Renders the same 1-on/1-off dotted crosshair the GDI overlay used to draw,
+    // but with no per-frame dash tessellation. A 1px-wide vertical FillRectangle
+    // (or 1px-tall horizontal one) sampled with EXTEND_MODE_WRAP produces an
+    // alternating opaque/transparent column (or row) regardless of the cursor's
+    // parity, since both diagonals of the 2x2 cell carry the same opaque pixel.
     {
-        D2D1_STROKE_STYLE_PROPERTIES props{};
-        props.startCap = D2D1_CAP_STYLE_FLAT;
-        props.endCap = D2D1_CAP_STYLE_FLAT;
-        props.dashCap = D2D1_CAP_STYLE_FLAT;
-        props.lineJoin = D2D1_LINE_JOIN_MITER;
-        props.miterLimit = kStrokeMiterLimit;
-        props.dashStyle = D2D1_DASH_STYLE_CUSTOM;
-        props.dashOffset = 0.f;
-        float const dashes[] = {1.f, 1.f};
-        hr = factory->CreateStrokeStyle(props, dashes, 2,
-                                        crosshair_style.ReleaseAndGetAddressOf());
+        constexpr UINT32 stipple_size = 2;
+        // BGRA8 premultiplied: kBorderColor (R=135, G=223, B=0, A=255). Memory
+        // order is B, G, R, A; on little-endian that packs into the UINT32 as
+        // 0xAA RR GG BB = 0xFF 87 DF 00 = 0xFF87DF00. The earlier 0xFF00DF87
+        // value transposed R and B and rendered the crosshair cyan-green.
+        constexpr UINT32 opaque = 0xFF87DF00u;
+        constexpr UINT32 transparent = 0x00000000u;
+        std::array<UINT32, static_cast<size_t>(stipple_size) * stipple_size> const
+            pixels = {{
+                opaque,
+                transparent,
+                transparent,
+                opaque,
+            }};
+
+        D2D1_BITMAP_PROPERTIES bmp_props{};
+        bmp_props.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        bmp_props.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+        float const dpi = Target_dpi();
+        bmp_props.dpiX = dpi;
+        bmp_props.dpiY = dpi;
+
+        Microsoft::WRL::ComPtr<ID2D1Bitmap> stipple_bmp;
+        hr = hwnd_rt->CreateBitmap(D2D1::SizeU(stipple_size, stipple_size),
+                                   pixels.data(),
+                                   static_cast<UINT32>(stipple_size * sizeof(UINT32)),
+                                   bmp_props, stipple_bmp.ReleaseAndGetAddressOf());
+        if (FAILED(hr)) {
+            return false;
+        }
+
+        D2D1_BITMAP_BRUSH_PROPERTIES const brush_props = D2D1::BitmapBrushProperties(
+            D2D1_EXTEND_MODE_WRAP, D2D1_EXTEND_MODE_WRAP,
+            D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
+        hr = hwnd_rt->CreateBitmapBrush(
+            stipple_bmp.Get(), brush_props,
+            crosshair_stipple_brush.ReleaseAndGetAddressOf());
         if (FAILED(hr)) {
             return false;
         }
@@ -537,7 +674,7 @@ void D2DOverlayResources::Release_device_resources() {
     round_cap_style.Reset();
     flat_cap_style.Reset();
     dashed_style.Reset();
-    crosshair_style.Reset();
+    crosshair_stipple_brush.Reset();
     text_dim.Reset();
     text_center.Reset();
     text_hint.Reset();
@@ -549,7 +686,18 @@ void D2DOverlayResources::Release_device_resources() {
     obfuscate_bitmaps.clear();
     text_bitmaps.clear();
     bubble_bitmaps.clear();
+    if (hwnd_rt) {
+        hwnd_rt->SetTarget(nullptr);
+    }
+    back_buffer_bitmap.Reset();
     hwnd_rt.Reset();
+    if (frame_latency_waitable != nullptr) {
+        CloseHandle(frame_latency_waitable);
+        frame_latency_waitable = nullptr;
+    }
+    swap_chain.Reset();
+    d2d_device.Reset();
+    d3d_device.Reset();
     annotations_valid = false;
     frozen_valid = false;
 }

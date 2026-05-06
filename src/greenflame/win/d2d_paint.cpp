@@ -514,18 +514,22 @@ void Draw_draft_text(ID2D1RenderTarget *rt, D2DOverlayResources &res,
 
 void Draw_crosshair(ID2D1RenderTarget *rt, D2DOverlayResources &res,
                     core::PointPx cursor, int vd_width, int vd_height) {
-    if (!res.crosshair_style) {
+    if (!res.crosshair_stipple_brush) {
         return;
     }
+    // Two 1-pixel-wide rectangles sampled with the wrapping 2x2 stipple brush
+    // produce the same 1-on/1-off pixel pattern the prior dashed-stroke path
+    // emitted, with no per-frame dash tessellation. The brush bitmap has
+    // kBorderColor on the diagonal so either column-parity samples to an
+    // alternating opaque/transparent pattern.
     float const cx = static_cast<float>(cursor.x);
     float const cy = static_cast<float>(cursor.y);
-    res.solid_brush->SetColor(kBorderColor);
-    rt->DrawLine(D2D1::Point2F(cx, 0.f),
-                 D2D1::Point2F(cx, static_cast<float>(vd_height)),
-                 res.solid_brush.Get(), 1.f, res.crosshair_style.Get());
-    rt->DrawLine(D2D1::Point2F(0.f, cy),
-                 D2D1::Point2F(static_cast<float>(vd_width), cy), res.solid_brush.Get(),
-                 1.f, res.crosshair_style.Get());
+    D2D1_RECT_F const v_rect =
+        D2D1::RectF(cx, 0.f, cx + 1.f, static_cast<float>(vd_height));
+    D2D1_RECT_F const h_rect =
+        D2D1::RectF(0.f, cy, static_cast<float>(vd_width), cy + 1.f);
+    rt->FillRectangle(v_rect, res.crosshair_stipple_brush.Get());
+    rt->FillRectangle(h_rect, res.crosshair_stipple_brush.Get());
 }
 
 void Draw_coord_tooltip(ID2D1RenderTarget *rt, D2DOverlayResources &res,
@@ -2998,7 +3002,26 @@ bool Paint_d2d_frame(D2DOverlayResources &res, D2DPaintInput const &input, int v
         !input.move_dragging && !input.annotation_editing && !input.modifier_preview &&
         !has_live_annotation_draft && input.lifted_window_bitmap == nullptr;
 
+    // Frame-latency throttle: with FRAME_LATENCY_WAITABLE_OBJECT and max
+    // latency 1, this blocks until DWM has consumed the prior frame, so the
+    // paint pipeline never builds frames faster than the compositor consumes
+    // them. Replaces the implicit backpressure that the legacy
+    // HwndRenderTarget Present path used to apply by stalling inside
+    // CDXGISwapChain::PrepareWindowedBltPresent. INFINITE wait is acceptable
+    // because the only way the waitable does not signal is a full GPU hang.
+    if (res.frame_latency_waitable != nullptr) {
+        GREENFLAME_PROFILE_SCOPE("D2DPaint::Paint_d2d_frame::Wait_frame_latency");
+        (void)WaitForSingleObjectEx(res.frame_latency_waitable, INFINITE, FALSE);
+    }
+
     res.hwnd_rt->BeginDraw();
+    // FLIP_DISCARD does not retain prior content. The steady-state path blits
+    // frozen_bitmap (full virtual-desktop coverage) and the dynamic path blits
+    // the screenshot, so every pixel is overwritten anyway -- but Clear() is
+    // documented as a no-op overlap on the GPU and guards against future paths
+    // that might leave gaps. Cleared to opaque black to match the prior
+    // RETAIN_CONTENTS surface state.
+    res.hwnd_rt->Clear(D2D1::ColorF(0.f, 0.f, 0.f));
 
     if (is_steady_state) {
         GREENFLAME_PROFILE_SCOPE("D2DPaint::Paint_d2d_frame::Steady_state");
@@ -3080,7 +3103,21 @@ bool Paint_d2d_frame(D2DOverlayResources &res, D2DPaintInput const &input, int v
         GREENFLAME_PROFILE_SCOPE("D2DPaint::Paint_d2d_frame::End_draw");
         hr = res.hwnd_rt->EndDraw();
     }
-    return hr != D2DERR_RECREATE_TARGET;
+    if (hr == D2DERR_RECREATE_TARGET) {
+        return false;
+    }
+    if (res.swap_chain) {
+        GREENFLAME_PROFILE_SCOPE("D2DPaint::Paint_d2d_frame::Present");
+        // SyncInterval=1 pairs with the waitable: DWM picks up the new frame
+        // on the next vsync. With FLIP_DISCARD the present is a pointer swap;
+        // the legacy ~28 ms windowed-blit wait inside Present is gone.
+        HRESULT const present_hr = res.swap_chain->Present(1, 0);
+        if (present_hr == DXGI_ERROR_DEVICE_REMOVED ||
+            present_hr == DXGI_ERROR_DEVICE_RESET) {
+            return false;
+        }
+    }
+    return true;
 }
 
 } // namespace greenflame

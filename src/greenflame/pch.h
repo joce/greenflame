@@ -14,6 +14,7 @@
 #include <dwmapi.h>
 #include <dwrite.h>
 #include <dxgi1_2.h>
+#include <dxgi1_3.h>
 #include <gdiplus.h>
 #include <shellapi.h>
 #include <spellcheck.h>
